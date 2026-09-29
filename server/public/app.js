@@ -88,7 +88,24 @@ const els = {
   resolutionSelect: document.getElementById('resolutionSelect'),
   fpsSelect: document.getElementById('fpsSelect'),
   noiseSuppressionCheck: document.getElementById('noiseSuppressionCheck'),
+  modeTabLan: document.getElementById('modeTabLan'),
+  modeTabInternet: document.getElementById('modeTabInternet'),
+  lanModeSection: document.getElementById('lanModeSection'),
+  internetModeSection: document.getElementById('internetModeSection'),
+  createCodeRoomBtn: document.getElementById('createCodeRoomBtn'),
+  joinCodeInput: document.getElementById('joinCodeInput'),
+  joinCodeBtn: document.getElementById('joinCodeBtn'),
+  internetModeStatus: document.getElementById('internetModeStatus'),
 };
+
+// STUN públicos (gratuitos) — deixam duas máquinas em redes diferentes se
+// conectarem direto pela internet sem precisar de Radmin/VPN nenhuma. Não
+// atrapalha o modo rede local: só dá mais opções de caminho de conexão pro
+// WebRTC escolher, ele prefere o caminho direto (LAN) quando existe.
+const ICE_SERVERS = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
 
 const NAME_KEY = 'tela-radmin:name';
 const AVATAR_KEY = 'tela-radmin:avatar';
@@ -250,10 +267,12 @@ function saveSettings() {
 }
 
 const state = {
-  ws: null,
+  transport: null,
+  roomMode: null, // 'lan' | 'internet'
+  roomAddr: '', // usado no modo lan (host:porta)
+  roomCode: null, // usado no modo internet
   myId: null,
   myName: '',
-  roomAddr: '',
   settings: loadSettings(),
   watchPcs: new Map(), // `${transmissorId}:${source}` -> RTCPeerConnection (eu assistindo)
   broadcastPcs: new Map(), // `${espectadorId}:${source}` -> RTCPeerConnection (eu transmitindo pra ele)
@@ -551,63 +570,219 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/* ---------------- abas de modo: rede local (Radmin) vs internet ---------------- */
+
+els.modeTabLan.addEventListener('click', () => {
+  els.modeTabLan.classList.add('active');
+  els.modeTabInternet.classList.remove('active');
+  els.lanModeSection.classList.remove('hidden');
+  els.internetModeSection.classList.add('hidden');
+});
+els.modeTabInternet.addEventListener('click', () => {
+  els.modeTabInternet.classList.add('active');
+  els.modeTabLan.classList.remove('active');
+  els.internetModeSection.classList.remove('hidden');
+  els.lanModeSection.classList.add('hidden');
+});
+
 els.hostBtn.addEventListener('click', () => {
   const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
   localStorage.setItem(NAME_KEY, name);
   ctlWs.send(JSON.stringify({ type: 'host:start', name: `Sala de ${name}` }));
-  joinRoom(lanInfo ? lanInfo.localIp : location.hostname, lanInfo ? lanInfo.port : location.port);
+  joinLanRoom(lanInfo ? lanInfo.localIp : location.hostname, lanInfo ? lanInfo.port : location.port);
 });
 
 els.manualJoinBtn.addEventListener('click', () => {
   const host = els.manualHost.value.trim();
   const port = els.manualPort.value.trim() || '47400';
   if (!host) return;
-  joinRoom(host, port);
+  joinLanRoom(host, port);
 });
 
-/* ---------------- entrar na sala (relay WebSocket) ---------------- */
+/* ---------------- transporte: uma "sala" pode rodar sobre WebSocket (rede
+   local, servidor já existe em server/main.cjs) OU sobre PeerJS (internet,
+   sem Radmin — usa o corretor público gratuito só pra combinar quem quer
+   falar com quem; depois disso é WebRTC direto igual sempre foi). O resto
+   do app (presença, sinalização de vídeo) não sabe nem precisa saber qual
+   dos dois está por baixo — só chama state.transport.send(objeto). ---------------- */
 
-function joinRoom(host, port) {
+function handleTransportMessage(msg) {
+  if (msg.type === 'welcome') {
+    state.myId = msg.id;
+  } else if (msg.type === 'presence') {
+    onPresence(msg.clients);
+  } else if (msg.type === 'signal') {
+    onSignal(msg.from, msg.data);
+  }
+}
+
+function joinLanRoom(host, port) {
   const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
   localStorage.setItem(NAME_KEY, name);
   state.myName = name;
+  state.roomMode = 'lan';
+  state.roomAddr = `${host}:${port}`;
 
   const ws = new WebSocket(`ws://${host}:${port}/relay`);
-  state.ws = ws;
+  state.transport = {
+    send(obj) { ws.send(JSON.stringify(obj)); },
+    close() { ws.close(); },
+  };
 
   ws.addEventListener('open', () => {
-    ws.send(JSON.stringify({ type: 'hello', name, avatar: myAvatar, banner: myBanner, bio: myBio }));
+    state.transport.send({ type: 'hello', name, avatar: myAvatar, banner: myBanner, bio: myBio });
   });
+  ws.addEventListener('message', (ev) => handleTransportMessage(JSON.parse(ev.data)));
+  ws.addEventListener('close', () => leaveRoom());
+  ws.addEventListener('error', () => {}); // 'close' já cuida de avisar/limpar
 
-  ws.addEventListener('message', (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === 'welcome') {
-      state.myId = msg.id;
-      enterRoomScreen(host, port);
-    } else if (msg.type === 'presence') {
-      onPresence(msg.clients);
-    } else if (msg.type === 'signal') {
-      onSignal(msg.from, msg.data);
+  enterRoomScreen(`Sala em ${host}`);
+}
+
+/* ---------------- modo internet: código de sala via PeerJS (sem Radmin) ----------------
+   Quem "cria a sala" vira o ponto central (mesmo papel que o host tem no
+   modo rede local): os outros conectam DIRETO nele por WebRTC (o PeerJS só
+   serviu de intermediário pra combinar essa conexão), e ele repassa
+   presença/sinalização pros demais — não tem servidor nenhum rodando 24h,
+   só enquanto quem criou a sala estiver com o app aberto. */
+
+const ROOM_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I/L pra não confundir
+function makeRoomCode() {
+  let code = '';
+  for (let i = 0; i < 6; i++) code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  return code;
+}
+
+function setInternetStatus(text) {
+  els.internetModeStatus.textContent = text;
+  els.internetModeStatus.classList.toggle('hidden', !text);
+}
+
+function hostInternetRoom() {
+  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
+  localStorage.setItem(NAME_KEY, name);
+  state.myName = name;
+  state.roomMode = 'internet';
+
+  const code = makeRoomCode();
+  const peer = new Peer(`svj-${code}`);
+  const members = new Map(); // id -> { conn: DataConnection|null (null = eu mesmo), ...dados... }
+  let selfId = null;
+
+  function deliver(id, msg) {
+    const m = members.get(id);
+    if (!m) return;
+    if (m.conn === null) handleTransportMessage(msg);
+    else if (m.conn.open) m.conn.send(msg);
+  }
+
+  function broadcastPresence() {
+    const list = [...members.entries()].map(([id, m]) => ({
+      id, name: m.name, avatar: m.avatar, banner: m.banner, bio: m.bio,
+      sharingScreen: m.sharingScreen, sharingCamera: m.sharingCamera,
+    }));
+    for (const id of members.keys()) deliver(id, { type: 'presence', clients: list });
+  }
+
+  function handleIncoming(fromId, msg) {
+    const m = members.get(fromId);
+    if (!m || !msg || !msg.type) return;
+    if (msg.type === 'hello') {
+      m.name = String(msg.name || 'Convidado').slice(0, 30);
+      if (typeof msg.avatar === 'string' && msg.avatar.startsWith('data:image/')) m.avatar = msg.avatar.slice(0, 60000);
+      if (typeof msg.banner === 'string' && msg.banner.startsWith('data:image/')) m.banner = msg.banner.slice(0, 120000);
+      if (typeof msg.bio === 'string') m.bio = msg.bio.slice(0, 190);
+      broadcastPresence();
+    } else if (msg.type === 'share:start') {
+      if (msg.source === 'camera') m.sharingCamera = true; else m.sharingScreen = true;
+      broadcastPresence();
+    } else if (msg.type === 'share:stop') {
+      if (msg.source === 'camera') m.sharingCamera = false; else m.sharingScreen = false;
+      broadcastPresence();
+    } else if (msg.type === 'signal' && msg.to) {
+      deliver(msg.to, { type: 'signal', from: fromId, data: msg.data });
     }
+  }
+
+  peer.on('open', (id) => {
+    selfId = id;
+    members.set(id, { conn: null, name, avatar: myAvatar, banner: myBanner, bio: myBio, sharingScreen: false, sharingCamera: false });
+    state.transport = {
+      send(obj) { handleIncoming(selfId, obj); },
+      close() { peer.destroy(); },
+    };
+    handleTransportMessage({ type: 'welcome', id });
+    enterRoomScreen('Sala pela internet', code);
   });
 
-  ws.addEventListener('close', () => {
-    leaveRoom();
+  peer.on('connection', (conn) => {
+    const id = conn.peer;
+    members.set(id, { conn, name: 'Convidado', avatar: null, banner: null, bio: '', sharingScreen: false, sharingCamera: false });
+    conn.on('data', (msg) => handleIncoming(id, msg));
+    conn.on('close', () => { members.delete(id); broadcastPresence(); });
+  });
+
+  peer.on('error', (err) => {
+    console.warn('[internet] erro no peer host:', err.type || err.message);
+    if (err.type === 'unavailable-id') setInternetStatus('Esse código já está em uso, tenta de novo.');
+    else setInternetStatus('Não deu pra criar a sala pela internet agora. Confere sua conexão.');
   });
 }
 
-function enterRoomScreen(host, port) {
+function joinInternetRoom(code) {
+  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
+  localStorage.setItem(NAME_KEY, name);
+  state.myName = name;
+  state.roomMode = 'internet';
+  setInternetStatus('Conectando…');
+
+  const peer = new Peer();
+  peer.on('open', () => {
+    const conn = peer.connect(`svj-${code}`, { reliable: true });
+    conn.on('open', () => {
+      state.transport = {
+        send(obj) { if (conn.open) conn.send(obj); },
+        close() { peer.destroy(); },
+      };
+      handleTransportMessage({ type: 'welcome', id: peer.id });
+      enterRoomScreen('Sala pela internet', code);
+      state.transport.send({ type: 'hello', name, avatar: myAvatar, banner: myBanner, bio: myBio });
+    });
+    conn.on('data', (msg) => handleTransportMessage(msg));
+    conn.on('close', () => leaveRoom());
+    conn.on('error', (err) => setInternetStatus(`Não deu pra entrar: ${err.message || err.type}`));
+  });
+  peer.on('error', (err) => {
+    console.warn('[internet] erro no peer:', err.type || err.message);
+    if (err.type === 'peer-unavailable') setInternetStatus('Código não encontrado — confere se está certo e se quem criou a sala ainda está com o app aberto.');
+    else setInternetStatus('Não deu pra conectar agora. Confere sua conexão com a internet.');
+  });
+}
+
+els.createCodeRoomBtn.addEventListener('click', hostInternetRoom);
+els.joinCodeBtn.addEventListener('click', () => {
+  const code = els.joinCodeInput.value.trim().toUpperCase();
+  if (code.length < 4) {
+    setInternetStatus('Digita o código completo que te passaram.');
+    return;
+  }
+  joinInternetRoom(code);
+});
+
+function enterRoomScreen(label, roomCode) {
   els.lobby.classList.add('hidden');
   els.room.classList.remove('hidden');
-  els.roomInfo.textContent = `Sala em ${host}`;
-  state.roomAddr = `${host}:${port}`;
+  els.roomInfo.textContent = roomCode ? `${label} · código ${roomCode}` : label;
+  state.roomCode = roomCode || null;
 }
 
 els.leaveBtn.addEventListener('click', () => {
-  if (state.ws) state.ws.close();
+  if (state.transport) state.transport.close();
+  leaveRoom();
 });
 els.leaveCallBtn.addEventListener('click', () => {
-  if (state.ws) state.ws.close();
+  if (state.transport) state.transport.close();
+  leaveRoom();
 });
 
 let toastTimer = null;
@@ -628,11 +803,13 @@ els.appAudioToggle.addEventListener('click', () => {
 });
 
 els.inviteBtn.addEventListener('click', async () => {
+  const value = state.roomMode === 'internet' ? state.roomCode : state.roomAddr;
+  const label = state.roomMode === 'internet' ? 'Código copiado' : 'Endereço copiado';
   try {
-    await navigator.clipboard.writeText(state.roomAddr);
-    showToast(`Endereço copiado: ${state.roomAddr}`);
+    await navigator.clipboard.writeText(value);
+    showToast(`${label}: ${value}`);
   } catch {
-    showToast(`Endereço da sala: ${state.roomAddr}`);
+    showToast(`${state.roomMode === 'internet' ? 'Código' : 'Endereço'} da sala: ${value}`);
   }
 });
 
@@ -644,10 +821,13 @@ function leaveRoom() {
     teardownWatch(key.slice(0, sep), key.slice(sep + 1));
   }
   exitFocusIfActive();
-  state.ws = null;
+  state.transport = null;
   state.myId = null;
+  state.roomMode = null;
+  state.roomCode = null;
   els.room.classList.add('hidden');
   els.lobby.classList.remove('hidden');
+  setInternetStatus('');
 }
 
 /* ---------------- presença: quem está na sala e quem compartilha ---------------- */
@@ -714,7 +894,7 @@ function updateEmptyHint() {
 /* ---------------- sinalização ---------------- */
 
 function sendSignal(to, data) {
-  state.ws.send(JSON.stringify({ type: 'signal', to, data }));
+  state.transport.send({ type: 'signal', to, data });
 }
 
 function onSignal(from, data) {
@@ -737,11 +917,14 @@ function onSignal(from, data) {
 
 function requestWatch(id, source, name, avatar) {
   const key = tileKey(id, source);
-  const pc = new RTCPeerConnection();
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   state.watchPcs.set(key, pc);
 
   pc.addEventListener('icecandidate', (ev) => {
-    if (ev.candidate) sendSignal(id, { kind: 'ice', candidate: ev.candidate, source });
+    // .toJSON() vira um objeto simples — o transporte por PeerJS (modo
+    // internet) não sabe serializar a classe nativa RTCIceCandidate direto,
+    // só objetos comuns.
+    if (ev.candidate) sendSignal(id, { kind: 'ice', candidate: ev.candidate.toJSON(), source });
   });
   pc.addEventListener('track', (ev) => {
     addOrUpdateTile(key, name, avatar, ev.streams[0], false, source);
@@ -852,7 +1035,7 @@ async function startScreenShare() {
 
   addOrUpdateTile(tileKey(state.myId, 'screen'), `${state.myName} (você)`, myAvatar, display, true, 'screen');
   updateEmptyHint();
-  state.ws.send(JSON.stringify({ type: 'share:start', source: 'screen' }));
+  state.transport.send({ type: 'share:start', source: 'screen' });
 }
 
 function setBtnLabel(btn, text) {
@@ -909,8 +1092,8 @@ function stopScreenShare() {
   removeTile(tileKey(state.myId, 'screen'));
   updateEmptyHint();
 
-  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify({ type: 'share:stop', source: 'screen' }));
+  if (state.transport) {
+    state.transport.send({ type: 'share:stop', source: 'screen' });
   }
 }
 
@@ -939,7 +1122,7 @@ async function startCameraShare() {
 
   addOrUpdateTile(tileKey(state.myId, 'camera'), `${state.myName} (você)`, myAvatar, cam, true, 'camera');
   updateEmptyHint();
-  state.ws.send(JSON.stringify({ type: 'share:start', source: 'camera' }));
+  state.transport.send({ type: 'share:start', source: 'camera' });
 }
 
 function stopCameraShare() {
@@ -960,8 +1143,8 @@ function stopCameraShare() {
   removeTile(tileKey(state.myId, 'camera'));
   updateEmptyHint();
 
-  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify({ type: 'share:stop', source: 'camera' }));
+  if (state.transport) {
+    state.transport.send({ type: 'share:stop', source: 'camera' });
   }
 }
 
@@ -971,7 +1154,7 @@ async function createBroadcastPeer(viewerId, source) {
   const localTracks = source === 'camera' ? state.camera.localTracks : state.screen.localTracks;
   if (!localTracks.length) return; // pedido chegou depois que eu já parei essa fonte
   const key = tileKey(viewerId, source);
-  const pc = new RTCPeerConnection();
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
   state.broadcastPcs.set(key, pc);
 
   const combined = new MediaStream(localTracks);
@@ -979,7 +1162,7 @@ async function createBroadcastPeer(viewerId, source) {
   preferH264(pc);
 
   pc.addEventListener('icecandidate', (ev) => {
-    if (ev.candidate) sendSignal(viewerId, { kind: 'ice', candidate: ev.candidate, source });
+    if (ev.candidate) sendSignal(viewerId, { kind: 'ice', candidate: ev.candidate.toJSON(), source });
   });
 
   const offer = await pc.createOffer();

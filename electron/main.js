@@ -5,7 +5,32 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, desktopCapturer, session } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, session, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
+
+// Atualização automática via GitHub Releases (github.com/Doug3011/suvaco-da-jinx).
+// Só roda no app empacotado de verdade — em dev (`npm start`) não tem update
+// feed configurado e só ia gerar erro no console à toa.
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.on('update-downloaded', (info) => {
+  dialog
+    .showMessageBox({
+      type: 'info',
+      title: 'Atualização pronta',
+      message: `Uma nova versão (${info.version}) do Suvaco da Jinx foi baixada.`,
+      detail: 'Reiniciar agora pra aplicar, ou continuar usando e aplicar só quando fechar o app.',
+      buttons: ['Reiniciar agora', 'Depois'],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    .then(({ response }) => {
+      if (response === 0) autoUpdater.quitAndInstall();
+    });
+});
+autoUpdater.on('error', (err) => {
+  console.warn('[auto-update] erro ao checar/baixar atualização:', err.message);
+});
 
 let nativeAddon = null;
 try {
@@ -139,6 +164,12 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
+
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.warn('[auto-update] não deu pra checar atualização agora:', err.message);
+    });
+  }
 });
 
 app.on('window-all-closed', () => {

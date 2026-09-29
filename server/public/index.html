@@ -29,24 +29,51 @@
         <span>Personalizar perfil (foto, banner, bio)</span>
       </button>
 
-      <div class="lobby-actions">
-        <button id="hostBtn" class="primary">Hospedar sala aqui</button>
+      <div class="mode-tabs">
+        <button type="button" id="modeTabLan" class="mode-tab active">Rede local (Radmin)</button>
+        <button type="button" id="modeTabInternet" class="mode-tab">Internet (sem Radmin)</button>
       </div>
 
-      <div class="divider">ou entre numa sala já aberta</div>
-
-      <div id="roomList" class="room-list">
-        <p class="hint">Procurando salas na rede…</p>
-      </div>
-
-      <details class="manual-join">
-        <summary>Entrar digitando o IP manualmente</summary>
-        <div class="manual-join-row">
-          <input id="manualHost" type="text" placeholder="ex: 26.12.34.56" />
-          <input id="manualPort" type="text" placeholder="47400" />
-          <button id="manualJoinBtn">Entrar</button>
+      <!-- modo rede local: descoberta automática por UDP, igual sempre foi -->
+      <div id="lanModeSection">
+        <div class="lobby-actions">
+          <button id="hostBtn" class="primary">Hospedar sala aqui</button>
         </div>
-      </details>
+
+        <div class="divider">ou entre numa sala já aberta</div>
+
+        <div id="roomList" class="room-list">
+          <p class="hint">Procurando salas na rede…</p>
+        </div>
+
+        <details class="manual-join">
+          <summary>Entrar digitando o IP manualmente</summary>
+          <div class="manual-join-row">
+            <input id="manualHost" type="text" placeholder="ex: 26.12.34.56" />
+            <input id="manualPort" type="text" placeholder="47400" />
+            <button id="manualJoinBtn">Entrar</button>
+          </div>
+        </details>
+      </div>
+
+      <!-- modo internet: sem Radmin, conecta por um código de sala via WebRTC
+           (STUN pra furar NAT + um corretor de sinalização público gratuito,
+           sem precisar hospedar nada) -->
+      <div id="internetModeSection" class="hidden">
+        <p class="hint">
+          Não precisa de Radmin nem de nenhum programa a mais — só internet
+          normal. Uma pessoa cria a sala e manda o código pros outros.
+        </p>
+        <div class="lobby-actions">
+          <button id="createCodeRoomBtn" class="primary">Criar sala</button>
+        </div>
+        <div class="divider">ou entre com um código que te passaram</div>
+        <div class="manual-join-row">
+          <input id="joinCodeInput" type="text" maxlength="6" placeholder="ex: 7K2P9M" style="text-transform: uppercase;" />
+          <button id="joinCodeBtn">Entrar</button>
+        </div>
+        <p id="internetModeStatus" class="hint hidden"></p>
+      </div>
 
       <p class="credits">Desenvolvido por <strong>Doug Muller Burro</strong></p>
     </section>
@@ -206,6 +233,7 @@
     </div>
   </div>
 
+  <script src="/vendor/peerjs.min.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

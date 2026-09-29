@@ -228,6 +228,26 @@ input[type="text"] {
 input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 input[type="file"] { color: var(--muted); font-size: 13px; }
 
+.mode-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--panel-2);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  margin-top: 4px;
+}
+.mode-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--muted);
+}
+.mode-tab.active { background: var(--panel); color: var(--text); }
+.mode-tab:hover { transform: none; }
+
 .lobby-actions { margin-top: 4px; }
 
 .divider {

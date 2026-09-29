@@ -1,0 +1,7 @@
+{
+  "name": "tela-radmin-server",
+  "private": true,
+  "version": "1.0.0",
+  "main": "main.cjs",
+  "description": "Servidor local (HTTP + WebSocket relay + descoberta UDP). Roda dentro do Electron ou sozinho via 'node main.cjs'. O ws vem de vendor/ws (vendorizado) em vez de node_modules."
+}

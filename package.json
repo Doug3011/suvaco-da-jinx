@@ -1,0 +1,57 @@
+{
+  "name": "tela-radmin",
+  "private": true,
+  "version": "2.0.0",
+  "description": "Compartilhamento de tela na rede local (Radmin VPN), com mute por app individual.",
+  "author": "Doug Muller Burro",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "rebuild-native": "cd native && npx node-gyp rebuild",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.doug.suvacodajinx",
+    "productName": "Suvaco da Jinx",
+    "icon": "build/icon.ico",
+    "asar": true,
+    "asarUnpack": [
+      "native/build/Release/*.node"
+    ],
+    "compression": "maximum",
+    "electronLanguages": [
+      "pt-BR",
+      "en-US"
+    ],
+    "files": [
+      "electron/**/*",
+      "server/main.cjs",
+      "server/package.json",
+      "server/public/**/*",
+      "server/vendor/**/*",
+      "native/build/Release/*.node",
+      "!native/build/Release/obj*/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Suvaco da Jinx"
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.4.2",
+    "electron-builder": "^26.15.3",
+    "node-gyp": "^13.0.2"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.9.2"
+  }
+}

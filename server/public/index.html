@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Suvaco da Jinx</title>
+  <link rel="icon" type="image/png" href="/logo.png" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- LOBBY -->
+    <section id="lobby" class="screen">
+      <div class="lobby-brand">
+        <img src="/logo.png" alt="" class="lobby-logo" />
+        <div>
+          <h1>Suvaco da Jinx</h1>
+          <p class="subtitle">Compartilhamento de tela na rede local (Radmin VPN)</p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Seu apelido</span>
+        <input id="nameInput" type="text" maxlength="30" placeholder="Como te chamam na mesa" />
+      </label>
+
+      <button type="button" id="openProfileBtn" class="profile-summary-btn">
+        <img id="avatarPreview" class="avatar-preview" alt="" />
+        <span>Personalizar perfil (foto, banner, bio)</span>
+      </button>
+
+      <div class="lobby-actions">
+        <button id="hostBtn" class="primary">Hospedar sala aqui</button>
+      </div>
+
+      <div class="divider">ou entre numa sala já aberta</div>
+
+      <div id="roomList" class="room-list">
+        <p class="hint">Procurando salas na rede…</p>
+      </div>
+
+      <details class="manual-join">
+        <summary>Entrar digitando o IP manualmente</summary>
+        <div class="manual-join-row">
+          <input id="manualHost" type="text" placeholder="ex: 26.12.34.56" />
+          <input id="manualPort" type="text" placeholder="47400" />
+          <button id="manualJoinBtn">Entrar</button>
+        </div>
+      </details>
+
+      <p class="credits">Desenvolvido por <strong>Doug Muller Burro</strong></p>
+    </section>
+
+    <!-- SALA -->
+    <section id="room" class="screen hidden">
+      <header class="room-topbar">
+        <div class="room-topbar-brand">
+          <img src="/logo.png" alt="" class="room-logo" />
+          <div class="room-topbar-info">
+            <strong id="roomInfo">Sala</strong>
+            <span id="peopleCount" class="muted"></span>
+          </div>
+        </div>
+        <div class="room-topbar-actions">
+          <button id="peopleToggleBtn" class="icon-btn ghost" type="button" title="Mostrar/esconder pessoas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Pessoas</span>
+          </button>
+          <button id="inviteBtn" class="icon-btn ghost" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <span>Convidar</span>
+          </button>
+          <button id="leaveBtn" class="icon-btn ghost danger-hover" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <span>Sair</span>
+          </button>
+        </div>
+      </header>
+
+      <div id="toast" class="toast hidden"></div>
+
+      <div class="room-body">
+        <div class="room-content">
+          <div id="focusBar" class="focus-bar hidden">
+            <span id="focusCount"></span>
+            <button id="focusBtn" class="primary">Tela cheia com selecionadas</button>
+          </div>
+
+          <div id="grid" class="grid">
+            <div id="emptyHint" class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              <p>Ninguém está transmitindo ainda</p>
+              <span>Use os controles abaixo pra compartilhar sua tela ou câmera</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- barra lateral direita, estilo Discord: pessoas na sala + áudio por app -->
+        <aside id="sidebar" class="room-sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-section-title">Pessoas na sala</div>
+            <div id="peopleBar" class="people-list"></div>
+          </div>
+
+          <div id="appAudioPanel" class="sidebar-section hidden">
+            <button type="button" id="appAudioToggle" class="sidebar-section-toggle">
+              <span>Áudio por app</span>
+              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div id="appAudioBody" class="sidebar-section-body collapsed">
+              <div class="app-audio-header">
+                <button id="refreshAppsBtn" class="ghost" type="button">Atualizar lista</button>
+              </div>
+              <div id="appAudioList" class="app-audio-list"></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- dock flutuante: seus controles de transmissão -->
+      <div class="dock">
+        <div class="dock-settings-wrap">
+          <button id="settingsBtn" class="dock-btn icon-only" type="button" title="Configurações de transmissão">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+          <div id="settingsPanel" class="settings-panel hidden">
+            <label class="settings-row">
+              <span>Resolução da tela</span>
+              <select id="resolutionSelect">
+                <option value="1280x720">1280×720 (leve)</option>
+                <option value="1920x1080" selected>1920×1080 (recomendado)</option>
+                <option value="2560x1440">2560×1440</option>
+                <option value="native">Nativa (sem limite)</option>
+              </select>
+            </label>
+            <label class="settings-row">
+              <span>Taxa de quadros</span>
+              <select id="fpsSelect">
+                <option value="15">15 fps (mais leve)</option>
+                <option value="24">24 fps</option>
+                <option value="30" selected>30 fps (recomendado)</option>
+                <option value="60">60 fps (mais pesado)</option>
+              </select>
+            </label>
+            <label class="settings-row settings-row-check">
+              <input type="checkbox" id="noiseSuppressionCheck" checked />
+              <span>Redução de ruído no microfone</span>
+            </label>
+            <p class="settings-hint">Resolução/fps mais baixos deixam a transmissão mais leve pro seu PC — importante se for jogar enquanto transmite.</p>
+          </div>
+        </div>
+        <label class="dock-toggle" id="micCheckWrap" title="Incluir microfone ao compartilhar a tela">
+          <input type="checkbox" id="micCheck" checked />
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          <span>Mic ao compartilhar</span>
+        </label>
+        <button id="micMuteBtn" class="dock-btn hidden" type="button" title="Mutar microfone"></button>
+        <button id="cameraBtn" class="dock-btn" type="button" title="Ligar câmera">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+          <span>Câmera</span>
+        </button>
+        <button id="shareBtn" class="dock-btn primary" type="button" title="Compartilhar tela">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span>Compartilhar tela</span>
+        </button>
+        <button id="leaveCallBtn" class="dock-btn dock-hangup" type="button" title="Sair da sala">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.92V20a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h2.08a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11l-1.27 1.27a16 16 0 0 0 2.61 3.41"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <!-- modal de perfil: editar o seu (no lobby) ou ver o de alguém (clicando na barra lateral) -->
+  <div id="profileModal" class="modal-overlay hidden">
+    <div id="profileModalCard" class="modal-card profile-modal">
+      <button type="button" id="profileModalClose" class="icon-btn ghost modal-close" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+
+      <label id="bannerLabel" class="profile-banner-edit">
+        <div id="profileBanner" class="profile-banner"></div>
+        <span class="profile-banner-hint">Clique pra trocar o banner</span>
+        <input type="file" id="bannerInput" accept="image/*" class="hidden" />
+      </label>
+
+      <div class="profile-modal-body">
+        <label id="modalAvatarLabel" class="profile-avatar-edit">
+          <img id="modalAvatarPreview" class="profile-avatar" alt="" />
+          <input type="file" id="modalAvatarInput" accept="image/*" class="hidden" />
+        </label>
+
+        <strong id="profileModalName" class="profile-modal-name"></strong>
+
+        <label class="field profile-bio-field">
+          <span>Bio</span>
+          <textarea id="bioInput" maxlength="190" rows="3" placeholder="Fale um pouco sobre você..."></textarea>
+        </label>
+
+        <div id="profileHistorySection" class="profile-history">
+          <div class="sidebar-section-title">Apps já vistos nas suas transmissões</div>
+          <div id="profileHistoryList" class="profile-history-list">
+            <p class="hint">Nenhum ainda — aparece depois que você compartilhar a tela.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

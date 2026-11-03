@@ -2682,6 +2682,15 @@ const CHANGELOG = {
   '2.19.0': [
     'Tentativa de tirar a borda que o Windows às vezes desenha em volta de uma janela específica sendo compartilhada — teste em casa e avisa se sumiu de verdade.',
   ],
+  '3.0.0': [
+    'Reformulação completa: o app agora é baseado em servidores e canais, igual Discord — a rede local (Radmin) não é mais necessária, funciona em qualquer rede.',
+    'Login simples só com apelido (sem senha) — entra uma vez e fica salvo nesse PC.',
+    'Crie servidores, convide seus amigos com um código, e organize canais de texto e de voz à vontade.',
+    'Canal de texto com mensagens de verdade (ficam salvas, chegam na hora pra quem está com o canal aberto).',
+    'Canal de voz com a mesma transmissão de tela/câmera/mic de sempre.',
+    'Configurações do servidor: troque o nome, o ícone, veja o código de convite, saia ou apague o servidor.',
+    'Aviso: ainda não dá pra mandar arquivo no chat de texto, e chamadas de voz em redes mais restritas (ex: 4G/5G, rede corporativa) podem não conectar ainda — chegando em breve.',
+  ],
 };
 
 const LAST_SEEN_VERSION_KEY = 'tela-radmin:last-seen-version';

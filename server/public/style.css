@@ -834,6 +834,11 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   flex-direction: column;
   gap: 14px;
 }
+/* so' existe espaço reservado pra barra lateral quando tem algo de verdade
+   pra mostrar nela (hoje: audio por app, durante compartilhamento de uma
+   janela específica) - sem isso, ficava uma faixa vazia à direita. */
+.room-sidebar:has(#appAudioPanel.hidden) { display: none; }
+
 .room-sidebar {
   width: 320px;
   flex-shrink: 0;

@@ -97,7 +97,6 @@ const els = {
   textChannelTextInput: document.getElementById('textChannelTextInput'),
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
-  peopleBar: document.getElementById('peopleBar'),
   chatNotificationsCheck: document.getElementById('chatNotificationsCheck'),
   dmModal: document.getElementById('dmModal'),
   dmModalClose: document.getElementById('dmModalClose'),
@@ -125,8 +124,6 @@ const els = {
   appAudioToggle: document.getElementById('appAudioToggle'),
   appAudioBody: document.getElementById('appAudioBody'),
   refreshAppsBtn: document.getElementById('refreshAppsBtn'),
-  sidebar: document.getElementById('sidebar'),
-  peopleToggleBtn: document.getElementById('peopleToggleBtn'),
   settingsBtn: document.getElementById('settingsBtn'),
   settingsModal: document.getElementById('settingsModal'),
   settingsModalClose: document.getElementById('settingsModalClose'),
@@ -1385,10 +1382,6 @@ function showToast(message, duration = 2500) {
   toastTimer = setTimeout(() => els.toast.classList.add('hidden'), duration);
 }
 
-els.peopleToggleBtn.addEventListener('click', () => {
-  els.sidebar.classList.toggle('hidden');
-});
-
 els.appAudioToggle.addEventListener('click', () => {
   els.appAudioBody.classList.toggle('collapsed');
   els.appAudioToggle.classList.toggle('open', !els.appAudioBody.classList.contains('collapsed'));
@@ -1427,7 +1420,6 @@ function leaveRoom() {
 
 function onPresence(list) {
   els.peopleCount.textContent = `· ${list.length} na sala`;
-  renderPeopleBar(list);
 
   const currentIds = new Set(list.map((c) => c.id));
   const infoById = new Map(list.map((c) => [c.id, c]));
@@ -1460,32 +1452,6 @@ function onPresence(list) {
   updateEmptyHint();
 }
 
-function renderPeopleBar(list) {
-  els.peopleBar.innerHTML = '';
-  for (const c of list) {
-    const row = document.createElement('div');
-    const isSharing = c.sharingScreen || c.sharingCamera;
-    row.className = 'people-list-row' + (isSharing ? ' sharing' : '');
-    row.title = 'Ver perfil';
-    const isMe = c.id === state.myId;
-    let badges = '';
-    if (c.sharingScreen) badges += `<span class="chip-badge">${ICONS.monitor}</span>`;
-    if (c.sharingCamera) badges += `<span class="chip-badge">${ICONS.camera}</span>`;
-    const statusText = c.isHost ? 'Online · Anfitrião' : 'Online';
-    row.innerHTML = `
-      <div class="avatar-status-wrap"><img src="${c.avatar || DEFAULT_AVATAR}" alt="" /><span class="status-dot"></span></div>
-      <span class="person-info">
-        <span class="name-row"><span class="name">${escapeHtml(c.name)}${isMe ? ' (você)' : ''}</span>${c.isHost ? `<span class="host-crown" title="Anfitrião">${ICONS.crown}</span>` : ''}</span>
-        <span class="status-text">${statusText}</span>
-      </span>
-      <span class="badges">${badges}</span>`;
-    row.addEventListener('click', () => {
-      if (isMe) openOwnProfile();
-      else openProfileModal({ readOnly: true, name: c.name, avatar: c.avatar, banner: c.banner, bio: c.bio });
-    });
-    els.peopleBar.appendChild(row);
-  }
-}
 
 function updateEmptyHint() {
   let visibleTiles = 0;

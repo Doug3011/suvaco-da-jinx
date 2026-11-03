@@ -56,14 +56,12 @@ const els = {
   welcomePanel: document.getElementById('welcomePanel'),
   userBarAvatar: document.getElementById('userBarAvatar'),
   userBarName: document.getElementById('userBarName'),
+  userBarProfileBtn: document.getElementById('userBarProfileBtn'),
   userBarLogoutBtn: document.getElementById('userBarLogoutBtn'),
   userBarSettingsBtn: document.getElementById('userBarSettingsBtn'),
   memberSidebar: document.getElementById('memberSidebar'),
   memberList: document.getElementById('memberList'),
   room: document.getElementById('room'),
-  nameInput: document.getElementById('nameInput'),
-  avatarPreview: document.getElementById('avatarPreview'),
-  openProfileBtn: document.getElementById('openProfileBtn'),
   profileModal: document.getElementById('profileModal'),
   profileModalCard: document.getElementById('profileModalCard'),
   profileModalClose: document.getElementById('profileModalClose'),
@@ -73,9 +71,38 @@ const els = {
   modalAvatarPreview: document.getElementById('modalAvatarPreview'),
   modalAvatarInput: document.getElementById('modalAvatarInput'),
   profileModalName: document.getElementById('profileModalName'),
+  profileModalHandle: document.getElementById('profileModalHandle'),
+  profileNameField: document.getElementById('profileNameField'),
+  profileNameInput: document.getElementById('profileNameInput'),
   bioInput: document.getElementById('bioInput'),
   profileHistorySection: document.getElementById('profileHistorySection'),
   profileHistoryList: document.getElementById('profileHistoryList'),
+  profileMutualSection: document.getElementById('profileMutualSection'),
+  profileMutualServers: document.getElementById('profileMutualServers'),
+  profileMutualFriends: document.getElementById('profileMutualFriends'),
+  profileActionsRow: document.getElementById('profileActionsRow'),
+  profileAddFriendBtn: document.getElementById('profileAddFriendBtn'),
+  profilePendingBtn: document.getElementById('profilePendingBtn'),
+  profileAcceptFriendBtn: document.getElementById('profileAcceptFriendBtn'),
+  profileMessageBtn: document.getElementById('profileMessageBtn'),
+  profileRemoveFriendBtn: document.getElementById('profileRemoveFriendBtn'),
+  homeBtn: document.getElementById('homeBtn'),
+  friendsTabs: document.querySelectorAll('.friends-tab'),
+  friendsTabPanels: document.querySelectorAll('.friends-tab-panel'),
+  friendsOnlineList: document.getElementById('friendsOnlineList'),
+  friendsAllList: document.getElementById('friendsAllList'),
+  friendsPendingIncoming: document.getElementById('friendsPendingIncoming'),
+  friendsPendingOutgoing: document.getElementById('friendsPendingOutgoing'),
+  addFriendForm: document.getElementById('addFriendForm'),
+  addFriendInput: document.getElementById('addFriendInput'),
+  addFriendError: document.getElementById('addFriendError'),
+  addFriendResults: document.getElementById('addFriendResults'),
+  dmChannel: document.getElementById('dmChannel'),
+  dmPeerAvatar: document.getElementById('dmPeerAvatar'),
+  dmPeerName: document.getElementById('dmPeerName'),
+  dmMessages: document.getElementById('dmMessages'),
+  dmForm: document.getElementById('dmForm'),
+  dmTextInput: document.getElementById('dmTextInput'),
   serverRail: document.getElementById('serverRail'),
   addServerBtn: document.getElementById('addServerBtn'),
   activeServerName: document.getElementById('activeServerName'),
@@ -203,6 +230,14 @@ function showAuthScreen() {
   myServers = [];
   activeServerId = null;
   activeChannels = [];
+  if (globalPresenceChannel) {
+    window.supabaseClient.removeChannel(globalPresenceChannel);
+    globalPresenceChannel = null;
+  }
+  closeDm();
+  friendsCache = [];
+  pendingIncoming = [];
+  pendingOutgoing = [];
 }
 
 async function fetchMyProfile(userId) {
@@ -221,13 +256,14 @@ async function fetchMyProfile(userId) {
 function showLobbyScreen() {
   els.authScreen.classList.add('hidden');
   els.lobby.classList.remove('hidden');
-  showMainPanel('welcome');
+  goHome();
   if (currentProfile) {
-    els.nameInput.value = currentProfile.display_name || '';
     els.userBarName.textContent = currentProfile.display_name || 'Convidado';
     els.userBarAvatar.src = currentProfile.avatar_url || DEFAULT_AVATAR;
   }
   fetchMyServers();
+  joinGlobalPresence();
+  fetchFriends();
 }
 
 els.authForm.addEventListener('submit', async (ev) => {
@@ -277,17 +313,7 @@ const ICE_SERVERS = [
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
 
-const NAME_KEY = 'tela-radmin:name';
-const AVATAR_KEY = 'tela-radmin:avatar';
-const BANNER_KEY = 'tela-radmin:banner';
-const BIO_KEY = 'tela-radmin:bio';
 const HISTORY_KEY = 'tela-radmin:app-history';
-els.nameInput.value = localStorage.getItem(NAME_KEY) || '';
-
-let myAvatar = localStorage.getItem(AVATAR_KEY) || null;
-let myBanner = localStorage.getItem(BANNER_KEY) || null;
-let myBio = localStorage.getItem(BIO_KEY) || '';
-els.avatarPreview.src = myAvatar || DEFAULT_AVATAR;
 
 let appHistory = new Set();
 try {
@@ -309,7 +335,7 @@ function rememberAppsInHistory(apps) {
   if (changed) saveAppHistory();
 }
 
-function resizeImageToDataUrl(file, width, height) {
+function resizeImageToBlob(file, width, height) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -322,14 +348,26 @@ function resizeImageToDataUrl(file, width, height) {
       const h = img.height * scale;
       ctx.drawImage(img, (width - w) / 2, (height - h) / 2, w, h);
       URL.revokeObjectURL(img.src);
-      resolve(canvas.toDataURL('image/jpeg', 0.7));
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Falha ao processar imagem'))), 'image/jpeg', 0.85);
     };
     img.onerror = reject;
     img.src = URL.createObjectURL(file);
   });
 }
 
+async function uploadProfileImage(blob, folder) {
+  const path = `${folder}/${currentUser.id}-${Date.now()}.jpg`;
+  const { error: uploadError } = await window.supabaseClient.storage
+    .from('avatars')
+    .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+  if (uploadError) throw uploadError;
+  const { data } = window.supabaseClient.storage.from('avatars').getPublicUrl(path);
+  return data.publicUrl;
+}
+
 /* ---------------- modal de perfil (editar o seu / ver o de alguém) ---------------- */
+
+let profileModalTargetId = null;
 
 function renderProfileBanner(el, banner) {
   el.style.backgroundImage = banner ? `url(${banner})` : '';
@@ -349,69 +387,183 @@ function renderProfileHistory() {
   }
 }
 
-function openProfileModal({ readOnly, name, avatar, banner, bio }) {
+function openProfileModal({ readOnly, userId, name, handle, avatar, banner, bio, mutualServers, mutualFriends, friendStatus }) {
+  profileModalTargetId = readOnly ? userId : null;
   els.profileModal.classList.toggle('readonly', readOnly);
   els.profileModal.classList.remove('hidden');
   els.profileModalName.textContent = name || 'Convidado';
+  els.profileModalHandle.textContent = readOnly && handle ? `· ${handle}` : '';
   els.modalAvatarPreview.src = avatar || DEFAULT_AVATAR;
   renderProfileBanner(els.profileBanner, banner);
   els.bioInput.value = bio || '';
   els.bioInput.readOnly = !!readOnly;
   els.bioInput.placeholder = readOnly ? 'Essa pessoa não escreveu uma bio.' : 'Fale um pouco sobre você...';
-  if (!readOnly) renderProfileHistory();
+
+  if (!readOnly) {
+    els.profileNameInput.value = currentProfile ? currentProfile.display_name || '' : '';
+    renderProfileHistory();
+    return;
+  }
+
+  const serversText = mutualServers && mutualServers.length ? `Servidores em comum: ${mutualServers.join(', ')}` : '';
+  const friendsText = mutualFriends && mutualFriends.length ? `Amigos em comum: ${mutualFriends.join(', ')}` : '';
+  els.profileMutualServers.textContent = serversText;
+  els.profileMutualFriends.textContent = friendsText;
+  els.profileMutualSection.classList.toggle('hidden', !serversText && !friendsText);
+
+  els.profileActionsRow.classList.remove('hidden');
+  els.profileAddFriendBtn.classList.toggle('hidden', friendStatus !== 'none');
+  els.profilePendingBtn.classList.toggle('hidden', friendStatus !== 'pending_out');
+  els.profileAcceptFriendBtn.classList.toggle('hidden', friendStatus !== 'pending_in');
+  els.profileMessageBtn.classList.toggle('hidden', friendStatus !== 'friends');
+  els.profileRemoveFriendBtn.classList.toggle('hidden', friendStatus !== 'friends');
 }
 
 function closeProfileModal() {
   els.profileModal.classList.add('hidden');
+  profileModalTargetId = null;
 }
 
 function openOwnProfile() {
   openProfileModal({
     readOnly: false,
-    name: (els.nameInput.value || 'Convidado').trim() || 'Convidado',
-    avatar: myAvatar,
-    banner: myBanner,
-    bio: myBio,
+    name: currentProfile ? currentProfile.display_name : 'Convidado',
+    avatar: currentProfile ? currentProfile.avatar_url : null,
+    banner: currentProfile ? currentProfile.banner_url : null,
+    bio: currentProfile ? currentProfile.bio : '',
   });
 }
 
-els.openProfileBtn.addEventListener('click', openOwnProfile);
+// busca perfil + servidores em comum + amigos em comum (RPC, ve' so' a
+// intersecao - a policy de friend_requests nao deixa listar os amigos de
+// outra pessoa direto) e abre o popout com os botoes certos pro estado
+// atual (nenhum vinculo / pedido enviado / pedido recebido / ja' amigos).
+async function openUserProfile(userId) {
+  if (!userId || userId === currentUser.id) {
+    openOwnProfile();
+    return;
+  }
+  await fetchFriends();
+  const { data: profile, error } = await window.supabaseClient
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+  if (error || !profile) {
+    console.error('Erro ao buscar perfil:', error);
+    return;
+  }
+
+  let mutualServerNames = [];
+  const myServerIds = myServers.map((s) => s.id);
+  if (myServerIds.length) {
+    const { data: sm } = await window.supabaseClient
+      .from('server_members')
+      .select('server_id, servers(name)')
+      .eq('user_id', userId)
+      .in('server_id', myServerIds);
+    mutualServerNames = (sm || []).map((r) => r.servers && r.servers.name).filter(Boolean);
+  }
+
+  const { data: mutualFriendsData } = await window.supabaseClient.rpc('mutual_friends', { other: userId });
+
+  openProfileModal({
+    readOnly: true,
+    userId,
+    name: profile.display_name || 'Convidado',
+    handle: (profile.id || '').slice(0, 8),
+    avatar: profile.avatar_url,
+    banner: profile.banner_url,
+    bio: profile.bio,
+    mutualServers: mutualServerNames,
+    mutualFriends: (mutualFriendsData || []).map((p) => p.display_name).filter(Boolean),
+    friendStatus: friendStatusOf(userId),
+  });
+}
+
+els.userBarProfileBtn.addEventListener('click', openOwnProfile);
 els.profileModalClose.addEventListener('click', closeProfileModal);
 els.profileModal.addEventListener('click', (ev) => {
   if (ev.target === els.profileModal) closeProfileModal();
 });
 
+els.profileNameInput.addEventListener('change', async () => {
+  const name = (els.profileNameInput.value || 'Convidado').trim() || 'Convidado';
+  els.profileNameInput.value = name;
+  const { error } = await window.supabaseClient.from('profiles').update({ display_name: name }).eq('id', currentUser.id);
+  if (error) { console.error('Erro ao salvar apelido:', error); return; }
+  currentProfile = { ...currentProfile, display_name: name };
+  els.profileModalName.textContent = name;
+  els.userBarName.textContent = name;
+});
+
 els.modalAvatarInput.addEventListener('change', async (ev) => {
   const file = ev.target.files[0];
+  ev.target.value = '';
   if (!file) return;
   try {
-    const dataUrl = await resizeImageToDataUrl(file, 96, 96);
-    myAvatar = dataUrl;
-    localStorage.setItem(AVATAR_KEY, dataUrl);
-    els.avatarPreview.src = dataUrl;
-    els.modalAvatarPreview.src = dataUrl;
-  } catch {
-    /* imagem inválida, ignora */
+    const blob = await resizeImageToBlob(file, 256, 256);
+    const url = await uploadProfileImage(blob, 'profile-icons');
+    const { error } = await window.supabaseClient.from('profiles').update({ avatar_url: url }).eq('id', currentUser.id);
+    if (error) throw error;
+    currentProfile = { ...currentProfile, avatar_url: url };
+    els.modalAvatarPreview.src = url;
+    els.userBarAvatar.src = url;
+  } catch (err) {
+    console.error('Erro ao trocar avatar:', err);
+    showToast('Não deu pra trocar a foto.', 2500);
   }
 });
 
 els.bannerInput.addEventListener('change', async (ev) => {
   const file = ev.target.files[0];
+  ev.target.value = '';
   if (!file) return;
   try {
-    const dataUrl = await resizeImageToDataUrl(file, 600, 180);
-    myBanner = dataUrl;
-    localStorage.setItem(BANNER_KEY, dataUrl);
-    renderProfileBanner(els.profileBanner, dataUrl);
-  } catch {
-    /* imagem inválida, ignora */
+    const blob = await resizeImageToBlob(file, 600, 180);
+    const url = await uploadProfileImage(blob, 'profile-banners');
+    const { error } = await window.supabaseClient.from('profiles').update({ banner_url: url }).eq('id', currentUser.id);
+    if (error) throw error;
+    currentProfile = { ...currentProfile, banner_url: url };
+    renderProfileBanner(els.profileBanner, url);
+  } catch (err) {
+    console.error('Erro ao trocar banner:', err);
+    showToast('Não deu pra trocar o banner.', 2500);
   }
 });
 
+let bioSaveTimer = null;
 els.bioInput.addEventListener('input', () => {
   if (els.bioInput.readOnly) return;
-  myBio = els.bioInput.value;
-  localStorage.setItem(BIO_KEY, myBio);
+  const bio = els.bioInput.value;
+  clearTimeout(bioSaveTimer);
+  bioSaveTimer = setTimeout(async () => {
+    const { error } = await window.supabaseClient.from('profiles').update({ bio }).eq('id', currentUser.id);
+    if (!error) currentProfile = { ...currentProfile, bio };
+  }, 600);
+});
+
+els.profileAddFriendBtn.addEventListener('click', async () => {
+  if (!profileModalTargetId) return;
+  await sendFriendRequest(profileModalTargetId);
+  openUserProfile(profileModalTargetId);
+});
+els.profileAcceptFriendBtn.addEventListener('click', async () => {
+  if (!profileModalTargetId) return;
+  await acceptFriendRequestWith(profileModalTargetId);
+  openUserProfile(profileModalTargetId);
+});
+els.profileRemoveFriendBtn.addEventListener('click', async () => {
+  if (!profileModalTargetId) return;
+  if (!confirm('Remover essa pessoa da sua lista de amigos?')) return;
+  await deleteFriendRequestWith(profileModalTargetId);
+  openUserProfile(profileModalTargetId);
+});
+els.profileMessageBtn.addEventListener('click', () => {
+  if (!profileModalTargetId) return;
+  const id = profileModalTargetId;
+  closeProfileModal();
+  openDm(id);
 });
 
 function tileKey(id, source) {
@@ -890,14 +1042,6 @@ function teardownAppAudio() {
 
 els.refreshAppsBtn.addEventListener('click', refreshAppList);
 
-// TODO: esse campo ainda so' grava no localStorage - nao atualiza
-// profiles.display_name no Supabase. Trocar de nome hoje so' reflete de
-// verdade criando outro apelido na tela de login.
-els.nameInput.addEventListener('change', () => {
-  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
-  localStorage.setItem(NAME_KEY, name);
-});
-
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -922,15 +1066,9 @@ async function fetchMyServers() {
   }
   myServers = data || [];
   renderServerRail();
-  if (myServers.length && !myServers.some((s) => s.id === activeServerId)) {
-    selectServer(myServers[0].id);
-  } else if (!myServers.length) {
-    activeServerId = null;
-    activeChannels = [];
-    els.activeServerName.textContent = 'Seus servidores';
-    els.copyInviteBtn.classList.add('hidden');
-    els.serverSettingsBtn.classList.add('hidden');
-    els.roomGrid.innerHTML = '<p class="hint">Crie ou entre num servidor pra ver os canais aqui.</p>';
+  if (activeServerId && !myServers.some((s) => s.id === activeServerId)) {
+    // o servidor que estava aberto foi apagado ou eu saí dele - volta pra Home
+    goHome();
   } else if (activeServerId) {
     // servidor ativo continua o mesmo, mas os dados dele (nome, icone...)
     // podem ter mudado - atualiza o cabeçalho sem precisar re-selecionar
@@ -957,6 +1095,7 @@ function renderServerRail() {
 async function selectServer(serverId) {
   activeServerId = serverId;
   renderServerRail();
+  els.homeBtn.classList.remove('active');
   const server = myServers.find((s) => s.id === serverId);
   els.activeServerName.textContent = server ? server.name : '';
   els.copyInviteBtn.classList.toggle('hidden', !server);
@@ -964,6 +1103,405 @@ async function selectServer(serverId) {
   await fetchChannels(serverId);
   joinServerPresence(serverId);
 }
+
+/* ---------------- Home: tela de amigos + mensagens diretas ----------------
+   "Home" e' um pseudo-servidor: activeServerId fica null, a lateral de
+   canais vira lista de conversas de DM, e o painel principal mostra as
+   abas de amigos (igual o botao com a logo do Discord abre a tela de
+   amigos em vez de um servidor). */
+
+function goHome() {
+  activeServerId = null;
+  renderServerRail();
+  els.homeBtn.classList.add('active');
+  els.activeServerName.textContent = 'Mensagens diretas';
+  els.copyInviteBtn.classList.add('hidden');
+  els.serverSettingsBtn.classList.add('hidden');
+  if (serverPresenceChannel) {
+    window.supabaseClient.removeChannel(serverPresenceChannel);
+    serverPresenceChannel = null;
+  }
+  serverMembersCache = [];
+  renderMemberSidebar();
+  renderDmSidebar();
+  showMainPanel('friends');
+}
+els.homeBtn.addEventListener('click', goHome);
+
+/* ---------------- amigos: pedir, aceitar, recusar, remover ----------------
+   friend_requests tem uma linha por par (pending -> accepted); recusar,
+   cancelar ou desfazer amizade e' sempre um delete dessa linha. As 3
+   listas abaixo (amigos de verdade, pedidos recebidos, pedidos enviados)
+   sao recalculadas toda vez que fetchFriends() roda, e alimentam tanto as
+   abas da tela de amigos quanto o popout de perfil e a lista de DM. */
+
+let friendsCache = []; // {requestId, id, name, avatar} - status accepted
+let pendingIncoming = []; // alguem me pediu, status pending
+let pendingOutgoing = []; // eu pedi, status pending
+
+async function fetchFriends() {
+  if (!currentUser) return;
+  const { data, error } = await window.supabaseClient
+    .from('friend_requests')
+    .select(
+      'id, requester_id, addressee_id, status, requester:requester_id(id,display_name,avatar_url), addressee:addressee_id(id,display_name,avatar_url)',
+    )
+    .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`);
+  if (error) {
+    console.error('Erro ao buscar amigos:', error);
+    return;
+  }
+  friendsCache = [];
+  pendingIncoming = [];
+  pendingOutgoing = [];
+  for (const row of data || []) {
+    const isRequester = row.requester_id === currentUser.id;
+    const other = isRequester ? row.addressee : row.requester;
+    if (!other) continue;
+    const entry = { requestId: row.id, id: other.id, name: other.display_name || 'Convidado', avatar: other.avatar_url };
+    if (row.status === 'accepted') friendsCache.push(entry);
+    else if (isRequester) pendingOutgoing.push(entry);
+    else pendingIncoming.push(entry);
+  }
+  renderFriendsPanels();
+}
+
+function friendStatusOf(otherId) {
+  if (friendsCache.some((f) => f.id === otherId)) return 'friends';
+  if (pendingOutgoing.some((f) => f.id === otherId)) return 'pending_out';
+  if (pendingIncoming.some((f) => f.id === otherId)) return 'pending_in';
+  return 'none';
+}
+
+async function sendFriendRequest(otherId) {
+  const { error } = await window.supabaseClient
+    .from('friend_requests')
+    .insert({ requester_id: currentUser.id, addressee_id: otherId });
+  if (error) {
+    console.error('Erro ao mandar pedido de amizade:', error);
+    showToast('Não deu pra mandar o pedido de amizade.', 2500);
+    return;
+  }
+  await fetchFriends();
+}
+
+async function acceptFriendRequestWith(otherId) {
+  const req = pendingIncoming.find((f) => f.id === otherId);
+  if (!req) return;
+  const { error } = await window.supabaseClient
+    .from('friend_requests')
+    .update({ status: 'accepted' })
+    .eq('id', req.requestId);
+  if (error) {
+    console.error('Erro ao aceitar pedido:', error);
+    showToast('Não deu pra aceitar o pedido.', 2500);
+    return;
+  }
+  await fetchFriends();
+}
+
+// cobre recusar pedido recebido, cancelar pedido enviado e desfazer
+// amizade - os tres casos sao o mesmo delete da linha em friend_requests.
+async function deleteFriendRequestWith(otherId) {
+  const entry =
+    friendsCache.find((f) => f.id === otherId) ||
+    pendingOutgoing.find((f) => f.id === otherId) ||
+    pendingIncoming.find((f) => f.id === otherId);
+  if (!entry) return;
+  const { error } = await window.supabaseClient.from('friend_requests').delete().eq('id', entry.requestId);
+  if (error) {
+    console.error('Erro ao remover vínculo de amizade:', error);
+    showToast('Não deu pra fazer isso agora.', 2500);
+    return;
+  }
+  await fetchFriends();
+}
+
+// linha reutilizada em: aba de amigos (online/todos), pendentes, resultado
+// de busca de "adicionar amigo" e lista de conversas de DM. Clique na
+// linha (fora dos botões de ação) abre o perfil da pessoa.
+function buildPersonRow(person, { online, showHandle, actions } = {}) {
+  const row = document.createElement('div');
+  row.className = 'people-list-row' + (online ? ' sharing' : '');
+  const statusDot = online ? '<span class="status-dot"></span>' : '';
+  row.innerHTML = `
+    <div class="avatar-status-wrap">
+      <img src="${person.avatar || DEFAULT_AVATAR}" alt="" />
+      ${statusDot}
+    </div>
+    <div class="person-info">
+      <span class="name">${escapeHtml(person.name || 'Convidado')}</span>
+      ${showHandle ? `<span class="person-sub">${escapeHtml((person.id || '').slice(0, 8))}</span>` : ''}
+    </div>
+    <div class="person-actions"></div>
+  `;
+  row.addEventListener('click', (ev) => {
+    if (ev.target.closest('.person-actions')) return;
+    openUserProfile(person.id);
+  });
+  if (actions && actions.length) {
+    const actionsEl = row.querySelector('.person-actions');
+    for (const action of actions) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn-sm ${action.className || 'ghost'}`;
+      btn.textContent = action.label;
+      if (action.disabled) btn.disabled = true;
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        action.onClick();
+      });
+      actionsEl.appendChild(btn);
+    }
+  }
+  return row;
+}
+
+function renderFriendsPanels() {
+  const onlineIds = globalPresenceChannel ? new Set(Object.keys(globalPresenceChannel.presenceState())) : new Set();
+
+  els.friendsOnlineList.innerHTML = '';
+  const onlineFriends = friendsCache.filter((f) => onlineIds.has(f.id));
+  if (!onlineFriends.length) {
+    els.friendsOnlineList.innerHTML = '<p class="friends-empty-hint">Ninguém online agora.</p>';
+  } else {
+    for (const f of onlineFriends) {
+      els.friendsOnlineList.appendChild(
+        buildPersonRow(f, { online: true, actions: [{ label: 'Mensagem', onClick: () => openDm(f.id) }] }),
+      );
+    }
+  }
+
+  els.friendsAllList.innerHTML = '';
+  if (!friendsCache.length) {
+    els.friendsAllList.innerHTML =
+      '<p class="friends-empty-hint">Você ainda não tem nenhum amigo. Procura alguém na aba "Adicionar amigo".</p>';
+  } else {
+    for (const f of friendsCache) {
+      els.friendsAllList.appendChild(
+        buildPersonRow(f, { online: onlineIds.has(f.id), actions: [{ label: 'Mensagem', onClick: () => openDm(f.id) }] }),
+      );
+    }
+  }
+
+  els.friendsPendingIncoming.innerHTML = '';
+  els.friendsPendingOutgoing.innerHTML = '';
+  if (pendingIncoming.length) {
+    const title = document.createElement('div');
+    title.className = 'people-list-section-title';
+    title.textContent = `Pedidos recebidos — ${pendingIncoming.length}`;
+    els.friendsPendingIncoming.appendChild(title);
+    for (const f of pendingIncoming) {
+      els.friendsPendingIncoming.appendChild(
+        buildPersonRow(f, {
+          actions: [
+            { label: 'Aceitar', className: 'primary', onClick: () => acceptFriendRequestWith(f.id) },
+            { label: 'Recusar', onClick: () => deleteFriendRequestWith(f.id) },
+          ],
+        }),
+      );
+    }
+  }
+  if (pendingOutgoing.length) {
+    const title = document.createElement('div');
+    title.className = 'people-list-section-title';
+    title.textContent = `Pedidos enviados — ${pendingOutgoing.length}`;
+    els.friendsPendingOutgoing.appendChild(title);
+    for (const f of pendingOutgoing) {
+      els.friendsPendingOutgoing.appendChild(
+        buildPersonRow(f, { actions: [{ label: 'Cancelar', onClick: () => deleteFriendRequestWith(f.id) }] }),
+      );
+    }
+  }
+  if (!pendingIncoming.length && !pendingOutgoing.length) {
+    els.friendsPendingIncoming.innerHTML = '<p class="friends-empty-hint">Nenhum pedido pendente.</p>';
+  }
+
+  renderDmSidebarIfHome();
+}
+
+els.friendsTabs.forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.friendsTab;
+    els.friendsTabs.forEach((b) => b.classList.toggle('active', b === btn));
+    els.friendsTabPanels.forEach((p) => p.classList.toggle('active', p.dataset.friendsPanel === tab));
+  });
+});
+
+els.addFriendForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const q = els.addFriendInput.value.trim();
+  els.addFriendError.classList.add('hidden');
+  if (!q) return;
+  const { data, error } = await window.supabaseClient
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .ilike('display_name', `%${q}%`)
+    .neq('id', currentUser.id)
+    .limit(20);
+  if (error) {
+    els.addFriendError.textContent = 'Erro na busca.';
+    els.addFriendError.classList.remove('hidden');
+    return;
+  }
+  els.addFriendResults.innerHTML = '';
+  if (!data || !data.length) {
+    els.addFriendResults.innerHTML = '<p class="friends-empty-hint">Ninguém encontrado com esse apelido.</p>';
+    return;
+  }
+  for (const p of data) {
+    const status = friendStatusOf(p.id);
+    const actions = [];
+    if (status === 'none') actions.push({ label: 'Adicionar', className: 'primary', onClick: () => sendFriendRequestFromSearch(p.id) });
+    else if (status === 'pending_out') actions.push({ label: 'Pedido enviado', disabled: true });
+    else if (status === 'pending_in')
+      actions.push({ label: 'Aceitar', className: 'primary', onClick: () => acceptFriendRequestWith(p.id) });
+    else actions.push({ label: 'Já é amigo', disabled: true });
+    els.addFriendResults.appendChild(
+      buildPersonRow({ id: p.id, name: p.display_name, avatar: p.avatar_url }, { showHandle: true, actions }),
+    );
+  }
+});
+
+async function sendFriendRequestFromSearch(otherId) {
+  await sendFriendRequest(otherId);
+  els.addFriendForm.requestSubmit();
+}
+
+/* ---------------- presença global: quem está online no app agora ----------------
+   Separado da presença por servidor (que so' conta quem esta' olhando
+   aquele servidor) - essa cobre "logado no app", usada pra separar
+   amigos online/offline na tela de amigos. */
+
+let globalPresenceChannel = null;
+
+function joinGlobalPresence() {
+  if (globalPresenceChannel || !currentUser) return;
+  const rt = window.supabaseClient.channel('presence:online', {
+    config: { presence: { key: currentUser.id } },
+  });
+  rt.on('presence', { event: 'sync' }, () => renderFriendsPanels());
+  rt.subscribe((status) => {
+    if (status === 'SUBSCRIBED') rt.track({});
+  });
+  globalPresenceChannel = rt;
+}
+
+/* ---------------- mensagens diretas ----------------
+   Decalque quase 1:1 do canal de texto (fetch inicial + postgres_changes),
+   so' que filtrando por par de usuários em vez de channel_id. */
+
+let activeDmPeerId = null;
+let dmRealtime = null;
+
+function renderDmSidebar() {
+  // o cabecalho (#activeServerName) ja' diz "Mensagens diretas" aqui -
+  // nao repete o titulo dentro da lista, soh os amigos.
+  els.roomGrid.innerHTML = '';
+  if (!friendsCache.length) {
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = 'Adicione amigos pra poder mandar mensagem direta.';
+    els.roomGrid.appendChild(hint);
+    return;
+  }
+  for (const f of friendsCache) {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'channel-row' + (activeDmPeerId === f.id ? ' active-channel' : '');
+    row.innerHTML = `<img src="${f.avatar || DEFAULT_AVATAR}" alt="" /><span>${escapeHtml(f.name)}</span>`;
+    row.addEventListener('click', () => openDm(f.id));
+    els.roomGrid.appendChild(row);
+  }
+}
+
+function renderDmSidebarIfHome() {
+  if (!activeServerId) renderDmSidebar();
+}
+
+function renderDmMessage(row) {
+  const isSelf = row.sender_id === currentUser.id;
+  const otherId = isSelf ? row.recipient_id : row.sender_id;
+  const friend = friendsCache.find((f) => f.id === otherId);
+  const name = isSelf ? (currentProfile ? currentProfile.display_name : 'Você') : friend ? friend.name : 'Convidado';
+  const avatar = isSelf ? currentProfile && currentProfile.avatar_url : friend && friend.avatar;
+  const time = new Date(row.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg' + (isSelf ? ' self' : '');
+  wrap.innerHTML = `
+    <img class="chat-msg-avatar" src="${avatar || DEFAULT_AVATAR}" alt="" />
+    <div class="chat-msg-body">
+      <div class="chat-msg-meta">
+        <span class="chat-msg-name">${escapeHtml(name)}</span>
+        <span class="chat-msg-time">${time}</span>
+      </div>
+      <div class="chat-msg-text">${escapeHtml(row.content)}</div>
+    </div>
+  `;
+  els.dmMessages.appendChild(wrap);
+  els.dmMessages.scrollTop = els.dmMessages.scrollHeight;
+
+  if (!isSelf && state.settings.chatNotifications) {
+    notifyChatMessage({ name, avatar, text: row.content });
+  }
+}
+
+async function openDm(friendId) {
+  const friend = friendsCache.find((f) => f.id === friendId);
+  activeDmPeerId = friendId;
+  els.dmPeerName.textContent = friend ? friend.name : 'Mensagem direta';
+  els.dmPeerAvatar.src = (friend && friend.avatar) || DEFAULT_AVATAR;
+  els.dmMessages.innerHTML = '';
+  renderDmSidebarIfHome();
+  showMainPanel('dm');
+
+  const { data, error } = await window.supabaseClient
+    .from('direct_messages')
+    .select('*')
+    .or(`and(sender_id.eq.${currentUser.id},recipient_id.eq.${friendId}),and(sender_id.eq.${friendId},recipient_id.eq.${currentUser.id})`)
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (error) {
+    console.error('Erro ao buscar mensagens diretas:', error);
+  } else {
+    for (const row of data) renderDmMessage(row);
+  }
+
+  if (dmRealtime) window.supabaseClient.removeChannel(dmRealtime);
+  dmRealtime = window.supabaseClient
+    .channel(`dm:${[currentUser.id, friendId].sort().join(':')}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages' }, (payload) => {
+      const row = payload.new;
+      const involvesUs =
+        (row.sender_id === currentUser.id && row.recipient_id === friendId) ||
+        (row.sender_id === friendId && row.recipient_id === currentUser.id);
+      if (involvesUs) renderDmMessage(row);
+    })
+    .subscribe();
+}
+
+function closeDm() {
+  if (dmRealtime) {
+    window.supabaseClient.removeChannel(dmRealtime);
+    dmRealtime = null;
+  }
+  activeDmPeerId = null;
+}
+
+els.dmForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const content = els.dmTextInput.value.trim();
+  if (!content || !activeDmPeerId) return;
+  els.dmTextInput.value = '';
+  const { error } = await window.supabaseClient
+    .from('direct_messages')
+    .insert({ sender_id: currentUser.id, recipient_id: activeDmPeerId, content });
+  if (error) {
+    console.error('Erro ao enviar mensagem direta:', error);
+    showToast('Não deu pra enviar a mensagem.', 2500);
+  }
+});
 
 /* ---------------- lista de membros do servidor (barra lateral direita) ----------------
    Realtime Presence por servidor (`server:<id>`) - cada cliente so' avisa
@@ -1006,6 +1544,114 @@ async function fetchServerMembers(serverId) {
   renderMemberSidebar();
 }
 
+/* ---------------- menu de contexto genérico (clique direito) ----------------
+   Usado hoje só pela lista de membros (volume individual), mas escrito
+   genérico (recebe uma função que monta o conteúdo) pra poder reaproveitar
+   em outro lugar se precisar. Fecha sozinho ao clicar fora ou apertar Esc. */
+
+let activeContextMenu = null;
+
+function closeContextMenu() {
+  if (!activeContextMenu) return;
+  activeContextMenu.remove();
+  activeContextMenu = null;
+  document.removeEventListener('click', closeContextMenu, true);
+  document.removeEventListener('keydown', onContextMenuKeydown, true);
+}
+function onContextMenuKeydown(ev) {
+  if (ev.key === 'Escape') closeContextMenu();
+}
+function openContextMenu(x, y, buildContent) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  buildContent(menu);
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(x, window.innerWidth - rect.width - 8));
+  const top = Math.max(8, Math.min(y, window.innerHeight - rect.height - 8));
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  activeContextMenu = menu;
+  setTimeout(() => {
+    document.addEventListener('click', closeContextMenu, true);
+    document.addEventListener('keydown', onContextMenuKeydown, true);
+  }, 0);
+}
+
+/* ---------------- volume individual por pessoa ----------------
+   So' faz sentido pra quem eu realmente estou ouvindo agora (quem tem
+   tile ativo na minha chamada de voz atual - a lista de membros e' do
+   servidor inteiro, nao so' de quem esta' na call). Guardado em memoria
+   (nao precisa persistir no banco, e' preferencia local de quem ouve) e
+   aplicado via .volume nativo dos elementos <audio>/<video>, igual o
+   slider que ja existe por tile - sem precisar de GainNode/AudioContext
+   novo. */
+
+const peerVolumes = new Map(); // userId -> 0..200 (%)
+
+function hasActiveTilesFor(peerId) {
+  return ['mic', 'camera', 'screen'].some((source) => state.tiles.has(tileKey(peerId, source)));
+}
+
+// aplica o volume guardado (se tiver) num elemento de midia recem-criado;
+// devolve a porcentagem aplicada (ou null se nao tinha nada guardado).
+function applyStoredPeerVolume(key, mediaEl) {
+  const peerId = key.slice(0, key.lastIndexOf(':'));
+  if (!peerVolumes.has(peerId)) return null;
+  const pct = peerVolumes.get(peerId);
+  mediaEl.volume = pct / 100;
+  return pct;
+}
+
+function applyPeerVolume(peerId, pct) {
+  peerVolumes.set(peerId, pct);
+  for (const source of ['mic', 'camera', 'screen']) {
+    const tile = state.tiles.get(tileKey(peerId, source));
+    if (tile && tile.video) tile.video.volume = pct / 100;
+  }
+}
+
+function openMemberContextMenu(x, y, member) {
+  openContextMenu(x, y, (menu) => {
+    const title = document.createElement('div');
+    title.className = 'context-menu-title';
+    title.textContent = member.name;
+    menu.appendChild(title);
+
+    const profileBtn = document.createElement('button');
+    profileBtn.type = 'button';
+    profileBtn.className = 'context-menu-action';
+    profileBtn.textContent = 'Ver perfil';
+    profileBtn.addEventListener('click', () => {
+      closeContextMenu();
+      openUserProfile(member.id);
+    });
+    menu.appendChild(profileBtn);
+
+    if (!hasActiveTilesFor(member.id)) {
+      const hint = document.createElement('div');
+      hint.className = 'context-menu-hint';
+      hint.textContent = 'Entre na mesma chamada de voz pra poder ajustar o volume dessa pessoa.';
+      menu.appendChild(hint);
+      return;
+    }
+
+    const current = peerVolumes.has(member.id) ? peerVolumes.get(member.id) : 100;
+    const row = document.createElement('div');
+    row.className = 'context-menu-item';
+    row.innerHTML = `<input type="range" min="0" max="200" value="${current}" /><span class="context-menu-volume-value">${current}%</span>`;
+    const slider = row.querySelector('input');
+    const valueLabel = row.querySelector('.context-menu-volume-value');
+    slider.addEventListener('input', () => {
+      const pct = Number(slider.value);
+      valueLabel.textContent = `${pct}%`;
+      applyPeerVolume(member.id, pct);
+    });
+    menu.appendChild(row);
+  });
+}
+
 function renderMemberSidebar() {
   if (!activeServerId) {
     els.memberSidebar.classList.add('hidden');
@@ -1032,16 +1678,14 @@ function renderMemberSidebar() {
     groupTitle.textContent = `${title} — ${members.length}`;
     els.memberList.appendChild(groupTitle);
     for (const member of members) {
-      const row = document.createElement('div');
-      row.className = 'people-list-row' + (title === 'Online' ? ' sharing' : '');
-      row.innerHTML = `
-        <div class="avatar-status-wrap">
-          <img src="${member.avatar || DEFAULT_AVATAR}" alt="" />
-          ${title === 'Online' ? '<span class="status-dot"></span>' : ''}
-        </div>
-        <div class="person-info"><div class="name-row"><span class="name">${escapeHtml(member.name)}</span></div></div>
-      `;
+      const row = buildPersonRow(member, { online: title === 'Online' });
       if (title !== 'Online') row.style.opacity = '0.5';
+      if (member.id !== currentUser.id) {
+        row.addEventListener('contextmenu', (ev) => {
+          ev.preventDefault();
+          openMemberContextMenu(ev.clientX, ev.clientY, member);
+        });
+      }
       els.memberList.appendChild(row);
     }
   };
@@ -1251,7 +1895,8 @@ els.deleteServerBtn.addEventListener('click', async () => {
 // e a sala de voz. Entrar num canal de texto NÃO sai de uma chamada de voz
 // em andamento (ela continua rodando em segundo plano, só escondida).
 function showMainPanel(panel) {
-  els.welcomePanel.classList.toggle('hidden', panel !== 'welcome');
+  els.welcomePanel.classList.toggle('hidden', panel !== 'friends');
+  els.dmChannel.classList.toggle('hidden', panel !== 'dm');
   els.textChannel.classList.toggle('hidden', panel !== 'text');
   els.room.classList.toggle('hidden', panel !== 'voice');
 }
@@ -1569,9 +2214,9 @@ function leaveRoom() {
   state.myId = null;
   activeVoiceChannel = null;
   renderChannelList();
-  // volta pro canal de texto que estava aberto antes (se tinha algum),
-  // senao cai na tela de boas-vindas.
-  showMainPanel(activeTextChannel ? 'text' : 'welcome');
+  // volta pro canal de texto ou DM que estava aberto antes (se tinha
+  // algum), senao cai na tela de amigos.
+  showMainPanel(activeTextChannel ? 'text' : activeDmPeerId ? 'dm' : 'friends');
 }
 
 /* ---------------- presença: quem está na sala e quem compartilha ---------------- */
@@ -1807,7 +2452,7 @@ async function startScreenShare() {
   display.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
   state.screen.blackFrameStop = watchForBlackFrames(display.getVideoTracks()[0]);
 
-  addOrUpdateTile(tileKey(state.myId, 'screen'), `${state.myName} (você)`, myAvatar, display, true, 'screen');
+  addOrUpdateTile(tileKey(state.myId, 'screen'), `${state.myName} (você)`, currentProfile ? currentProfile.avatar_url : null, display, true, 'screen');
   updateEmptyHint();
   state.transport.send({ type: 'share:start', source: 'screen' });
 }
@@ -2371,7 +3016,7 @@ async function startCameraShare() {
 
   cam.getVideoTracks()[0].addEventListener('ended', stopCameraShare);
 
-  addOrUpdateTile(tileKey(state.myId, 'camera'), `${state.myName} (você)`, myAvatar, composited, true, 'camera');
+  addOrUpdateTile(tileKey(state.myId, 'camera'), `${state.myName} (você)`, currentProfile ? currentProfile.avatar_url : null, composited, true, 'camera');
   updateEmptyHint();
   state.transport.send({ type: 'share:start', source: 'camera' });
 }
@@ -2444,6 +3089,7 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
       audio.autoplay = true;
       document.body.appendChild(audio);
       applySpeakerDevice(audio);
+      if (!isSelf) applyStoredPeerVolume(key, audio);
       micTile = { root: audio, video: audio, isSelf, audioOnly: true };
       state.tiles.set(key, micTile);
     }
@@ -2492,6 +3138,11 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
     const btnFullscreen = root.querySelector('.btn-fullscreen');
     const btnPip = root.querySelector('.btn-pip');
     const pinInput = root.querySelector('.pin-input');
+
+    if (!isSelf) {
+      const appliedPct = applyStoredPeerVolume(key, video);
+      if (appliedPct !== null) volSlider.value = String(appliedPct);
+    }
 
     if (!document.pictureInPictureEnabled) {
       btnPip.classList.add('hidden');
@@ -2695,6 +3346,12 @@ const CHANGELOG = {
     'Ajustes visuais: cada área da tela (servidores, canais, conteúdo, membros) agora tem um tom de fundo diferente, pra ficar claro onde uma termina e a outra começa.',
     'Ícone do soundboard no dock ficou mais simples e legível.',
     'Corrigido: um selo decorativo da tela de login estava ficando preso no canto da tela e escondendo o primeiro servidor da lista.',
+  ],
+  '3.1.0': [
+    'Tela inicial virou uma tela de Amigos, igual Discord: adicione gente pelo apelido, aceite/recuse pedidos, veja quem tá online e mande mensagem direta.',
+    'Perfil (foto, banner, bio e apelido) agora salva de verdade e aparece pros outros — antes só ficava salvo no seu PC.',
+    'Clique no nome de alguém na lista de online do servidor pra ver o perfil dela, com servidores e amigos em comum.',
+    'Botão direito em alguém na lista de online (durante uma chamada) abre um controle de volume só pra você — não muda o volume dela pros outros.',
   ],
 };
 

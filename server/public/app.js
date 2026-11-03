@@ -46,12 +46,7 @@ const ICONS = {
 
 const els = {
   authScreen: document.getElementById('authScreen'),
-  authTabLogin: document.getElementById('authTabLogin'),
-  authTabSignup: document.getElementById('authTabSignup'),
   authForm: document.getElementById('authForm'),
-  authEmailInput: document.getElementById('authEmailInput'),
-  authPasswordInput: document.getElementById('authPasswordInput'),
-  authDisplayNameField: document.getElementById('authDisplayNameField'),
   authDisplayNameInput: document.getElementById('authDisplayNameInput'),
   authError: document.getElementById('authError'),
   authSubmitBtn: document.getElementById('authSubmitBtn'),
@@ -173,20 +168,8 @@ const els = {
    a página (evento INITIAL_SESSION), então cobre tanto o boot quanto
    login/logout feitos na hora. */
 
-let authMode = 'login'; // 'login' | 'signup'
 let currentUser = null; // auth.users (via sessão)
 let currentProfile = null; // public.profiles
-
-function setAuthMode(mode) {
-  authMode = mode;
-  els.authTabLogin.classList.toggle('active', mode === 'login');
-  els.authTabSignup.classList.toggle('active', mode === 'signup');
-  els.authDisplayNameField.classList.toggle('hidden', mode !== 'signup');
-  els.authSubmitBtn.textContent = mode === 'signup' ? 'Criar conta' : 'Entrar';
-  els.authError.classList.add('hidden');
-}
-els.authTabLogin.addEventListener('click', () => setAuthMode('login'));
-els.authTabSignup.addEventListener('click', () => setAuthMode('signup'));
 
 function showAuthScreen() {
   els.authScreen.classList.remove('hidden');
@@ -220,29 +203,15 @@ function showLobbyScreen() {
 
 els.authForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const email = els.authEmailInput.value.trim();
-  const password = els.authPasswordInput.value;
+  const displayName = els.authDisplayNameInput.value.trim();
+  if (!displayName) return;
   els.authError.classList.add('hidden');
   els.authSubmitBtn.disabled = true;
   try {
-    if (authMode === 'signup') {
-      const displayName = els.authDisplayNameInput.value.trim() || 'Convidado';
-      const { data, error } = await window.supabaseClient.auth.signUp({
-        email,
-        password,
-        options: { data: { display_name: displayName } },
-      });
-      if (error) throw error;
-      if (!data.session) {
-        els.authError.textContent = 'Conta criada! Confirma seu e-mail (se for exigido) e entra.';
-        els.authError.classList.remove('hidden');
-        setAuthMode('login');
-        return;
-      }
-    } else {
-      const { error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    }
+    const { error } = await window.supabaseClient.auth.signInAnonymously({
+      options: { data: { display_name: displayName } },
+    });
+    if (error) throw error;
     // onAuthStateChange cuida do resto (busca o perfil, mostra o lobby).
   } catch (err) {
     els.authError.textContent = err.message || 'Erro ao entrar.';

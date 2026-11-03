@@ -14,38 +14,20 @@
   </div>
 
   <div id="app">
-    <!-- LOGIN / CADASTRO -->
+    <!-- LOGIN: so' apelido (login anonimo do Supabase) - fica salvo nesta
+         instalacao, so' pede de novo se a sessao for apagada -->
     <section id="authScreen" class="screen">
       <div class="auth-card">
         <img src="/logo.png" alt="" class="auth-logo" />
         <h1>Suvaco da <span class="accent-text">Jinx</span></h1>
-        <p class="subtitle auth-subtitle">Entra com sua conta pra ver seus servidores</p>
-
-        <div class="auth-tabs">
-          <button type="button" id="authTabLogin" class="auth-tab active">Entrar</button>
-          <button type="button" id="authTabSignup" class="auth-tab">Criar conta</button>
-        </div>
+        <p class="subtitle auth-subtitle">Escolhe um nome pra entrar</p>
 
         <form id="authForm" class="auth-form">
           <label class="field">
-            <span>E-mail</span>
-            <div class="input-with-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/></svg>
-              <input id="authEmailInput" type="email" placeholder="voce@exemplo.com" autocomplete="email" required />
-            </div>
-          </label>
-          <label class="field">
-            <span>Senha</span>
-            <div class="input-with-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              <input id="authPasswordInput" type="password" placeholder="Sua senha" autocomplete="current-password" minlength="6" required />
-            </div>
-          </label>
-          <label id="authDisplayNameField" class="field hidden">
             <span>Como quer ser chamado</span>
             <div class="input-with-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <input id="authDisplayNameInput" type="text" maxlength="30" placeholder="Seu apelido" />
+              <input id="authDisplayNameInput" type="text" maxlength="30" placeholder="Seu apelido" required />
             </div>
           </label>
 

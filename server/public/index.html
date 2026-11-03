@@ -59,18 +59,23 @@
 
     <!-- LOBBY -->
     <section id="lobby" class="screen hidden">
-      <aside class="lobby-rail" aria-hidden="true">
-        <div class="lobby-rail-btn active" title="Salas">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
+      <aside class="lobby-rail">
+        <div id="serverRail" class="server-rail-list"></div>
+        <button type="button" id="addServerBtn" class="lobby-rail-btn add-server-btn" title="Criar ou entrar em servidor">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
       </aside>
 
       <aside class="lobby-sidebar">
         <div class="channel-list-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-          <span>Salas</span>
+          <span id="activeServerName">Seus servidores</span>
+          <button type="button" id="copyInviteBtn" class="icon-btn ghost hidden" title="Copiar código de convite">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
         </div>
-        <div id="roomGrid" class="channel-list"></div>
+        <div id="roomGrid" class="channel-list">
+          <p class="hint">Crie ou entre num servidor pra ver os canais aqui.</p>
+        </div>
       </aside>
 
       <div class="lobby-main">
@@ -81,14 +86,9 @@
             <h1>Suvaco da <span class="accent-text">Jinx</span></h1>
             <p class="subtitle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              Compartilhamento de tela na rede local (Radmin VPN)
+              Servidores, chamadas de voz e compartilhamento de tela
             </p>
           </div>
-        </div>
-        <div class="connection-pill" id="connectionPill">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          <span id="connectionPillText">Radmin VPN</span>
-          <span class="pill-dot"></span>
         </div>
         <button type="button" id="logoutBtn" class="icon-btn ghost" title="Sair da conta">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -114,60 +114,6 @@
         </div>
         <svg class="chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
-
-      <div class="mode-tabs">
-        <button type="button" id="modeTabLan" class="mode-tab active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="6" height="7" rx="1"/><rect x="16" y="14" width="6" height="7" rx="1"/><rect x="9" y="2" width="6" height="7" rx="1"/><path d="M12 9v3M5 14v-2a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/></svg>
-          <span>Rede local (Radmin)</span>
-        </button>
-        <button type="button" id="modeTabInternet" class="mode-tab">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-          <span>Internet (sem Radmin)</span>
-        </button>
-      </div>
-
-      <!-- modo rede local: descoberta automática por UDP, igual sempre foi -->
-      <div id="lanModeSection">
-        <div class="lobby-section-title">Quem está online <span id="onlineCount" class="muted"></span></div>
-        <div id="onlinePeersList" class="online-peers-list">
-          <p class="hint">Procurando quem está com o app aberto na rede…</p>
-        </div>
-
-        <details class="manual-join">
-          <summary>
-            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>
-            <span>Entrar digitando o IP manualmente</span>
-            <svg class="chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-          </summary>
-          <div class="manual-join-row">
-            <input id="manualHost" type="text" placeholder="ex: 26.12.34.56" />
-            <input id="manualPort" type="text" placeholder="47400" />
-            <button id="manualJoinBtn">Entrar</button>
-          </div>
-        </details>
-      </div>
-
-      <!-- modo internet: sem Radmin, conecta por um código de sala via WebRTC
-           (STUN pra furar NAT + um corretor de sinalização público gratuito,
-           sem precisar hospedar nada) -->
-      <div id="internetModeSection" class="hidden">
-        <p class="hint">
-          Não precisa de Radmin nem de nenhum programa a mais — só internet
-          normal. Uma pessoa cria a sala e manda o código pros outros.
-        </p>
-        <div class="lobby-actions">
-          <button id="createCodeRoomBtn" class="primary btn-with-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-            <span>Criar sala</span>
-          </button>
-        </div>
-        <div class="divider-line"><span>ou entre com um código que te passaram</span></div>
-        <div class="manual-join-row">
-          <input id="joinCodeInput" type="text" maxlength="6" placeholder="ex: 7K2P9M" style="text-transform: uppercase;" />
-          <button id="joinCodeBtn">Entrar</button>
-        </div>
-        <p id="internetModeStatus" class="hint hidden"></p>
-      </div>
 
       <p class="credits">Desenvolvido por <strong>Doug Muller Burro</strong></p>
       <a class="tabletop-link" href="https://github.com/Doug3011/outro-lado-da-mesa/releases/latest/download/OutroLado-Setup.exe" target="_blank" rel="noopener">
@@ -283,6 +229,44 @@
         </button>
       </div>
     </section>
+  </div>
+
+  <!-- modal de servidor: criar um novo ou entrar com código de convite -->
+  <div id="serverModal" class="modal-overlay hidden">
+    <div class="modal-card server-modal">
+      <button type="button" id="serverModalClose" class="icon-btn ghost modal-close" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h2 class="settings-modal-title">Servidor</h2>
+      <div class="auth-tabs">
+        <button type="button" id="serverTabCreate" class="auth-tab active">Criar servidor</button>
+        <button type="button" id="serverTabJoin" class="auth-tab">Entrar com código</button>
+      </div>
+
+      <div id="serverCreatePanel">
+        <label class="field">
+          <span>Nome do servidor</span>
+          <div class="input-with-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <input id="serverNameInput" type="text" maxlength="60" placeholder="Nome do servidor" />
+          </div>
+        </label>
+        <button type="button" id="serverCreateBtn" class="primary auth-submit-btn">Criar servidor</button>
+      </div>
+
+      <div id="serverJoinPanel" class="hidden">
+        <label class="field">
+          <span>Código de convite</span>
+          <div class="input-with-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <input id="serverJoinCodeInput" type="text" maxlength="12" placeholder="ex: 7k2p9m3a" />
+          </div>
+        </label>
+        <button type="button" id="serverJoinBtn" class="primary auth-submit-btn">Entrar no servidor</button>
+      </div>
+
+      <p id="serverModalError" class="auth-error hidden"></p>
+    </div>
   </div>
 
   <!-- modal de perfil: editar o seu (no lobby) ou ver o de alguém (clicando na barra lateral) -->

@@ -73,12 +73,22 @@ const els = {
   bioInput: document.getElementById('bioInput'),
   profileHistorySection: document.getElementById('profileHistorySection'),
   profileHistoryList: document.getElementById('profileHistoryList'),
-  onlineCount: document.getElementById('onlineCount'),
-  onlinePeersList: document.getElementById('onlinePeersList'),
+  serverRail: document.getElementById('serverRail'),
+  addServerBtn: document.getElementById('addServerBtn'),
+  activeServerName: document.getElementById('activeServerName'),
+  copyInviteBtn: document.getElementById('copyInviteBtn'),
   roomGrid: document.getElementById('roomGrid'),
-  manualHost: document.getElementById('manualHost'),
-  manualPort: document.getElementById('manualPort'),
-  manualJoinBtn: document.getElementById('manualJoinBtn'),
+  serverModal: document.getElementById('serverModal'),
+  serverModalClose: document.getElementById('serverModalClose'),
+  serverTabCreate: document.getElementById('serverTabCreate'),
+  serverTabJoin: document.getElementById('serverTabJoin'),
+  serverCreatePanel: document.getElementById('serverCreatePanel'),
+  serverJoinPanel: document.getElementById('serverJoinPanel'),
+  serverNameInput: document.getElementById('serverNameInput'),
+  serverCreateBtn: document.getElementById('serverCreateBtn'),
+  serverJoinCodeInput: document.getElementById('serverJoinCodeInput'),
+  serverJoinBtn: document.getElementById('serverJoinBtn'),
+  serverModalError: document.getElementById('serverModalError'),
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
   peopleBar: document.getElementById('peopleBar'),
@@ -146,16 +156,6 @@ const els = {
   camDeviceSelect: document.getElementById('camDeviceSelect'),
   speakerDeviceSelect: document.getElementById('speakerDeviceSelect'),
   noiseSuppressionCheck: document.getElementById('noiseSuppressionCheck'),
-  modeTabLan: document.getElementById('modeTabLan'),
-  modeTabInternet: document.getElementById('modeTabInternet'),
-  lanModeSection: document.getElementById('lanModeSection'),
-  internetModeSection: document.getElementById('internetModeSection'),
-  createCodeRoomBtn: document.getElementById('createCodeRoomBtn'),
-  joinCodeInput: document.getElementById('joinCodeInput'),
-  joinCodeBtn: document.getElementById('joinCodeBtn'),
-  internetModeStatus: document.getElementById('internetModeStatus'),
-  connectionPill: document.getElementById('connectionPill'),
-  connectionPillText: document.getElementById('connectionPillText'),
   whatsNewModal: document.getElementById('whatsNewModal'),
   whatsNewClose: document.getElementById('whatsNewClose'),
   whatsNewVersion: document.getElementById('whatsNewVersion'),
@@ -191,6 +191,9 @@ els.authTabSignup.addEventListener('click', () => setAuthMode('signup'));
 function showAuthScreen() {
   els.authScreen.classList.remove('hidden');
   els.lobby.classList.add('hidden');
+  myServers = [];
+  activeServerId = null;
+  activeChannels = [];
 }
 
 async function fetchMyProfile(userId) {
@@ -212,6 +215,7 @@ function showLobbyScreen() {
   if (currentProfile) {
     els.nameInput.value = currentProfile.display_name || '';
   }
+  fetchMyServers();
 }
 
 els.authForm.addEventListener('submit', async (ev) => {
@@ -907,13 +911,7 @@ function connectCtl() {
   });
   ctlWs.addEventListener('message', (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === 'rooms') {
-      latestRooms = msg.rooms;
-      renderRoomGrid();
-    } else if (msg.type === 'peers') {
-      latestPeers = msg.peers;
-      renderOnlinePeers();
-    } else if (msg.type === 'dm:history') {
+    if (msg.type === 'dm:history') {
       if (state.dmPeer && state.dmPeer.deviceId === msg.deviceId) {
         els.dmMessages.innerHTML = '';
         for (const entry of msg.messages || []) renderDmEntry(entry, { skipNotify: true });
@@ -943,131 +941,183 @@ els.nameInput.addEventListener('change', () => {
   }
 });
 
-/* ---------------- lobby: "amigos online" (presença) + salas numeradas ----------------
-   Presença é independente de sala: o app avisa "estou online" assim que abre,
-   sem ninguém precisar hospedar nada (beacon UDP separado, sempre ligado —
-   ver server/main.cjs). As salas viram slots numerados (Sala 1, Sala 2...)
-   em vez de nome livre: clicar num slot vazio te vira anfitrião dele na
-   hora; clicar num ocupado te faz entrar como convidado — sem precisar
-   escolher "hospedar" ou "entrar" manualmente. */
-
-let latestRooms = [];
-let latestPeers = [];
-const MIN_ROOM_SLOTS = 6;
-const ROOM_NAME_RE = /^Sala (\d+)$/;
-
-function roomNumberFromName(name) {
-  const m = ROOM_NAME_RE.exec(name || '');
-  return m ? Number(m[1]) : null;
-}
-
-function renderOnlinePeers() {
-  els.onlineCount.textContent = latestPeers.length ? `· ${latestPeers.length}` : '';
-  if (!latestPeers.length) {
-    els.onlinePeersList.innerHTML = '<p class="hint">Ninguém mais com o app aberto na rede agora.</p>';
-    return;
-  }
-  els.onlinePeersList.innerHTML = '';
-  for (const p of latestPeers) {
-    const row = document.createElement('div');
-    row.className = 'online-peer-row';
-    row.title = 'Mandar mensagem';
-    row.innerHTML = `
-      <span class="status-dot-standalone"></span>
-      <span class="online-peer-name">${escapeHtml(p.name)}</span>
-      <span class="online-peer-status">${p.room ? `em ${escapeHtml(p.room)}` : 'no lobby'}</span>
-      <span class="online-peer-dm-icon">${ICONS.message}</span>
-    `;
-    row.addEventListener('click', () => openDmModal(p));
-    els.onlinePeersList.appendChild(row);
-  }
-}
-
-function renderRoomGrid() {
-  const occupied = new Map(); // número -> info da sala
-  for (const r of latestRooms) {
-    const n = roomNumberFromName(r.name);
-    if (n) occupied.set(n, r);
-  }
-  const highest = occupied.size ? Math.max(...occupied.keys()) : 0;
-  const slotCount = Math.max(MIN_ROOM_SLOTS, highest + 1);
-
-  els.roomGrid.innerHTML = '';
-  for (let n = 1; n <= slotCount; n++) {
-    const room = occupied.get(n);
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'channel-row' + (room ? ' occupied' : '');
-    row.title = room ? `${room.people} ${room.people === 1 ? 'pessoa' : 'pessoas'}` : 'Vazia — clique pra criar';
-    row.innerHTML = `
-      ${ICONS.volume}
-      <span>Sala ${n}</span>
-      <span class="channel-row-dot"></span>
-    `;
-    row.addEventListener('click', () => enterNumberedRoom(n, room));
-    els.roomGrid.appendChild(row);
-
-    // gente já dentro da sala aparece aninhada embaixo do nome — igual um
-    // canal de voz do Discord mostrando quem está conectado nele.
-    if (room && room.members && room.members.length) {
-      const membersWrap = document.createElement('div');
-      membersWrap.className = 'channel-members';
-      for (const memberName of room.members) {
-        const memberRow = document.createElement('div');
-        memberRow.className = 'channel-member';
-        memberRow.innerHTML = `<span class="member-dot"></span><span>${escapeHtml(memberName)}</span>`;
-        membersWrap.appendChild(memberRow);
-      }
-      els.roomGrid.appendChild(membersWrap);
-    }
-  }
-}
-
-function enterNumberedRoom(n, room) {
-  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
-  localStorage.setItem(NAME_KEY, name);
-  const label = `Sala ${n}`;
-  if (room) {
-    joinLanRoom(room.host, room.port, label);
-  } else {
-    ctlWs.send(JSON.stringify({ type: 'host:start', name: label }));
-    state.hostingRoomLabel = label;
-    joinLanRoom(lanInfo ? lanInfo.localIp : location.hostname, lanInfo ? lanInfo.port : location.port, label);
-  }
-}
-
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-/* ---------------- abas de modo: rede local (Radmin) vs internet ---------------- */
+/* ---------------- lobby: servidores e canais (Supabase) ----------------
+   Trilho de servidores à esquerda + lista de canais (texto/voz) do servidor
+   selecionado, igual Discord. Abrir um canal de verdade (texto na Fase 3,
+   voz na Fase 4) ainda não existe — por enquanto só mostra um aviso. */
 
-function updateConnectionPill(mode) {
-  if (!els.connectionPill) return;
-  els.connectionPill.classList.toggle('internet', mode === 'internet');
-  els.connectionPillText.textContent = mode === 'internet' ? 'Internet' : 'Radmin VPN';
+let myServers = [];
+let activeServerId = null;
+let activeChannels = [];
+
+async function fetchMyServers() {
+  const { data, error } = await window.supabaseClient
+    .from('servers')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error) {
+    console.error('Erro ao buscar servidores:', error);
+    return;
+  }
+  myServers = data || [];
+  renderServerRail();
+  if (myServers.length && !myServers.some((s) => s.id === activeServerId)) {
+    selectServer(myServers[0].id);
+  } else if (!myServers.length) {
+    activeServerId = null;
+    activeChannels = [];
+    els.activeServerName.textContent = 'Seus servidores';
+    els.copyInviteBtn.classList.add('hidden');
+    els.roomGrid.innerHTML = '<p class="hint">Crie ou entre num servidor pra ver os canais aqui.</p>';
+  }
 }
 
-els.modeTabLan.addEventListener('click', () => {
-  els.modeTabLan.classList.add('active');
-  els.modeTabInternet.classList.remove('active');
-  els.lanModeSection.classList.remove('hidden');
-  els.internetModeSection.classList.add('hidden');
-  updateConnectionPill('lan');
-});
-els.modeTabInternet.addEventListener('click', () => {
-  els.modeTabInternet.classList.add('active');
-  els.modeTabLan.classList.remove('active');
-  els.internetModeSection.classList.remove('hidden');
-  els.lanModeSection.classList.add('hidden');
-  updateConnectionPill('internet');
+function renderServerRail() {
+  els.serverRail.innerHTML = '';
+  for (const server of myServers) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'server-rail-btn' + (server.id === activeServerId ? ' active' : '');
+    btn.title = server.name;
+    btn.innerHTML = server.icon_url
+      ? `<img src="${escapeHtml(server.icon_url)}" alt="" />`
+      : escapeHtml((server.name || '?').trim().slice(0, 2).toUpperCase());
+    btn.addEventListener('click', () => selectServer(server.id));
+    els.serverRail.appendChild(btn);
+  }
+}
+
+async function selectServer(serverId) {
+  activeServerId = serverId;
+  renderServerRail();
+  const server = myServers.find((s) => s.id === serverId);
+  els.activeServerName.textContent = server ? server.name : '';
+  els.copyInviteBtn.classList.toggle('hidden', !server);
+  await fetchChannels(serverId);
+}
+
+async function fetchChannels(serverId) {
+  const { data, error } = await window.supabaseClient
+    .from('channels')
+    .select('*')
+    .eq('server_id', serverId)
+    .order('position', { ascending: true });
+  activeChannels = error ? [] : (data || []);
+  if (error) console.error('Erro ao buscar canais:', error);
+  renderChannelList();
+}
+
+function renderChannelList() {
+  els.roomGrid.innerHTML = '';
+  if (!activeChannels.length) {
+    els.roomGrid.innerHTML = '<p class="hint">Esse servidor ainda não tem canais.</p>';
+    return;
+  }
+  const groups = [
+    { title: 'Texto', icon: ICONS.message, channels: activeChannels.filter((c) => c.type === 'text') },
+    { title: 'Voz', icon: ICONS.volume, channels: activeChannels.filter((c) => c.type === 'voice') },
+  ];
+  for (const group of groups) {
+    if (!group.channels.length) continue;
+    const title = document.createElement('div');
+    title.className = 'channel-group-title';
+    title.textContent = group.title;
+    els.roomGrid.appendChild(title);
+    for (const channel of group.channels) {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'channel-row';
+      row.innerHTML = `${group.icon}<span>${escapeHtml(channel.name)}</span>`;
+      row.addEventListener('click', () => openChannel(channel));
+      els.roomGrid.appendChild(row);
+    }
+  }
+}
+
+function openChannel(channel) {
+  showToast(`Em breve: canal "${channel.name}" (${channel.type === 'voice' ? 'voz' : 'texto'})`, 2500);
+}
+
+/* ---------------- modal: criar servidor / entrar com código de convite ---------------- */
+
+function setServerModalTab(tab) {
+  els.serverTabCreate.classList.toggle('active', tab === 'create');
+  els.serverTabJoin.classList.toggle('active', tab === 'join');
+  els.serverCreatePanel.classList.toggle('hidden', tab !== 'create');
+  els.serverJoinPanel.classList.toggle('hidden', tab !== 'join');
+  els.serverModalError.classList.add('hidden');
+}
+els.serverTabCreate.addEventListener('click', () => setServerModalTab('create'));
+els.serverTabJoin.addEventListener('click', () => setServerModalTab('join'));
+
+function openServerModal() {
+  setServerModalTab('create');
+  els.serverNameInput.value = '';
+  els.serverJoinCodeInput.value = '';
+  els.serverModal.classList.remove('hidden');
+}
+function closeServerModal() {
+  els.serverModal.classList.add('hidden');
+}
+els.addServerBtn.addEventListener('click', openServerModal);
+els.serverModalClose.addEventListener('click', closeServerModal);
+
+function showServerModalError(text) {
+  els.serverModalError.textContent = text;
+  els.serverModalError.classList.remove('hidden');
+}
+
+els.serverCreateBtn.addEventListener('click', async () => {
+  const name = els.serverNameInput.value.trim();
+  if (!name) { showServerModalError('Dá um nome pro servidor.'); return; }
+  els.serverCreateBtn.disabled = true;
+  try {
+    const { data, error } = await window.supabaseClient
+      .from('servers')
+      .insert({ name, owner_id: currentUser.id })
+      .select()
+      .single();
+    if (error) throw error;
+    closeServerModal();
+    await fetchMyServers();
+    selectServer(data.id);
+  } catch (err) {
+    showServerModalError(err.message || 'Não deu pra criar o servidor.');
+  } finally {
+    els.serverCreateBtn.disabled = false;
+  }
 });
 
-els.manualJoinBtn.addEventListener('click', () => {
-  const host = els.manualHost.value.trim();
-  const port = els.manualPort.value.trim() || '47400';
-  if (!host) return;
-  joinLanRoom(host, port);
+els.serverJoinBtn.addEventListener('click', async () => {
+  const code = els.serverJoinCodeInput.value.trim().toLowerCase();
+  if (!code) { showServerModalError('Digita o código de convite.'); return; }
+  els.serverJoinBtn.disabled = true;
+  try {
+    const { data: serverId, error } = await window.supabaseClient.rpc('join_server_by_code', { code });
+    if (error) throw error;
+    closeServerModal();
+    await fetchMyServers();
+    selectServer(serverId);
+  } catch (err) {
+    showServerModalError(err.message || 'Código inválido.');
+  } finally {
+    els.serverJoinBtn.disabled = false;
+  }
+});
+
+els.copyInviteBtn.addEventListener('click', async () => {
+  const server = myServers.find((s) => s.id === activeServerId);
+  if (!server) return;
+  try {
+    await navigator.clipboard.writeText(server.invite_code);
+    showToast('Código de convite copiado!', 2000);
+  } catch {
+    showToast(`Código: ${server.invite_code}`, 4000);
+  }
 });
 
 /* ---------------- transporte: uma "sala" pode rodar sobre WebSocket (rede
@@ -1265,15 +1315,9 @@ function joinInternetRoom(code) {
   });
 }
 
-els.createCodeRoomBtn.addEventListener('click', hostInternetRoom);
-els.joinCodeBtn.addEventListener('click', () => {
-  const code = els.joinCodeInput.value.trim().toUpperCase();
-  if (code.length < 4) {
-    setInternetStatus('Digita o código completo que te passaram.');
-    return;
-  }
-  joinInternetRoom(code);
-});
+// `hostInternetRoom`/`joinInternetRoom` ficam sem nenhum botão chamando -
+// eram a UI de "sala por código" do modo Internet antigo, substituída pelo
+// fluxo de servidor/convite acima. Removidas de vez na Fase 5 (faxina).
 
 function enterRoomScreen(label, roomCode) {
   els.lobby.classList.add('hidden');

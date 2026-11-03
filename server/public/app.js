@@ -119,15 +119,6 @@ const els = {
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
   chatNotificationsCheck: document.getElementById('chatNotificationsCheck'),
-  dmModal: document.getElementById('dmModal'),
-  dmModalClose: document.getElementById('dmModalClose'),
-  dmPeerName: document.getElementById('dmPeerName'),
-  dmMessages: document.getElementById('dmMessages'),
-  dmPendingAttachments: document.getElementById('dmPendingAttachments'),
-  dmForm: document.getElementById('dmForm'),
-  dmAttachBtn: document.getElementById('dmAttachBtn'),
-  dmFileInput: document.getElementById('dmFileInput'),
-  dmTextInput: document.getElementById('dmTextInput'),
   micMuteBtn: document.getElementById('micMuteBtn'),
   cameraBtn: document.getElementById('cameraBtn'),
   shareBtn: document.getElementById('shareBtn'),
@@ -423,9 +414,6 @@ els.bioInput.addEventListener('input', () => {
   localStorage.setItem(BIO_KEY, myBio);
 });
 
-let ctlWs = null;
-let lanInfo = null;
-
 function tileKey(id, source) {
   return `${id}:${source}`;
 }
@@ -462,12 +450,8 @@ function saveSettings() {
 
 const state = {
   transport: null,
-  roomMode: null, // 'lan' | 'internet'
-  roomAddr: '', // usado no modo lan (host:porta)
-  roomCode: null, // usado no modo internet
   myId: null,
   myName: '',
-  hostingRoomLabel: null, // preenchido quando EU virei anfitrião automático de uma Sala N (pra saber se devo host:stop ao sair)
   settings: loadSettings(),
   watchPcs: new Map(), // `${transmissorId}:${source}` -> RTCPeerConnection (eu assistindo)
   broadcastPcs: new Map(), // `${espectadorId}:${source}` -> RTCPeerConnection (eu transmitindo pra ele)
@@ -478,7 +462,6 @@ const state = {
   screen: { sharing: false, displayStream: null, localTracks: [], blackFrameStop: null },
   camera: { sharing: false, camStream: null, localTracks: [] },
   mic: { sharing: false, micStream: null, localTracks: [] },
-  dmPeer: null, // {id, deviceId, name, host, port, room} — com quem a conversa de mensagem direta aberta agora é
 };
 
 /* ---------------- configurações de transmissão (resolução/fps/ruído) ---------------- */
@@ -907,47 +890,12 @@ function teardownAppAudio() {
 
 els.refreshAppsBtn.addEventListener('click', refreshAppList);
 
-/* ---------------- lobby: descoberta de salas ---------------- */
-
-fetch('/lan/info').then((r) => r.json()).then((info) => { lanInfo = info; });
-
-function connectCtl() {
-  ctlWs = new WebSocket(`ws://${location.host}/lan/ctl`);
-  ctlWs.addEventListener('open', () => {
-    ctlWs.send(JSON.stringify({ type: 'discover:start' }));
-    ctlWs.send(JSON.stringify({ type: 'presence:name', name: (els.nameInput.value || 'Convidado').trim() || 'Convidado' }));
-    if (myAvatar) ctlWs.send(JSON.stringify({ type: 'presence:avatar', avatar: myAvatar }));
-  });
-  ctlWs.addEventListener('message', (ev) => {
-    const msg = JSON.parse(ev.data);
-    if (msg.type === 'dm:history') {
-      if (state.dmPeer && state.dmPeer.deviceId === msg.deviceId) {
-        els.dmMessages.innerHTML = '';
-        for (const entry of msg.messages || []) renderDmEntry(entry, { skipNotify: true });
-      }
-    } else if (msg.type === 'dm:sent') {
-      if (state.dmPeer && state.dmPeer.deviceId === msg.deviceId) {
-        renderDmEntry(msg.entry, { skipNotify: true });
-      }
-    } else if (msg.type === 'dm:incoming') {
-      const dmOpenForThisPeer = state.dmPeer && state.dmPeer.deviceId === msg.deviceId && !els.dmModal.classList.contains('hidden');
-      if (dmOpenForThisPeer) {
-        renderDmEntry(msg.entry, {});
-      } else {
-        if (state.settings.chatNotifications) notifyChatMessage(msg.entry);
-        showToast(`Mensagem de ${msg.entry.name || 'alguém'}`, 4000);
-      }
-    }
-  });
-}
-connectCtl();
-
+// TODO: esse campo ainda so' grava no localStorage - nao atualiza
+// profiles.display_name no Supabase. Trocar de nome hoje so' reflete de
+// verdade criando outro apelido na tela de login.
 els.nameInput.addEventListener('change', () => {
   const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
   localStorage.setItem(NAME_KEY, name);
-  if (ctlWs && ctlWs.readyState === ctlWs.OPEN) {
-    ctlWs.send(JSON.stringify({ type: 'presence:name', name }));
-  }
 });
 
 function escapeHtml(s) {
@@ -1525,8 +1473,9 @@ function joinVoiceChannel(channel) {
   activeVoiceChannel = channel;
   renderChannelList();
   const myId = currentUser.id;
+  state.myName = currentProfile ? currentProfile.display_name : 'Convidado';
   const presenceMeta = {
-    name: currentProfile ? currentProfile.display_name : 'Convidado',
+    name: state.myName,
     avatar: currentProfile ? currentProfile.avatar_url : null,
     sharingScreen: false,
     sharingCamera: false,
@@ -1668,179 +1617,6 @@ function updateEmptyHint() {
   els.emptyHint.classList.toggle('hidden', visibleTiles > 0);
 }
 
-/* ---------------- chat da sala ----------------
-   Passa pelo MESMO canal de presença/sinalização que já existe (WebSocket
-   do relay no modo LAN, PeerJS no modo Internet) — por isso, no modo LAN
-   (Radmin), o chat já nasce privado só pra quem está naquela rede, de
-   graça: o relay nem é alcançável por quem não está nela, então não tem
-   "vazamento" possível sem precisar de nenhum código extra de permissão.
-   O servidor é quem retransmite pra todo mundo (igual já faz com a
-   presença) — o remetente só vê a própria mensagem quando ela volta pelo
-   mesmo caminho, não é desenhada localmente antes, pra evitar qualquer
-   duplicação ou mensagem "fantasma" se o envio falhar no meio do caminho. */
-
-// No modo LAN o anexo vai por upload HTTP de verdade (streamed pro disco do
-// anfitrião, servidor que já existe) — por isso aguenta até 500MB. No modo
-// Internet não tem servidor compartilhado nenhum alcançável entre as
-// pessoas (cada um só tem o próprio `localhost`), então o anexo continua
-// embutido em base64 dentro da própria mensagem — por isso fica no limite
-// antigo de 25MB, bem mais conservador.
-const CHAT_MAX_ATTACHMENTS = 4;
-const CHAT_FILE_MAX_BYTES_LAN = 500 * 1024 * 1024;
-const CHAT_FILE_MAX_BYTES_INTERNET = 25 * 1024 * 1024;
-const CHAT_TOTAL_MAX_BYTES_LAN = 1200 * 1024 * 1024;
-const CHAT_TOTAL_MAX_BYTES_INTERNET = 50 * 1024 * 1024;
-function currentChatFileMaxBytes() {
-  return state.roomMode === 'lan' ? CHAT_FILE_MAX_BYTES_LAN : CHAT_FILE_MAX_BYTES_INTERNET;
-}
-function currentChatTotalMaxBytes() {
-  return state.roomMode === 'lan' ? CHAT_TOTAL_MAX_BYTES_LAN : CHAT_TOTAL_MAX_BYTES_INTERNET;
-}
-let pendingChatFiles = [];
-
-// Mesma validação que o relay LAN (`server/main.cjs`) faz — duplicada aqui
-// porque o modo Internet retransmite pelo PRÓPRIO navegador de quem
-// hospedou a sala (`hostInternetRoom`), não pelo servidor Node.
-const CHAT_ATTACHMENT_DATAURL_MAX = 34 * 1024 * 1024;
-function sanitizeChatAttachment(a) {
-  const dataUrl = a && typeof a.dataUrl === 'string' && a.dataUrl.startsWith('data:') ? a.dataUrl.slice(0, CHAT_ATTACHMENT_DATAURL_MAX) : '';
-  return {
-    name: String((a && a.name) || 'arquivo').slice(0, 120),
-    type: String((a && a.type) || '').slice(0, 100),
-    size: Number(a && a.size) || 0,
-    dataUrl,
-  };
-}
-
-function formatFileSize(bytes) {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-// Upload de verdade (streamed, não base64) pro servidor de quem vai ficar
-// com o arquivo — pro chat da sala, é `roomAddr` (servidor de quem
-// hospedou); pra mensagem direta, é o MEU próprio servidor (`lanInfo`), já
-// que não tem "sala" nenhuma, cada lado guarda a própria cópia da
-// conversa. É sempre uma origem DIFERENTE da página atual (cada um carrega
-// a própria página via localhost) — o servidor já libera CORS pra essas
-// rotas especificamente por causa disso (ver `/chat/` em main.cjs).
-function uploadFileTo(baseAddr, file, onProgress) {
-  return new Promise((resolve, reject) => {
-    const url = `http://${baseAddr}/chat/upload?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type || 'application/octet-stream')}`;
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', url);
-    xhr.upload.addEventListener('progress', (ev) => {
-      if (ev.lengthComputable && onProgress) onProgress(ev.loaded / ev.total);
-    });
-    xhr.addEventListener('load', () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText));
-        } catch (err) {
-          reject(err);
-        }
-      } else {
-        reject(new Error(`upload falhou (status ${xhr.status})`));
-      }
-    });
-    xhr.addEventListener('error', () => reject(new Error('erro de rede no upload')));
-    xhr.send(file);
-  });
-}
-
-function chatFileUrl(fileId) {
-  return `http://${state.roomAddr}/chat/files/${fileId}`;
-}
-
-function renderPendingAttachments() {
-  if (!pendingChatFiles.length) {
-    els.chatPendingAttachments.classList.add('hidden');
-    els.chatPendingAttachments.innerHTML = '';
-    return;
-  }
-  els.chatPendingAttachments.classList.remove('hidden');
-  els.chatPendingAttachments.innerHTML = '';
-  pendingChatFiles.forEach((file, idx) => {
-    const chip = document.createElement('div');
-    chip.className = 'chat-pending-chip';
-    chip.innerHTML = `<span>${escapeHtml(file.name)} <span class="chat-pending-size">(${formatFileSize(file.size)})</span></span><button type="button" class="chat-pending-remove">${ICONS.close}</button>`;
-    chip.querySelector('button').addEventListener('click', () => {
-      pendingChatFiles.splice(idx, 1);
-      renderPendingAttachments();
-    });
-    els.chatPendingAttachments.appendChild(chip);
-  });
-}
-
-// Mostra "Enviando arquivo.zip... 42%" no lugar da lista de pendentes
-// enquanto o upload HTTP de um anexo grande está rolando — sem isso, uma
-// transferência de centenas de MB fica sem feedback nenhum de progresso.
-function setChatSendingStatus(text) {
-  if (!text) {
-    renderPendingAttachments();
-    return;
-  }
-  els.chatPendingAttachments.classList.remove('hidden');
-  els.chatPendingAttachments.innerHTML = `<div class="chat-sending-status">${escapeHtml(text)}</div>`;
-}
-
-// A antiga sala (#room) tinha um chat embutido na barra lateral, ligado ao
-// state.transport LAN/PeerJS antigo. Esse transporte nao existe mais (ver
-// joinVoiceChannel) e comunicacao por texto agora vive nos canais de texto
-// de verdade (Fase 3) - entao os listeners de #chatForm/#chatAttachBtn/
-// #chatFileInput saem daqui (os elementos nem existem mais no HTML).
-// As funcoes abaixo (uploadFileTo/onChatMessage/etc.) ficam orfas, ainda
-// usadas pelo codigo (tambem morto) de Mensagem Direta - removidas de vez
-// na faxina da Fase 5.
-
-function onChatMessage(msg, opts) {
-  const isSelf = msg.from === state.myId;
-  const row = document.createElement('div');
-  row.className = 'chat-msg' + (isSelf ? ' self' : '');
-  const time = new Date(msg.ts || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-  let attachmentsHtml = '';
-  for (const att of msg.attachments || []) {
-    const url = att.fileId ? chatFileUrl(att.fileId) : att.dataUrl;
-    if (!url) continue;
-    if (att.type && att.type.startsWith('image/')) {
-      attachmentsHtml += `<a href="${url}" target="_blank" rel="noopener"><img class="chat-attachment-img" src="${url}" alt="${escapeHtml(att.name)}" /></a>`;
-    } else {
-      attachmentsHtml += `<a class="chat-attachment-file" href="${url}" download="${escapeHtml(att.name)}">${ICONS.file}<span>${escapeHtml(att.name)}</span><span class="chat-attachment-size">${formatFileSize(att.size)}</span></a>`;
-    }
-  }
-
-  row.innerHTML = `
-    <img class="chat-msg-avatar" src="${msg.avatar || DEFAULT_AVATAR}" alt="" />
-    <div class="chat-msg-body">
-      <div class="chat-msg-meta">
-        <span class="chat-msg-name">${escapeHtml(msg.name || 'Convidado')}</span>
-        <span class="chat-msg-time">${time}</span>
-      </div>
-      ${msg.text ? `<div class="chat-msg-text">${escapeHtml(msg.text)}</div>` : ''}
-      ${attachmentsHtml ? `<div class="chat-msg-attachments">${attachmentsHtml}</div>` : ''}
-    </div>
-  `;
-  els.chatMessages.appendChild(row);
-  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
-
-  const skipNotify = opts && opts.skipNotify;
-  if (!isSelf && !skipNotify && state.settings.chatNotifications) {
-    notifyChatMessage(msg);
-  }
-}
-
 function notifyChatMessage(msg) {
   if (!('Notification' in window)) return;
   // não incomoda se a pessoa já está com o app em foco olhando pro chat —
@@ -1869,187 +1645,6 @@ function notifyChatMessage(msg) {
     });
   }
 }
-
-function clearChat() {
-  els.chatMessages.innerHTML = '';
-  pendingChatFiles = [];
-  renderPendingAttachments();
-}
-
-/* ---------------- mensagem direta (DM) ----------------
-   Clicar em alguém "online" na página inicial abre essa conversa com ela —
-   não precisa dos dois estarem na mesma sala. Por baixo, é o MEU servidor
-   (não a renderer) que gerencia a conexão de verdade com o servidor da
-   outra pessoa; aqui só pede as coisas pelo canal de controle local
-   (`ctlWs`) que já existe — ver bloco de DM em `server/main.cjs`. */
-
-let dmPendingFiles = [];
-
-function openDmModal(peer) {
-  state.dmPeer = peer;
-  els.dmPeerName.textContent = peer.name || 'Convidado';
-  els.dmMessages.innerHTML = '';
-  dmPendingFiles = [];
-  renderDmPendingAttachments();
-  els.dmModal.classList.remove('hidden');
-  if (ctlWs && ctlWs.readyState === ctlWs.OPEN) {
-    ctlWs.send(JSON.stringify({ type: 'dm:get-history', deviceId: peer.deviceId }));
-  }
-}
-
-function closeDmModal() {
-  els.dmModal.classList.add('hidden');
-  state.dmPeer = null;
-}
-
-els.dmModalClose.addEventListener('click', closeDmModal);
-els.dmModal.addEventListener('click', (ev) => {
-  if (ev.target === els.dmModal) closeDmModal();
-});
-
-function dmFileUrl(att) {
-  if (att.fileId) {
-    const host = att.fileHost || (state.dmPeer && state.dmPeer.host);
-    const port = att.filePort || (state.dmPeer && state.dmPeer.port);
-    return `http://${host}:${port}/chat/files/${att.fileId}`;
-  }
-  return att.dataUrl || '';
-}
-
-function renderDmEntry(entry, opts) {
-  const isSelf = entry.from === 'me';
-  const row = document.createElement('div');
-  row.className = 'chat-msg' + (isSelf ? ' self' : '');
-  const time = new Date(entry.ts || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-  let attachmentsHtml = '';
-  for (const att of entry.attachments || []) {
-    const url = dmFileUrl(att);
-    if (!url) continue;
-    if (att.type && att.type.startsWith('image/')) {
-      attachmentsHtml += `<a href="${url}" target="_blank" rel="noopener"><img class="chat-attachment-img" src="${url}" alt="${escapeHtml(att.name)}" /></a>`;
-    } else {
-      attachmentsHtml += `<a class="chat-attachment-file" href="${url}" download="${escapeHtml(att.name)}">${ICONS.file}<span>${escapeHtml(att.name)}</span><span class="chat-attachment-size">${formatFileSize(att.size)}</span></a>`;
-    }
-  }
-
-  row.innerHTML = `
-    <img class="chat-msg-avatar" src="${entry.avatar || DEFAULT_AVATAR}" alt="" />
-    <div class="chat-msg-body">
-      <div class="chat-msg-meta">
-        <span class="chat-msg-name">${escapeHtml(isSelf ? 'Você' : entry.name || 'Convidado')}</span>
-        <span class="chat-msg-time">${time}</span>
-      </div>
-      ${entry.text ? `<div class="chat-msg-text">${escapeHtml(entry.text)}</div>` : ''}
-      ${attachmentsHtml ? `<div class="chat-msg-attachments">${attachmentsHtml}</div>` : ''}
-    </div>
-  `;
-  els.dmMessages.appendChild(row);
-  els.dmMessages.scrollTop = els.dmMessages.scrollHeight;
-
-  if (!isSelf && !(opts && opts.skipNotify) && state.settings.chatNotifications) {
-    notifyChatMessage(entry);
-  }
-}
-
-function renderDmPendingAttachments() {
-  if (!dmPendingFiles.length) {
-    els.dmPendingAttachments.classList.add('hidden');
-    els.dmPendingAttachments.innerHTML = '';
-    return;
-  }
-  els.dmPendingAttachments.classList.remove('hidden');
-  els.dmPendingAttachments.innerHTML = '';
-  dmPendingFiles.forEach((file, idx) => {
-    const chip = document.createElement('div');
-    chip.className = 'chat-pending-chip';
-    chip.innerHTML = `<span>${escapeHtml(file.name)} <span class="chat-pending-size">(${formatFileSize(file.size)})</span></span><button type="button" class="chat-pending-remove">${ICONS.close}</button>`;
-    chip.querySelector('button').addEventListener('click', () => {
-      dmPendingFiles.splice(idx, 1);
-      renderDmPendingAttachments();
-    });
-    els.dmPendingAttachments.appendChild(chip);
-  });
-}
-
-function setDmSendingStatus(text) {
-  if (!text) {
-    renderDmPendingAttachments();
-    return;
-  }
-  els.dmPendingAttachments.classList.remove('hidden');
-  els.dmPendingAttachments.innerHTML = `<div class="chat-sending-status">${escapeHtml(text)}</div>`;
-}
-
-els.dmAttachBtn.addEventListener('click', () => els.dmFileInput.click());
-els.dmFileInput.addEventListener('change', () => {
-  const files = [...els.dmFileInput.files];
-  els.dmFileInput.value = '';
-  const maxMb = Math.round(CHAT_FILE_MAX_BYTES_LAN / (1024 * 1024));
-  let pendingTotal = dmPendingFiles.reduce((sum, f) => sum + f.size, 0);
-  for (const file of files) {
-    if (dmPendingFiles.length >= CHAT_MAX_ATTACHMENTS) {
-      showToast(`Máximo de ${CHAT_MAX_ATTACHMENTS} anexos por mensagem.`, 3000);
-      break;
-    }
-    if (file.size > CHAT_FILE_MAX_BYTES_LAN) {
-      showToast(`"${file.name}" é maior que ${maxMb}MB — escolhe um arquivo menor.`, 3500);
-      continue;
-    }
-    if (pendingTotal + file.size > CHAT_TOTAL_MAX_BYTES_LAN) {
-      showToast(`Isso passaria de ${Math.round(CHAT_TOTAL_MAX_BYTES_LAN / (1024 * 1024))}MB somando os anexos — manda em mensagens separadas.`, 4000);
-      continue;
-    }
-    dmPendingFiles.push(file);
-    pendingTotal += file.size;
-  }
-  renderDmPendingAttachments();
-});
-
-els.dmForm.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  if (!state.dmPeer || !ctlWs || ctlWs.readyState !== ctlWs.OPEN) return;
-  const text = els.dmTextInput.value.trim().slice(0, 2000);
-  const files = dmPendingFiles;
-  dmPendingFiles = [];
-  if (!text && !files.length) {
-    renderDmPendingAttachments();
-    return;
-  }
-  els.dmTextInput.value = '';
-
-  const attachments = [];
-  const myAddr = lanInfo ? `${lanInfo.localIp}:${lanInfo.port}` : `${location.hostname}:${location.port}`;
-  for (const file of files) {
-    try {
-      setDmSendingStatus(`Enviando "${file.name}"... 0%`);
-      const uploaded = await uploadFileTo(myAddr, file, (frac) => {
-        setDmSendingStatus(`Enviando "${file.name}"... ${Math.round(frac * 100)}%`);
-      });
-      attachments.push({
-        name: uploaded.name,
-        type: uploaded.type,
-        size: uploaded.size,
-        fileId: uploaded.id,
-        fileHost: lanInfo ? lanInfo.localIp : location.hostname,
-        filePort: lanInfo ? lanInfo.port : Number(location.port),
-      });
-    } catch {
-      showToast(`Não consegui enviar "${file.name}".`, 3500);
-    }
-  }
-  setDmSendingStatus(null);
-  ctlWs.send(
-    JSON.stringify({
-      type: 'dm:send',
-      deviceId: state.dmPeer.deviceId,
-      host: state.dmPeer.host,
-      port: state.dmPeer.port,
-      text,
-      attachments,
-    }),
-  );
-});
 
 /* ---------------- sinalização ---------------- */
 

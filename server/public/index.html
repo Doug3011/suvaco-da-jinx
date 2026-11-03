@@ -471,34 +471,9 @@
             <span>Notificar novas mensagens do chat</span>
           </label>
           <p class="settings-hint">Avisa com uma notificação do Windows quando chegar mensagem nova no chat e o app não estiver em foco. Desliga aqui se não quiser ser incomodado.</p>
-          <p class="settings-hint">Limite de anexo na rede local (Radmin): 500MB por arquivo, até 4 por mensagem. No modo Internet (sem Radmin) fica em 25MB, porque aí não tem servidor compartilhado alcançável entre vocês. O chat (da sala e as mensagens diretas) agora fica salvo em disco de verdade — sobrevive a fechar e abrir o app de novo.</p>
+          <p class="settings-hint">As mensagens dos canais de texto ficam salvas de verdade (sobrevivem a fechar e abrir o app, e a todo mundo sair e voltar). Anexo de arquivo no chat ainda não existe nessa versão nova — só texto por enquanto.</p>
         </div>
       </div>
-    </div>
-  </div>
-
-  <!-- mensagem direta: clicando em alguém "online" na página inicial -->
-  <div id="dmModal" class="modal-overlay hidden">
-    <div class="modal-card dm-modal">
-      <button type="button" id="dmModalClose" class="icon-btn ghost modal-close" title="Fechar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-      <div class="dm-modal-header">
-        <strong id="dmPeerName"></strong>
-        <span class="muted">Mensagem direta</span>
-      </div>
-      <div id="dmMessages" class="chat-messages dm-messages"></div>
-      <div id="dmPendingAttachments" class="chat-pending-attachments hidden"></div>
-      <form id="dmForm" class="chat-input-row">
-        <button type="button" id="dmAttachBtn" class="icon-btn ghost" title="Anexar arquivo ou imagem">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-        </button>
-        <input type="file" id="dmFileInput" class="hidden" multiple accept="image/*,.pdf,.txt,.zip,.doc,.docx" />
-        <input type="text" id="dmTextInput" placeholder="Mandar mensagem..." maxlength="2000" autocomplete="off" />
-        <button type="submit" class="icon-btn primary" title="Enviar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </button>
-      </form>
     </div>
   </div>
 

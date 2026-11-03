@@ -62,10 +62,6 @@ try {
 }
 
 process.env.TELA_NO_OPEN = '1';
-// Onde o chat (histórico + arquivos anexados) fica salvo de verdade em
-// disco, sobrevivendo a fechar/abrir o app — pasta de dados do usuário
-// (ex: %APPDATA%\Suvaco da Jinx\), não dentro da instalação do programa.
-process.env.TELA_DATA_DIR = app.getPath('userData');
 require(path.join(__dirname, '..', 'server', 'main.cjs'));
 
 const PORT = Number(process.env.TELA_PORT) || 47400;

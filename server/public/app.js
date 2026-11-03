@@ -45,6 +45,17 @@ const ICONS = {
 };
 
 const els = {
+  authScreen: document.getElementById('authScreen'),
+  authTabLogin: document.getElementById('authTabLogin'),
+  authTabSignup: document.getElementById('authTabSignup'),
+  authForm: document.getElementById('authForm'),
+  authEmailInput: document.getElementById('authEmailInput'),
+  authPasswordInput: document.getElementById('authPasswordInput'),
+  authDisplayNameField: document.getElementById('authDisplayNameField'),
+  authDisplayNameInput: document.getElementById('authDisplayNameInput'),
+  authError: document.getElementById('authError'),
+  authSubmitBtn: document.getElementById('authSubmitBtn'),
+  logoutBtn: document.getElementById('logoutBtn'),
   lobby: document.getElementById('lobby'),
   room: document.getElementById('room'),
   nameInput: document.getElementById('nameInput'),
@@ -155,6 +166,103 @@ const els = {
   updateReadyLaterBtn: document.getElementById('updateReadyLaterBtn'),
   updateReadyRestartBtn: document.getElementById('updateReadyRestartBtn'),
 };
+
+/* ---------------- autenticação (Supabase) ----------------
+   Gate de login: a tela de lobby só aparece depois de autenticado.
+   onAuthStateChange dispara sozinho com a sessão restaurada ao carregar
+   a página (evento INITIAL_SESSION), então cobre tanto o boot quanto
+   login/logout feitos na hora. */
+
+let authMode = 'login'; // 'login' | 'signup'
+let currentUser = null; // auth.users (via sessão)
+let currentProfile = null; // public.profiles
+
+function setAuthMode(mode) {
+  authMode = mode;
+  els.authTabLogin.classList.toggle('active', mode === 'login');
+  els.authTabSignup.classList.toggle('active', mode === 'signup');
+  els.authDisplayNameField.classList.toggle('hidden', mode !== 'signup');
+  els.authSubmitBtn.textContent = mode === 'signup' ? 'Criar conta' : 'Entrar';
+  els.authError.classList.add('hidden');
+}
+els.authTabLogin.addEventListener('click', () => setAuthMode('login'));
+els.authTabSignup.addEventListener('click', () => setAuthMode('signup'));
+
+function showAuthScreen() {
+  els.authScreen.classList.remove('hidden');
+  els.lobby.classList.add('hidden');
+}
+
+async function fetchMyProfile(userId) {
+  const { data, error } = await window.supabaseClient
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+  if (error) {
+    console.error('Erro ao buscar perfil:', error);
+    return null;
+  }
+  return data;
+}
+
+function showLobbyScreen() {
+  els.authScreen.classList.add('hidden');
+  els.lobby.classList.remove('hidden');
+  if (currentProfile) {
+    els.nameInput.value = currentProfile.display_name || '';
+  }
+}
+
+els.authForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const email = els.authEmailInput.value.trim();
+  const password = els.authPasswordInput.value;
+  els.authError.classList.add('hidden');
+  els.authSubmitBtn.disabled = true;
+  try {
+    if (authMode === 'signup') {
+      const displayName = els.authDisplayNameInput.value.trim() || 'Convidado';
+      const { data, error } = await window.supabaseClient.auth.signUp({
+        email,
+        password,
+        options: { data: { display_name: displayName } },
+      });
+      if (error) throw error;
+      if (!data.session) {
+        els.authError.textContent = 'Conta criada! Confirma seu e-mail (se for exigido) e entra.';
+        els.authError.classList.remove('hidden');
+        setAuthMode('login');
+        return;
+      }
+    } else {
+      const { error } = await window.supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    }
+    // onAuthStateChange cuida do resto (busca o perfil, mostra o lobby).
+  } catch (err) {
+    els.authError.textContent = err.message || 'Erro ao entrar.';
+    els.authError.classList.remove('hidden');
+  } finally {
+    els.authSubmitBtn.disabled = false;
+  }
+});
+
+els.logoutBtn.addEventListener('click', async () => {
+  await window.supabaseClient.auth.signOut();
+});
+
+window.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+  if (session && session.user) {
+    currentUser = session.user;
+    currentProfile = await fetchMyProfile(currentUser.id);
+    showLobbyScreen();
+  } else {
+    currentUser = null;
+    currentProfile = null;
+    showAuthScreen();
+  }
+});
 
 // STUN públicos (gratuitos) — deixam duas máquinas em redes diferentes se
 // conectarem direto pela internet sem precisar de Radmin/VPN nenhuma. Não

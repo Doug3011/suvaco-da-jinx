@@ -133,3 +133,23 @@ create policy "so membros do canal escrevem, como si mesmo" on public.messages f
 
 -- habilita Realtime (postgres_changes) na tabela de mensagens
 alter publication supabase_realtime add table public.messages;
+
+-- ====== STORAGE ======
+-- precisa existir um bucket chamado "avatars", marcado como publico
+-- (Storage -> New bucket no dashboard) - usado tanto pra foto de perfil
+-- quanto pra icone de servidor (path server-icons/<id>-<timestamp>.ext).
+-- RLS do storage.objects fica ligado por padrao em bucket novo sem
+-- nenhuma policy, bloqueando qualquer upload ate essas policies existirem.
+create policy "autenticados sobem pro bucket avatars"
+on storage.objects for insert
+to authenticated
+with check (bucket_id = 'avatars');
+
+create policy "autenticados atualizam arquivos no bucket avatars"
+on storage.objects for update
+to authenticated
+using (bucket_id = 'avatars');
+
+create policy "leitura publica do bucket avatars"
+on storage.objects for select
+using (bucket_id = 'avatars');

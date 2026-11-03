@@ -174,6 +174,7 @@ let currentUser = null; // auth.users (via sessão)
 let currentProfile = null; // public.profiles
 
 function showAuthScreen() {
+  if (activeVoiceChannel) leaveRoom(); // fecha mic/camera/tela e desconecta do Realtime antes de deslogar
   els.authScreen.classList.remove('hidden');
   els.lobby.classList.add('hidden');
   els.textChannel.classList.add('hidden');
@@ -1100,9 +1101,12 @@ function renderChannelList() {
     title.textContent = group.title;
     els.roomGrid.appendChild(title);
     for (const channel of group.channels) {
+      const isActive =
+        (channel.type === 'text' && activeTextChannel && activeTextChannel.id === channel.id) ||
+        (channel.type === 'voice' && activeVoiceChannel && activeVoiceChannel.id === channel.id);
       const row = document.createElement('button');
       row.type = 'button';
-      row.className = 'channel-row';
+      row.className = 'channel-row' + (isActive ? ' active-channel' : '');
       row.innerHTML = `${group.icon}<span>${escapeHtml(channel.name)}</span>`;
       row.addEventListener('click', () => openChannel(channel));
       els.roomGrid.appendChild(row);
@@ -1121,8 +1125,20 @@ function showMainPanel(panel) {
 }
 
 function openChannel(channel) {
-  if (channel.type === 'text') openTextChannel(channel);
-  else joinVoiceChannel(channel);
+  if (channel.type === 'text') {
+    openTextChannel(channel);
+    return;
+  }
+  // ja estou conectado nesse MESMO canal de voz - so' volta pra tela dele
+  // em vez de tentar entrar de novo (o Realtime nao deixa assinar o mesmo
+  // canal duas vezes, e ficava sem voltar pra tela nenhuma).
+  if (activeVoiceChannel && activeVoiceChannel.id === channel.id) {
+    showMainPanel('voice');
+    return;
+  }
+  // trocando de canal de voz enquanto ja estava em outro - sai do atual antes
+  if (activeVoiceChannel) leaveRoom();
+  joinVoiceChannel(channel);
 }
 
 /* ---------------- canal de texto: mensagens persistidas (Supabase) ----------------
@@ -1174,6 +1190,7 @@ function renderTextChannelMessage(row, authorProfile) {
 
 async function openTextChannel(channel) {
   activeTextChannel = channel;
+  renderChannelList();
   els.textChannelName.textContent = channel.name;
   els.textChannelMessages.innerHTML = '';
   showMainPanel('text');
@@ -1318,7 +1335,11 @@ els.copyInviteBtn.addEventListener('click', async () => {
    state.transport.send(objeto), igual sempre falou com os transportes
    antigos (LAN/PeerJS, ambos removidos daqui pra ficar so' esse). */
 
+let activeVoiceChannel = null;
+
 function joinVoiceChannel(channel) {
+  activeVoiceChannel = channel;
+  renderChannelList();
   const myId = currentUser.id;
   const presenceMeta = {
     name: currentProfile ? currentProfile.display_name : 'Convidado',
@@ -1413,7 +1434,11 @@ function leaveRoom() {
   if (state.transport) state.transport.close();
   state.transport = null;
   state.myId = null;
-  showMainPanel('welcome');
+  activeVoiceChannel = null;
+  renderChannelList();
+  // volta pro canal de texto que estava aberto antes (se tinha algum),
+  // senao cai na tela de boas-vindas.
+  showMainPanel(activeTextChannel ? 'text' : 'welcome');
 }
 
 /* ---------------- presença: quem está na sala e quem compartilha ---------------- */

@@ -293,9 +293,21 @@ els.userBarSettingsBtn.addEventListener('click', () => openSettingsModal());
 
 window.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
   if (session && session.user) {
+    // o supabase-js reemite esse evento sozinho sempre que a janela
+    // recupera o foco (alt-tab, abrir um <input type=file>, etc.) pra
+    // revalidar/renovar o token - NAO e' um login novo. Só faz o reset
+    // de tela (showLobbyScreen -> volta pra Home, desseleciona servidor,
+    // derrubava até a chamada de voz visualmente) na PRIMEIRA vez que
+    // esse usuário loga nessa sessão do app.
+    const isNewLogin = !currentUser || currentUser.id !== session.user.id;
     currentUser = session.user;
     currentProfile = await fetchMyProfile(currentUser.id);
-    showLobbyScreen();
+    if (isNewLogin) {
+      showLobbyScreen();
+    } else if (currentProfile) {
+      els.userBarName.textContent = currentProfile.display_name || 'Convidado';
+      els.userBarAvatar.src = currentProfile.avatar_url || DEFAULT_AVATAR;
+    }
   } else {
     currentUser = null;
     currentProfile = null;
@@ -3352,6 +3364,10 @@ const CHANGELOG = {
     'Perfil (foto, banner, bio e apelido) agora salva de verdade e aparece pros outros — antes só ficava salvo no seu PC.',
     'Clique no nome de alguém na lista de online do servidor pra ver o perfil dela, com servidores e amigos em comum.',
     'Botão direito em alguém na lista de online (durante uma chamada) abre um controle de volume só pra você — não muda o volume dela pros outros.',
+  ],
+  '3.1.1': [
+    'Corrigido: alt-tab (ou qualquer coisa que tirasse o foco da janela, como abrir o seletor de arquivo) jogava você de volta pra tela de Amigos e desselecionava o servidor — mesmo com uma chamada de voz rolando. Agora o app fica exatamente onde você deixou.',
+    'Isso também corrige não conseguir trocar o ícone do servidor (o seletor de arquivo abrindo contava como perder o foco).',
   ],
 };
 

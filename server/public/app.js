@@ -93,12 +93,6 @@ const els = {
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
   peopleBar: document.getElementById('peopleBar'),
-  chatMessages: document.getElementById('chatMessages'),
-  chatPendingAttachments: document.getElementById('chatPendingAttachments'),
-  chatForm: document.getElementById('chatForm'),
-  chatAttachBtn: document.getElementById('chatAttachBtn'),
-  chatFileInput: document.getElementById('chatFileInput'),
-  chatTextInput: document.getElementById('chatTextInput'),
   chatNotificationsCheck: document.getElementById('chatNotificationsCheck'),
   dmModal: document.getElementById('dmModal'),
   dmModalClose: document.getElementById('dmModalClose'),
@@ -249,10 +243,11 @@ window.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
   }
 });
 
-// STUN públicos (gratuitos) — deixam duas máquinas em redes diferentes se
-// conectarem direto pela internet sem precisar de Radmin/VPN nenhuma. Não
-// atrapalha o modo rede local: só dá mais opções de caminho de conexão pro
-// WebRTC escolher, ele prefere o caminho direto (LAN) quando existe.
+// STUN públicos (gratuitos) — resolvem o caso em que os dois lados
+// conseguem ser alcançados direto (a maioria das redes domésticas). Sem um
+// servidor TURN ainda (pendente: VM Oracle Cloud + coturn, self-hosted),
+// NATs mais restritos (ex: CGNAT, bloqueio de dupla-NAT, redes corporativas)
+// não conseguem conectar — isso entra como complemento aqui depois.
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
@@ -1021,7 +1016,7 @@ function renderChannelList() {
 
 function openChannel(channel) {
   if (channel.type === 'text') openTextChannel(channel);
-  else showToast(`Em breve: canal de voz "${channel.name}" (Fase 4)`, 2500);
+  else joinVoiceChannel(channel);
 }
 
 /* ---------------- canal de texto: mensagens persistidas (Supabase) ----------------
@@ -1213,210 +1208,66 @@ els.copyInviteBtn.addEventListener('click', async () => {
   }
 });
 
-/* ---------------- transporte: uma "sala" pode rodar sobre WebSocket (rede
-   local, servidor já existe em server/main.cjs) OU sobre PeerJS (internet,
-   sem Radmin — usa o corretor público gratuito só pra combinar quem quer
-   falar com quem; depois disso é WebRTC direto igual sempre foi). O resto
-   do app (presença, sinalização de vídeo) não sabe nem precisa saber qual
-   dos dois está por baixo — só chama state.transport.send(objeto). ---------------- */
+/* ---------------- transporte: canal de voz via Supabase Realtime ----------------
+   Cada canal de voz vira um Realtime Channel proprio (`voice:<channelId>`):
+   Presence cobre "quem esta no canal agora" (substitui a presenca por
+   WebSocket/PeerJS de antes) e Broadcast carrega a sinalizacao WebRTC
+   (offer/answer/ICE) entre os participantes. O resto do app (onPresence/
+   onSignal/createBroadcastPeer/etc.) nao muda nada - so fala com
+   state.transport.send(objeto), igual sempre falou com os transportes
+   antigos (LAN/PeerJS, ambos removidos daqui pra ficar so' esse). */
 
-function handleTransportMessage(msg) {
-  if (msg.type === 'welcome') {
-    state.myId = msg.id;
-  } else if (msg.type === 'presence') {
-    onPresence(msg.clients);
-  } else if (msg.type === 'signal') {
-    onSignal(msg.from, msg.data);
-  } else if (msg.type === 'chat') {
-    onChatMessage(msg);
-  } else if (msg.type === 'chat:history') {
-    for (const entry of msg.messages || []) onChatMessage(entry, { skipNotify: true });
-  }
-}
-
-function joinLanRoom(host, port, roomLabel) {
-  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
-  localStorage.setItem(NAME_KEY, name);
-  state.myName = name;
-  state.roomMode = 'lan';
-  state.roomAddr = `${host}:${port}`;
-
-  const ws = new WebSocket(`ws://${host}:${port}/relay`);
-  // Fila pra cobrir a corrida entre o WS ainda CONNECTING e algo que já quer
-  // mandar mensagem assim que a sala abre (ex: o mic ligando sozinho via
-  // `enterRoomScreen` -> `startMicShare`, que tem um `await getUserMedia`
-  // no meio e pode terminar antes do handshake do WebSocket completar).
-  const sendQueue = [];
-  state.transport = {
-    send(obj) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
-      else sendQueue.push(obj);
-    },
-    close() { ws.close(); },
+function joinVoiceChannel(channel) {
+  const myId = currentUser.id;
+  const presenceMeta = {
+    name: currentProfile ? currentProfile.display_name : 'Convidado',
+    avatar: currentProfile ? currentProfile.avatar_url : null,
+    sharingScreen: false,
+    sharingCamera: false,
+    sharingMic: false,
   };
 
-  ws.addEventListener('open', () => {
-    for (const queued of sendQueue.splice(0)) ws.send(JSON.stringify(queued));
-    state.transport.send({ type: 'hello', name, avatar: myAvatar, banner: myBanner, bio: myBio });
-    if (roomLabel && ctlWs && ctlWs.readyState === ctlWs.OPEN) {
-      ctlWs.send(JSON.stringify({ type: 'presence:room', room: roomLabel }));
+  const rt = window.supabaseClient.channel(`voice:${channel.id}`, {
+    config: { presence: { key: myId }, broadcast: { self: false } },
+  });
+
+  rt.on('presence', { event: 'sync' }, () => {
+    const presenceState = rt.presenceState();
+    const clients = Object.entries(presenceState).map(([id, metas]) => ({ id, ...metas[0] }));
+    onPresence(clients);
+  });
+
+  rt.on('broadcast', { event: 'signal' }, ({ payload }) => {
+    if (payload.to !== myId) return; // broadcast chega pra todo mundo no canal, cada um filtra o que e' seu
+    onSignal(payload.from, payload.data);
+  });
+
+  state.transport = {
+    send(obj) {
+      if (obj.type === 'signal') {
+        rt.send({ type: 'broadcast', event: 'signal', payload: { from: myId, to: obj.to, data: obj.data } });
+      } else if (obj.type === 'share:start' || obj.type === 'share:stop') {
+        const field = PRESENCE_FIELD[obj.source];
+        if (field) presenceMeta[field] = obj.type === 'share:start';
+        rt.track(presenceMeta);
+      }
+    },
+    close() { window.supabaseClient.removeChannel(rt); },
+  };
+
+  rt.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      state.myId = myId;
+      rt.track(presenceMeta);
+      enterRoomScreen(channel.name);
     }
   });
-  ws.addEventListener('message', (ev) => handleTransportMessage(JSON.parse(ev.data)));
-  ws.addEventListener('close', () => leaveRoom());
-  ws.addEventListener('error', () => {}); // 'close' já cuida de avisar/limpar
-
-  enterRoomScreen(roomLabel || `Sala em ${host}`);
 }
 
-/* ---------------- modo internet: código de sala via PeerJS (sem Radmin) ----------------
-   Quem "cria a sala" vira o ponto central (mesmo papel que o host tem no
-   modo rede local): os outros conectam DIRETO nele por WebRTC (o PeerJS só
-   serviu de intermediário pra combinar essa conexão), e ele repassa
-   presença/sinalização pros demais — não tem servidor nenhum rodando 24h,
-   só enquanto quem criou a sala estiver com o app aberto. */
-
-const ROOM_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sem 0/O/1/I/L pra não confundir
-function makeRoomCode() {
-  let code = '';
-  for (let i = 0; i < 6; i++) code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
-  return code;
-}
-
-function setInternetStatus(text) {
-  els.internetModeStatus.textContent = text;
-  els.internetModeStatus.classList.toggle('hidden', !text);
-}
-
-function hostInternetRoom() {
-  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
-  localStorage.setItem(NAME_KEY, name);
-  state.myName = name;
-  state.roomMode = 'internet';
-
-  const code = makeRoomCode();
-  const peer = new Peer(`svj-${code}`);
-  const members = new Map(); // id -> { conn: DataConnection|null (null = eu mesmo), ...dados... }
-  let selfId = null;
-  // Mesma ideia do relay LAN: histórico só na memória de quem hospedou,
-  // dura enquanto essa pessoa estiver com o app aberto (sala vazia e
-  // voltando depois continua vendo o chat; fechar o app zera).
-  const chatHistory = [];
-  const CHAT_HISTORY_MAX = 200;
-
-  function deliver(id, msg) {
-    const m = members.get(id);
-    if (!m) return;
-    if (m.conn === null) handleTransportMessage(msg);
-    else if (m.conn.open) m.conn.send(msg);
-  }
-
-  function broadcastPresence() {
-    const list = [...members.entries()].map(([id, m]) => ({
-      id, name: m.name, avatar: m.avatar, banner: m.banner, bio: m.bio,
-      sharingScreen: m.sharingScreen, sharingCamera: m.sharingCamera, sharingMic: m.sharingMic,
-      isHost: id === selfId,
-    }));
-    for (const id of members.keys()) deliver(id, { type: 'presence', clients: list });
-  }
-
-  function handleIncoming(fromId, msg) {
-    const m = members.get(fromId);
-    if (!m || !msg || !msg.type) return;
-    if (msg.type === 'hello') {
-      m.name = String(msg.name || 'Convidado').slice(0, 30);
-      if (typeof msg.avatar === 'string' && msg.avatar.startsWith('data:image/')) m.avatar = msg.avatar.slice(0, 60000);
-      if (typeof msg.banner === 'string' && msg.banner.startsWith('data:image/')) m.banner = msg.banner.slice(0, 120000);
-      if (typeof msg.bio === 'string') m.bio = msg.bio.slice(0, 190);
-      broadcastPresence();
-    } else if (msg.type === 'share:start') {
-      const field = PRESENCE_FIELD[msg.source];
-      if (field) m[field] = true;
-      broadcastPresence();
-    } else if (msg.type === 'share:stop') {
-      const field = PRESENCE_FIELD[msg.source];
-      if (field) m[field] = false;
-      broadcastPresence();
-    } else if (msg.type === 'signal' && msg.to) {
-      deliver(msg.to, { type: 'signal', from: fromId, data: msg.data });
-    } else if (msg.type === 'chat') {
-      const text = typeof msg.text === 'string' ? msg.text.slice(0, 2000) : '';
-      const attachments = Array.isArray(msg.attachments) ? msg.attachments.slice(0, 4).map(sanitizeChatAttachment) : [];
-      if (!text && !attachments.length) return;
-      const chatMsg = { type: 'chat', from: fromId, name: m.name, avatar: m.avatar, text, attachments, ts: Date.now() };
-      chatHistory.push(chatMsg);
-      if (chatHistory.length > CHAT_HISTORY_MAX) chatHistory.shift();
-      for (const memberId of members.keys()) deliver(memberId, chatMsg);
-    }
-  }
-
-  peer.on('open', (id) => {
-    selfId = id;
-    members.set(id, { conn: null, name, avatar: myAvatar, banner: myBanner, bio: myBio, sharingScreen: false, sharingCamera: false, sharingMic: false });
-    state.transport = {
-      send(obj) { handleIncoming(selfId, obj); },
-      close() { peer.destroy(); },
-    };
-    handleTransportMessage({ type: 'welcome', id });
-    enterRoomScreen('Sala pela internet', code);
-  });
-
-  peer.on('connection', (conn) => {
-    const id = conn.peer;
-    members.set(id, { conn, name: 'Convidado', avatar: null, banner: null, bio: '', sharingScreen: false, sharingCamera: false, sharingMic: false });
-    conn.on('data', (msg) => handleIncoming(id, msg));
-    conn.on('close', () => { members.delete(id); broadcastPresence(); });
-    conn.on('open', () => {
-      if (chatHistory.length) deliver(id, { type: 'chat:history', messages: chatHistory });
-    });
-  });
-
-  peer.on('error', (err) => {
-    console.warn('[internet] erro no peer host:', err.type || err.message);
-    if (err.type === 'unavailable-id') setInternetStatus('Esse código já está em uso, tenta de novo.');
-    else setInternetStatus('Não deu pra criar a sala pela internet agora. Confere sua conexão.');
-  });
-}
-
-function joinInternetRoom(code) {
-  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
-  localStorage.setItem(NAME_KEY, name);
-  state.myName = name;
-  state.roomMode = 'internet';
-  setInternetStatus('Conectando…');
-
-  const peer = new Peer();
-  peer.on('open', () => {
-    const conn = peer.connect(`svj-${code}`, { reliable: true });
-    conn.on('open', () => {
-      state.transport = {
-        send(obj) { if (conn.open) conn.send(obj); },
-        close() { peer.destroy(); },
-      };
-      handleTransportMessage({ type: 'welcome', id: peer.id });
-      enterRoomScreen('Sala pela internet', code);
-      state.transport.send({ type: 'hello', name, avatar: myAvatar, banner: myBanner, bio: myBio });
-    });
-    conn.on('data', (msg) => handleTransportMessage(msg));
-    conn.on('close', () => leaveRoom());
-    conn.on('error', (err) => setInternetStatus(`Não deu pra entrar: ${err.message || err.type}`));
-  });
-  peer.on('error', (err) => {
-    console.warn('[internet] erro no peer:', err.type || err.message);
-    if (err.type === 'peer-unavailable') setInternetStatus('Código não encontrado — confere se está certo e se quem criou a sala ainda está com o app aberto.');
-    else setInternetStatus('Não deu pra conectar agora. Confere sua conexão com a internet.');
-  });
-}
-
-// `hostInternetRoom`/`joinInternetRoom` ficam sem nenhum botão chamando -
-// eram a UI de "sala por código" do modo Internet antigo, substituída pelo
-// fluxo de servidor/convite acima. Removidas de vez na Fase 5 (faxina).
-
-function enterRoomScreen(label, roomCode) {
+function enterRoomScreen(label) {
   els.lobby.classList.add('hidden');
   els.room.classList.remove('hidden');
-  els.roomInfo.textContent = roomCode ? `${label} · código ${roomCode}` : label;
-  state.roomCode = roomCode || null;
+  els.roomInfo.textContent = label;
   if (state.settings.autoMic) startMicShare();
 }
 
@@ -1441,13 +1292,13 @@ els.appAudioToggle.addEventListener('click', () => {
 });
 
 els.inviteBtn.addEventListener('click', async () => {
-  const value = state.roomMode === 'internet' ? state.roomCode : state.roomAddr;
-  const label = state.roomMode === 'internet' ? 'Código copiado' : 'Endereço copiado';
+  const server = myServers.find((s) => s.id === activeServerId);
+  if (!server) return;
   try {
-    await navigator.clipboard.writeText(value);
-    showToast(`${label}: ${value}`);
+    await navigator.clipboard.writeText(server.invite_code);
+    showToast(`Código de convite copiado: ${server.invite_code}`);
   } catch {
-    showToast(`${state.roomMode === 'internet' ? 'Código' : 'Endereço'} da sala: ${value}`);
+    showToast(`Código de convite: ${server.invite_code}`);
   }
 });
 
@@ -1455,28 +1306,19 @@ function leaveRoom() {
   stopScreenShare();
   stopCameraShare();
   stopMicShare();
-  clearChat();
   for (const key of [...state.watchPcs.keys()]) {
     const sep = key.lastIndexOf(':');
     teardownWatch(key.slice(0, sep), key.slice(sep + 1));
   }
   exitFocusIfActive();
-  if (ctlWs && ctlWs.readyState === ctlWs.OPEN) {
-    if (state.hostingRoomLabel) ctlWs.send(JSON.stringify({ type: 'host:stop' }));
-    ctlWs.send(JSON.stringify({ type: 'presence:room', room: null }));
-  }
-  state.hostingRoomLabel = null;
   // fecha o transporte só DEPOIS de mandar os "parei de compartilhar" acima
   // (stopScreenShare/stopCameraShare/stopMicShare) — fechar antes fazia o
-  // `.send()` deles cair num WebSocket já em CLOSING, gerando erro no console.
+  // `.send()` deles cair num canal já fechado, gerando erro no console.
   if (state.transport) state.transport.close();
   state.transport = null;
   state.myId = null;
-  state.roomMode = null;
-  state.roomCode = null;
   els.room.classList.add('hidden');
   els.lobby.classList.remove('hidden');
-  setInternetStatus('');
 }
 
 /* ---------------- presença: quem está na sala e quem compartilha ---------------- */
@@ -1676,65 +1518,14 @@ function setChatSendingStatus(text) {
   els.chatPendingAttachments.innerHTML = `<div class="chat-sending-status">${escapeHtml(text)}</div>`;
 }
 
-els.chatAttachBtn.addEventListener('click', () => els.chatFileInput.click());
-els.chatFileInput.addEventListener('change', () => {
-  const files = [...els.chatFileInput.files];
-  els.chatFileInput.value = '';
-  const maxBytes = currentChatFileMaxBytes();
-  const totalMaxBytes = currentChatTotalMaxBytes();
-  const maxMb = Math.round(maxBytes / (1024 * 1024));
-  let pendingTotal = pendingChatFiles.reduce((sum, f) => sum + f.size, 0);
-  for (const file of files) {
-    if (pendingChatFiles.length >= CHAT_MAX_ATTACHMENTS) {
-      showToast(`Máximo de ${CHAT_MAX_ATTACHMENTS} anexos por mensagem.`, 3000);
-      break;
-    }
-    if (file.size > maxBytes) {
-      showToast(`"${file.name}" é maior que ${maxMb}MB — escolhe um arquivo menor.`, 3500);
-      continue;
-    }
-    if (pendingTotal + file.size > totalMaxBytes) {
-      showToast(`Isso passaria de ${Math.round(totalMaxBytes / (1024 * 1024))}MB somando os anexos dessa mensagem — manda em mensagens separadas.`, 4000);
-      continue;
-    }
-    pendingChatFiles.push(file);
-    pendingTotal += file.size;
-  }
-  renderPendingAttachments();
-});
-
-els.chatForm.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  if (!state.transport) return;
-  const text = els.chatTextInput.value.trim().slice(0, 2000);
-  const files = pendingChatFiles;
-  pendingChatFiles = [];
-  if (!text && !files.length) {
-    renderPendingAttachments();
-    return;
-  }
-  els.chatTextInput.value = '';
-
-  const attachments = [];
-  for (const file of files) {
-    try {
-      if (state.roomMode === 'lan') {
-        setChatSendingStatus(`Enviando "${file.name}"... 0%`);
-        const uploaded = await uploadFileTo(state.roomAddr, file, (frac) => {
-          setChatSendingStatus(`Enviando "${file.name}"... ${Math.round(frac * 100)}%`);
-        });
-        attachments.push({ name: uploaded.name, type: uploaded.type, size: uploaded.size, fileId: uploaded.id });
-      } else {
-        const dataUrl = await fileToDataUrl(file);
-        attachments.push({ name: file.name, type: file.type, size: file.size, dataUrl });
-      }
-    } catch {
-      showToast(`Não consegui enviar "${file.name}".`, 3500);
-    }
-  }
-  setChatSendingStatus(null);
-  state.transport.send({ type: 'chat', text, attachments });
-});
+// A antiga sala (#room) tinha um chat embutido na barra lateral, ligado ao
+// state.transport LAN/PeerJS antigo. Esse transporte nao existe mais (ver
+// joinVoiceChannel) e comunicacao por texto agora vive nos canais de texto
+// de verdade (Fase 3) - entao os listeners de #chatForm/#chatAttachBtn/
+// #chatFileInput saem daqui (os elementos nem existem mais no HTML).
+// As funcoes abaixo (uploadFileTo/onChatMessage/etc.) ficam orfas, ainda
+// usadas pelo codigo (tambem morto) de Mensagem Direta - removidas de vez
+// na faxina da Fase 5.
 
 function onChatMessage(msg, opts) {
   const isSelf = msg.from === state.myId;

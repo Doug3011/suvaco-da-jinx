@@ -1838,12 +1838,14 @@ els.serverSettingsSaveBtn.addEventListener('click', async () => {
   }
 });
 
-els.serverIconLabel.addEventListener('click', (ev) => {
-  // o <input type=file> dentro do <label> já abriria sozinho, mas previne
-  // duplo-disparo se o clique cair bem em cima do input escondido
-  if (ev.target !== els.serverIconInput) els.serverIconInput.click();
-  ev.preventDefault();
-});
+// sem handler de clique no label de propósito: um <label> que envolve um
+// <input type=file> já abre o seletor de arquivo sozinho (igual o avatar
+// de perfil, que nunca teve esse handler). Um handler aqui que chamava
+// manualmente .click() + preventDefault() causava um bug sutil: o clique
+// sintético de .click() borbulha de volta pro label (que é ancestral do
+// input), reaciona o MESMO listener, e o preventDefault() incondicional
+// cancelava o próprio diálogo nativo que tinha acabado de ser disparado -
+// por isso clicar em "Trocar ícone" não abria nada.
 els.serverIconInput.addEventListener('change', async () => {
   const file = els.serverIconInput.files[0];
   els.serverIconInput.value = '';
@@ -3368,6 +3370,9 @@ const CHANGELOG = {
   '3.1.1': [
     'Corrigido: alt-tab (ou qualquer coisa que tirasse o foco da janela, como abrir o seletor de arquivo) jogava você de volta pra tela de Amigos e desselecionava o servidor — mesmo com uma chamada de voz rolando. Agora o app fica exatamente onde você deixou.',
     'Isso também corrige não conseguir trocar o ícone do servidor (o seletor de arquivo abrindo contava como perder o foco).',
+  ],
+  '3.1.2': [
+    'Corrigido de vez o botão "Trocar ícone" do servidor — um bug no próprio código cancelava o seletor de arquivo antes dele abrir.',
   ],
 };
 

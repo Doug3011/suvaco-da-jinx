@@ -51,7 +51,15 @@ $$;
 alter table public.servers enable row level security;
 alter table public.server_members enable row level security;
 
-create policy "so membros veem o servidor" on public.servers for select using (is_member_of_server(id));
+-- owner_id = auth.uid() cobre o instante da criacao: o INSERT via
+-- supabase-js (.insert().select()) faz um RETURNING que e' checado contra
+-- essa policy de SELECT, mas o trigger que insere a membership do dono em
+-- server_members so roda DEPOIS do insert completar (AFTER INSERT) -
+-- sem essa condicao extra, is_member_of_server(id) ainda daria false
+-- nesse instante e o insert inteiro falharia com "violates row-level
+-- security policy", mesmo o dono sendo o dono.
+create policy "so membros veem o servidor" on public.servers for select
+  using (is_member_of_server(id) or owner_id = auth.uid());
 create policy "qualquer logado cria servidor (vira owner)" on public.servers for insert with check (auth.uid() = owner_id);
 create policy "so owner edita" on public.servers for update using (auth.uid() = owner_id);
 create policy "so owner apaga" on public.servers for delete using (auth.uid() = owner_id);

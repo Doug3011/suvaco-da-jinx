@@ -79,6 +79,10 @@ svg { display: block; }
 }
 .brand-badge svg { width: 20px; height: 20px; }
 @media (max-width: 900px) { .brand-badge { display: none; } }
+/* so' faz sentido como decoracao da tela de login - uma vez dentro do
+   lobby ele fica fixo por cima do primeiro servidor do trilho, escondendo
+   o botao real atras dele */
+body:has(#lobby:not(.hidden)) .brand-badge { display: none; }
 
 /* ---------- botões base ---------- */
 

@@ -42,6 +42,8 @@ const ICONS = {
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   stop: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>`,
   message: `<svg ${ICON_ATTRS}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
+  plus: `<svg ${ICON_ATTRS}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  gear: `<svg ${ICON_ATTRS}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
 };
 
 const els = {
@@ -90,6 +92,25 @@ const els = {
   serverJoinCodeInput: document.getElementById('serverJoinCodeInput'),
   serverJoinBtn: document.getElementById('serverJoinBtn'),
   serverModalError: document.getElementById('serverModalError'),
+  channelModal: document.getElementById('channelModal'),
+  channelModalClose: document.getElementById('channelModalClose'),
+  channelModalTitle: document.getElementById('channelModalTitle'),
+  channelNameInput: document.getElementById('channelNameInput'),
+  channelCreateBtn: document.getElementById('channelCreateBtn'),
+  channelModalError: document.getElementById('channelModalError'),
+  serverSettingsBtn: document.getElementById('serverSettingsBtn'),
+  serverSettingsModal: document.getElementById('serverSettingsModal'),
+  serverSettingsModalClose: document.getElementById('serverSettingsModalClose'),
+  serverIconLabel: document.getElementById('serverIconLabel'),
+  serverIconPreview: document.getElementById('serverIconPreview'),
+  serverIconInput: document.getElementById('serverIconInput'),
+  serverSettingsNameInput: document.getElementById('serverSettingsNameInput'),
+  serverSettingsSaveBtn: document.getElementById('serverSettingsSaveBtn'),
+  serverSettingsInviteCode: document.getElementById('serverSettingsInviteCode'),
+  serverSettingsCopyInviteBtn: document.getElementById('serverSettingsCopyInviteBtn'),
+  serverSettingsError: document.getElementById('serverSettingsError'),
+  leaveServerBtn: document.getElementById('leaveServerBtn'),
+  deleteServerBtn: document.getElementById('deleteServerBtn'),
   textChannel: document.getElementById('textChannel'),
   textChannelName: document.getElementById('textChannelName'),
   textChannelMessages: document.getElementById('textChannelMessages'),
@@ -960,7 +981,13 @@ async function fetchMyServers() {
     activeChannels = [];
     els.activeServerName.textContent = 'Seus servidores';
     els.copyInviteBtn.classList.add('hidden');
+    els.serverSettingsBtn.classList.add('hidden');
     els.roomGrid.innerHTML = '<p class="hint">Crie ou entre num servidor pra ver os canais aqui.</p>';
+  } else if (activeServerId) {
+    // servidor ativo continua o mesmo, mas os dados dele (nome, icone...)
+    // podem ter mudado - atualiza o cabeçalho sem precisar re-selecionar
+    const server = myServers.find((s) => s.id === activeServerId);
+    if (server) els.activeServerName.textContent = server.name;
   }
 }
 
@@ -985,6 +1012,7 @@ async function selectServer(serverId) {
   const server = myServers.find((s) => s.id === serverId);
   els.activeServerName.textContent = server ? server.name : '';
   els.copyInviteBtn.classList.toggle('hidden', !server);
+  els.serverSettingsBtn.classList.toggle('hidden', !server);
   await fetchChannels(serverId);
   joinServerPresence(serverId);
 }
@@ -1086,19 +1114,22 @@ async function fetchChannels(serverId) {
 
 function renderChannelList() {
   els.roomGrid.innerHTML = '';
-  if (!activeChannels.length) {
-    els.roomGrid.innerHTML = '<p class="hint">Esse servidor ainda não tem canais.</p>';
-    return;
-  }
+  if (!activeServerId) return;
   const groups = [
-    { title: 'Texto', icon: ICONS.message, channels: activeChannels.filter((c) => c.type === 'text') },
-    { title: 'Voz', icon: ICONS.volume, channels: activeChannels.filter((c) => c.type === 'voice') },
+    { type: 'text', title: 'Texto', icon: ICONS.message, channels: activeChannels.filter((c) => c.type === 'text') },
+    { type: 'voice', title: 'Voz', icon: ICONS.volume, channels: activeChannels.filter((c) => c.type === 'voice') },
   ];
   for (const group of groups) {
-    if (!group.channels.length) continue;
     const title = document.createElement('div');
     title.className = 'channel-group-title';
-    title.textContent = group.title;
+    title.innerHTML = `<span>${group.title}</span>`;
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'channel-group-add';
+    addBtn.title = `Criar canal de ${group.title.toLowerCase()}`;
+    addBtn.innerHTML = ICONS.plus;
+    addBtn.addEventListener('click', () => openCreateChannelModal(group.type));
+    title.appendChild(addBtn);
     els.roomGrid.appendChild(title);
     for (const channel of group.channels) {
       const isActive =
@@ -1113,6 +1144,159 @@ function renderChannelList() {
     }
   }
 }
+
+/* ---------------- modal: criar canal ---------------- */
+
+let createChannelType = 'text';
+
+function openCreateChannelModal(type) {
+  createChannelType = type;
+  els.channelModalTitle.textContent = `Criar canal de ${type === 'voice' ? 'voz' : 'texto'}`;
+  els.channelNameInput.value = '';
+  els.channelModalError.classList.add('hidden');
+  els.channelModal.classList.remove('hidden');
+  els.channelNameInput.focus();
+}
+function closeChannelModal() {
+  els.channelModal.classList.add('hidden');
+}
+els.channelModalClose.addEventListener('click', closeChannelModal);
+
+els.channelCreateBtn.addEventListener('click', async () => {
+  const name = els.channelNameInput.value.trim();
+  if (!name) {
+    els.channelModalError.textContent = 'Dá um nome pro canal.';
+    els.channelModalError.classList.remove('hidden');
+    return;
+  }
+  const samType = activeChannels.filter((c) => c.type === createChannelType);
+  const nextPosition = samType.length ? Math.max(...samType.map((c) => c.position)) + 1 : 0;
+  els.channelCreateBtn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient
+      .from('channels')
+      .insert({ server_id: activeServerId, name, type: createChannelType, position: nextPosition });
+    if (error) throw error;
+    closeChannelModal();
+    await fetchChannels(activeServerId);
+  } catch (err) {
+    els.channelModalError.textContent = err.message || 'Não deu pra criar o canal.';
+    els.channelModalError.classList.remove('hidden');
+  } finally {
+    els.channelCreateBtn.disabled = false;
+  }
+});
+
+/* ---------------- modal: configurações do servidor ---------------- */
+
+function openServerSettingsModal() {
+  const server = myServers.find((s) => s.id === activeServerId);
+  if (!server) return;
+  const isOwner = server.owner_id === currentUser.id;
+  els.serverIconPreview.src = server.icon_url || DEFAULT_AVATAR;
+  els.serverSettingsNameInput.value = server.name;
+  els.serverSettingsNameInput.disabled = !isOwner;
+  els.serverIconLabel.classList.toggle('hidden', !isOwner);
+  els.serverSettingsSaveBtn.classList.toggle('hidden', !isOwner);
+  els.serverSettingsInviteCode.value = server.invite_code;
+  els.serverSettingsError.classList.add('hidden');
+  els.leaveServerBtn.classList.toggle('hidden', isOwner);
+  els.deleteServerBtn.classList.toggle('hidden', !isOwner);
+  els.serverSettingsModal.classList.remove('hidden');
+}
+function closeServerSettingsModal() {
+  els.serverSettingsModal.classList.add('hidden');
+}
+els.serverSettingsBtn.addEventListener('click', openServerSettingsModal);
+els.serverSettingsModalClose.addEventListener('click', closeServerSettingsModal);
+
+function showServerSettingsError(text) {
+  els.serverSettingsError.textContent = text;
+  els.serverSettingsError.classList.remove('hidden');
+}
+
+els.serverSettingsSaveBtn.addEventListener('click', async () => {
+  const name = els.serverSettingsNameInput.value.trim();
+  if (!name) { showServerSettingsError('Dá um nome pro servidor.'); return; }
+  els.serverSettingsSaveBtn.disabled = true;
+  try {
+    const { error } = await window.supabaseClient
+      .from('servers')
+      .update({ name })
+      .eq('id', activeServerId);
+    if (error) throw error;
+    closeServerSettingsModal();
+    await fetchMyServers();
+  } catch (err) {
+    showServerSettingsError(err.message || 'Não deu pra salvar.');
+  } finally {
+    els.serverSettingsSaveBtn.disabled = false;
+  }
+});
+
+els.serverIconLabel.addEventListener('click', (ev) => {
+  // o <input type=file> dentro do <label> já abriria sozinho, mas previne
+  // duplo-disparo se o clique cair bem em cima do input escondido
+  if (ev.target !== els.serverIconInput) els.serverIconInput.click();
+  ev.preventDefault();
+});
+els.serverIconInput.addEventListener('change', async () => {
+  const file = els.serverIconInput.files[0];
+  els.serverIconInput.value = '';
+  if (!file) return;
+  els.serverSettingsError.classList.add('hidden');
+  try {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = `server-icons/${activeServerId}-${Date.now()}.${ext}`;
+    const { error: uploadError } = await window.supabaseClient.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true });
+    if (uploadError) throw uploadError;
+    const { data: publicUrlData } = window.supabaseClient.storage.from('avatars').getPublicUrl(path);
+    const { error: updateError } = await window.supabaseClient
+      .from('servers')
+      .update({ icon_url: publicUrlData.publicUrl })
+      .eq('id', activeServerId);
+    if (updateError) throw updateError;
+    els.serverIconPreview.src = publicUrlData.publicUrl;
+    await fetchMyServers();
+  } catch (err) {
+    showServerSettingsError(err.message || 'Não deu pra trocar o ícone.');
+  }
+});
+
+els.serverSettingsCopyInviteBtn.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(els.serverSettingsInviteCode.value);
+    showToast('Código de convite copiado!', 2000);
+  } catch {
+    /* clipboard sem permissão - o campo já mostra o código pra copiar na mão */
+  }
+});
+
+els.leaveServerBtn.addEventListener('click', async () => {
+  if (!confirm('Sair desse servidor? Você vai precisar de um novo convite pra voltar.')) return;
+  const { error } = await window.supabaseClient
+    .from('server_members')
+    .delete()
+    .eq('server_id', activeServerId)
+    .eq('user_id', currentUser.id);
+  if (error) { showServerSettingsError(error.message); return; }
+  closeServerSettingsModal();
+  activeServerId = null;
+  await fetchMyServers();
+});
+
+els.deleteServerBtn.addEventListener('click', async () => {
+  const server = myServers.find((s) => s.id === activeServerId);
+  if (!server) return;
+  if (!confirm(`Apagar o servidor "${server.name}" de vez? Isso remove os canais e mensagens de todo mundo. Não tem como desfazer.`)) return;
+  const { error } = await window.supabaseClient.from('servers').delete().eq('id', activeServerId);
+  if (error) { showServerSettingsError(error.message); return; }
+  closeServerSettingsModal();
+  activeServerId = null;
+  await fetchMyServers();
+});
 
 // A barra de servidores/canais fica sempre visível (igual Discord) - só o
 // conteúdo principal troca entre o painel de boas-vindas, o canal de texto

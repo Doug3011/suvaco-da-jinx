@@ -703,8 +703,20 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   letter-spacing: 0.04em;
   color: var(--muted);
   padding: 14px 10px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .channel-group-title:first-child { padding-top: 2px; }
+.channel-group-add {
+  background: none;
+  border: none;
+  padding: 2px;
+  color: var(--muted);
+  display: flex;
+}
+.channel-group-add:hover { color: var(--text); transform: none; }
+.channel-group-add svg { width: 14px; height: 14px; }
 .channel-row.active-channel {
   background: var(--panel-2);
   color: var(--text);
@@ -714,6 +726,36 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 
 .server-modal { width: 380px; max-width: 100%; padding: 28px 24px 24px; }
 #serverJoinCodeInput { text-transform: lowercase; }
+
+/* ---------- configurações do servidor ---------- */
+
+.server-settings-modal { text-align: left; }
+.server-icon-edit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.server-icon-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.server-icon-hint { font-size: 13px; color: var(--accent); }
+#serverSettingsInviteCode { flex: 1; text-transform: lowercase; }
+.server-settings-danger {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
 
 /* ---------- canal de texto (tela cheia) ---------- */
 

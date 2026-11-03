@@ -54,6 +54,9 @@
           <button type="button" id="copyInviteBtn" class="icon-btn ghost hidden" title="Copiar código de convite">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
           </button>
+          <button type="button" id="serverSettingsBtn" class="icon-btn ghost hidden" title="Configurações do servidor">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
         </div>
         <div id="roomGrid" class="channel-list">
           <p class="hint">Crie ou entre num servidor pra ver os canais aqui.</p>
@@ -264,6 +267,63 @@
       </div>
 
       <p id="serverModalError" class="auth-error hidden"></p>
+    </div>
+  </div>
+
+  <!-- modal de criar canal (texto ou voz, dependendo de qual "+" foi clicado) -->
+  <div id="channelModal" class="modal-overlay hidden">
+    <div class="modal-card server-modal">
+      <button type="button" id="channelModalClose" class="icon-btn ghost modal-close" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h2 class="settings-modal-title" id="channelModalTitle">Criar canal</h2>
+      <label class="field">
+        <span>Nome do canal</span>
+        <div class="input-with-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          <input id="channelNameInput" type="text" maxlength="60" placeholder="ex: geral" />
+        </div>
+      </label>
+      <button type="button" id="channelCreateBtn" class="primary auth-submit-btn">Criar canal</button>
+      <p id="channelModalError" class="auth-error hidden"></p>
+    </div>
+  </div>
+
+  <!-- modal de configurações do servidor: so' o dono pode editar (RLS garante isso no banco tambem) -->
+  <div id="serverSettingsModal" class="modal-overlay hidden">
+    <div class="modal-card server-modal server-settings-modal">
+      <button type="button" id="serverSettingsModalClose" class="icon-btn ghost modal-close" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h2 class="settings-modal-title">Configurações do servidor</h2>
+
+      <label id="serverIconLabel" class="server-icon-edit">
+        <img id="serverIconPreview" class="server-icon-preview" alt="" />
+        <span class="server-icon-hint">Trocar ícone</span>
+        <input type="file" id="serverIconInput" accept="image/png,image/jpeg,image/webp" class="hidden" />
+      </label>
+
+      <label class="field">
+        <span>Nome do servidor</span>
+        <div class="input-with-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <input id="serverSettingsNameInput" type="text" maxlength="60" />
+        </div>
+      </label>
+      <button type="button" id="serverSettingsSaveBtn" class="primary auth-submit-btn">Salvar</button>
+
+      <div class="divider-line"><span>código de convite</span></div>
+      <div class="manual-join-row">
+        <input id="serverSettingsInviteCode" type="text" readonly />
+        <button type="button" id="serverSettingsCopyInviteBtn">Copiar</button>
+      </div>
+
+      <p id="serverSettingsError" class="auth-error hidden"></p>
+
+      <div class="server-settings-danger">
+        <button type="button" id="leaveServerBtn" class="ghost danger-hover hidden">Sair do servidor</button>
+        <button type="button" id="deleteServerBtn" class="danger hidden">Apagar servidor</button>
+      </div>
     </div>
   </div>
 

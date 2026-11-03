@@ -58,55 +58,89 @@
         <div id="roomGrid" class="channel-list">
           <p class="hint">Crie ou entre num servidor pra ver os canais aqui.</p>
         </div>
+
+        <!-- barra de usuário fixa embaixo, estilo Discord -->
+        <div class="user-bar">
+          <img id="userBarAvatar" class="user-bar-avatar" alt="" />
+          <div class="user-bar-info">
+            <strong id="userBarName">Convidado</strong>
+          </div>
+          <button type="button" id="userBarLogoutBtn" class="icon-btn ghost" title="Sair da conta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+          <button type="button" id="userBarSettingsBtn" class="icon-btn ghost" title="Configurações">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </button>
+        </div>
       </aside>
 
-      <div class="lobby-main">
-      <div class="lobby-header-row">
-        <div class="lobby-brand">
-          <img src="/logo.png" alt="" class="lobby-logo" />
-          <div>
-            <h1>Suvaco da <span class="accent-text">Jinx</span></h1>
-            <p class="subtitle">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              Servidores, chamadas de voz e compartilhamento de tela
-            </p>
+      <div class="lobby-content">
+        <!-- painel inicial: perfil/apelido, mostrado quando nenhum canal esta aberto -->
+        <div id="welcomePanel" class="lobby-panel lobby-main">
+          <div class="lobby-header-row">
+            <div class="lobby-brand">
+              <img src="/logo.png" alt="" class="lobby-logo" />
+              <div>
+                <h1>Suvaco da <span class="accent-text">Jinx</span></h1>
+                <p class="subtitle">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                  Servidores, chamadas de voz e compartilhamento de tela
+                </p>
+              </div>
+            </div>
           </div>
+
+          <label class="field">
+            <span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Seu apelido
+            </span>
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <input id="nameInput" type="text" maxlength="30" placeholder="Como te chamam na mesa" />
+            </div>
+          </label>
+
+          <button type="button" id="openProfileBtn" class="profile-summary-btn">
+            <img id="avatarPreview" class="avatar-preview" alt="" />
+            <div class="profile-summary-text">
+              <strong>Personalizar perfil</strong>
+              <span>Foto, banner, bio</span>
+            </div>
+            <svg class="chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+
+          <p class="credits">Desenvolvido por <strong>Doug Muller Burro</strong></p>
+          <a class="tabletop-link" href="https://github.com/Doug3011/outro-lado-da-mesa/releases/latest/download/OutroLado-Setup.exe" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span>Baixar "O Outro Lado da Mesa" (tabletop)</span>
+          </a>
         </div>
-        <button type="button" id="logoutBtn" class="icon-btn ghost" title="Sair da conta">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        </button>
-      </div>
 
-      <label class="field">
-        <span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          Seu apelido
-        </span>
-        <div class="input-with-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-          <input id="nameInput" type="text" maxlength="30" placeholder="Como te chamam na mesa" />
-        </div>
-      </label>
+        <!-- CANAL DE TEXTO -->
+        <section id="textChannel" class="lobby-panel hidden">
+          <header class="room-topbar">
+            <div class="room-topbar-brand">
+              <div class="room-topbar-info">
+                <strong id="textChannelName">canal</strong>
+              </div>
+            </div>
+          </header>
+          <div class="room-body">
+            <div class="room-content text-channel-content">
+              <div id="textChannelMessages" class="chat-messages text-channel-messages"></div>
+              <form id="textChannelForm" class="chat-input-row">
+                <input type="text" id="textChannelTextInput" placeholder="Mandar mensagem..." maxlength="2000" autocomplete="off" />
+                <button type="submit" class="icon-btn primary" title="Enviar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
 
-      <button type="button" id="openProfileBtn" class="profile-summary-btn">
-        <img id="avatarPreview" class="avatar-preview" alt="" />
-        <div class="profile-summary-text">
-          <strong>Personalizar perfil</strong>
-          <span>Foto, banner, bio</span>
-        </div>
-        <svg class="chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>
-
-      <p class="credits">Desenvolvido por <strong>Doug Muller Burro</strong></p>
-      <a class="tabletop-link" href="https://github.com/Doug3011/outro-lado-da-mesa/releases/latest/download/OutroLado-Setup.exe" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span>Baixar "O Outro Lado da Mesa" (tabletop)</span>
-      </a>
-      </div>
-    </section>
-
-    <!-- SALA -->
-    <section id="room" class="screen hidden">
+        <!-- SALA DE VOZ -->
+        <section id="room" class="lobby-panel hidden">
       <header class="room-topbar">
         <div class="room-topbar-brand">
           <img src="/logo.png" alt="" class="room-logo" />
@@ -194,31 +228,13 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.92V20a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h2.08a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11l-1.27 1.27a16 16 0 0 0 2.61 3.41"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
         </button>
       </div>
-    </section>
-
-    <!-- CANAL DE TEXTO -->
-    <section id="textChannel" class="screen hidden">
-      <header class="room-topbar">
-        <div class="room-topbar-brand">
-          <button type="button" id="textChannelBackBtn" class="icon-btn ghost" title="Voltar">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-          </button>
-          <div class="room-topbar-info">
-            <strong id="textChannelName">canal</strong>
-          </div>
-        </div>
-      </header>
-      <div class="room-body">
-        <div class="room-content text-channel-content">
-          <div id="textChannelMessages" class="chat-messages text-channel-messages"></div>
-          <form id="textChannelForm" class="chat-input-row">
-            <input type="text" id="textChannelTextInput" placeholder="Mandar mensagem..." maxlength="2000" autocomplete="off" />
-            <button type="submit" class="icon-btn primary" title="Enviar">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-            </button>
-          </form>
-        </div>
+        </section>
       </div>
+
+      <!-- lista de membros do servidor, estilo Discord -->
+      <aside id="memberSidebar" class="member-sidebar hidden">
+        <div id="memberList" class="people-list"></div>
+      </aside>
     </section>
   </div>
 

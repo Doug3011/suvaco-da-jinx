@@ -50,8 +50,14 @@ const els = {
   authDisplayNameInput: document.getElementById('authDisplayNameInput'),
   authError: document.getElementById('authError'),
   authSubmitBtn: document.getElementById('authSubmitBtn'),
-  logoutBtn: document.getElementById('logoutBtn'),
   lobby: document.getElementById('lobby'),
+  welcomePanel: document.getElementById('welcomePanel'),
+  userBarAvatar: document.getElementById('userBarAvatar'),
+  userBarName: document.getElementById('userBarName'),
+  userBarLogoutBtn: document.getElementById('userBarLogoutBtn'),
+  userBarSettingsBtn: document.getElementById('userBarSettingsBtn'),
+  memberSidebar: document.getElementById('memberSidebar'),
+  memberList: document.getElementById('memberList'),
   room: document.getElementById('room'),
   nameInput: document.getElementById('nameInput'),
   avatarPreview: document.getElementById('avatarPreview'),
@@ -85,7 +91,6 @@ const els = {
   serverJoinBtn: document.getElementById('serverJoinBtn'),
   serverModalError: document.getElementById('serverModalError'),
   textChannel: document.getElementById('textChannel'),
-  textChannelBackBtn: document.getElementById('textChannelBackBtn'),
   textChannelName: document.getElementById('textChannelName'),
   textChannelMessages: document.getElementById('textChannelMessages'),
   textChannelForm: document.getElementById('textChannelForm'),
@@ -180,6 +185,11 @@ function showAuthScreen() {
     textChannelRealtime = null;
   }
   activeTextChannel = null;
+  if (serverPresenceChannel) {
+    window.supabaseClient.removeChannel(serverPresenceChannel);
+    serverPresenceChannel = null;
+  }
+  serverMembersCache = [];
   myServers = [];
   activeServerId = null;
   activeChannels = [];
@@ -201,8 +211,11 @@ async function fetchMyProfile(userId) {
 function showLobbyScreen() {
   els.authScreen.classList.add('hidden');
   els.lobby.classList.remove('hidden');
+  showMainPanel('welcome');
   if (currentProfile) {
     els.nameInput.value = currentProfile.display_name || '';
+    els.userBarName.textContent = currentProfile.display_name || 'Convidado';
+    els.userBarAvatar.src = currentProfile.avatar_url || DEFAULT_AVATAR;
   }
   fetchMyServers();
 }
@@ -227,9 +240,10 @@ els.authForm.addEventListener('submit', async (ev) => {
   }
 });
 
-els.logoutBtn.addEventListener('click', async () => {
+els.userBarLogoutBtn.addEventListener('click', async () => {
   await window.supabaseClient.auth.signOut();
 });
+els.userBarSettingsBtn.addEventListener('click', () => openSettingsModal());
 
 window.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
   if (session && session.user) {
@@ -974,6 +988,91 @@ async function selectServer(serverId) {
   els.activeServerName.textContent = server ? server.name : '';
   els.copyInviteBtn.classList.toggle('hidden', !server);
   await fetchChannels(serverId);
+  joinServerPresence(serverId);
+}
+
+/* ---------------- lista de membros do servidor (barra lateral direita) ----------------
+   Realtime Presence por servidor (`server:<id>`) - cada cliente so' avisa
+   "estou olhando esse servidor agora", sem precisar estar numa chamada de
+   voz. Mostra quem ta online (nessa sessao) separado de quem ta offline,
+   igual Discord. Serve tambem de base pra sinalizacao de transferencia de
+   arquivo P2P mais pra frente. */
+
+let serverPresenceChannel = null;
+let serverMembersCache = [];
+
+function joinServerPresence(serverId) {
+  if (serverPresenceChannel) {
+    window.supabaseClient.removeChannel(serverPresenceChannel);
+    serverPresenceChannel = null;
+  }
+  const myId = currentUser.id;
+  const rt = window.supabaseClient.channel(`server:${serverId}`, {
+    config: { presence: { key: myId } },
+  });
+  rt.on('presence', { event: 'sync' }, () => renderMemberSidebar());
+  rt.subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      rt.track({
+        name: currentProfile ? currentProfile.display_name : 'Convidado',
+        avatar: currentProfile ? currentProfile.avatar_url : null,
+      });
+    }
+  });
+  serverPresenceChannel = rt;
+  fetchServerMembers(serverId);
+}
+
+async function fetchServerMembers(serverId) {
+  const { data, error } = await window.supabaseClient
+    .from('server_members')
+    .select('user_id, profiles(display_name, avatar_url)')
+    .eq('server_id', serverId);
+  serverMembersCache = error ? [] : (data || []);
+  renderMemberSidebar();
+}
+
+function renderMemberSidebar() {
+  if (!activeServerId) {
+    els.memberSidebar.classList.add('hidden');
+    return;
+  }
+  els.memberSidebar.classList.remove('hidden');
+  const onlineIds = serverPresenceChannel
+    ? new Set(Object.keys(serverPresenceChannel.presenceState()))
+    : new Set();
+
+  const online = [];
+  const offline = [];
+  for (const m of serverMembersCache) {
+    const profile = m.profiles || {};
+    const entry = { id: m.user_id, name: profile.display_name || 'Convidado', avatar: profile.avatar_url };
+    (onlineIds.has(m.user_id) ? online : offline).push(entry);
+  }
+
+  els.memberList.innerHTML = '';
+  const addGroup = (title, members) => {
+    if (!members.length) return;
+    const groupTitle = document.createElement('div');
+    groupTitle.className = 'channel-group-title';
+    groupTitle.textContent = `${title} — ${members.length}`;
+    els.memberList.appendChild(groupTitle);
+    for (const member of members) {
+      const row = document.createElement('div');
+      row.className = 'people-list-row' + (title === 'Online' ? ' sharing' : '');
+      row.innerHTML = `
+        <div class="avatar-status-wrap">
+          <img src="${member.avatar || DEFAULT_AVATAR}" alt="" />
+          ${title === 'Online' ? '<span class="status-dot"></span>' : ''}
+        </div>
+        <div class="person-info"><div class="name-row"><span class="name">${escapeHtml(member.name)}</span></div></div>
+      `;
+      if (title !== 'Online') row.style.opacity = '0.5';
+      els.memberList.appendChild(row);
+    }
+  };
+  addGroup('Online', online);
+  addGroup('Offline', offline);
 }
 
 async function fetchChannels(serverId) {
@@ -1012,6 +1111,16 @@ function renderChannelList() {
       els.roomGrid.appendChild(row);
     }
   }
+}
+
+// A barra de servidores/canais fica sempre visível (igual Discord) - só o
+// conteúdo principal troca entre o painel de boas-vindas, o canal de texto
+// e a sala de voz. Entrar num canal de texto NÃO sai de uma chamada de voz
+// em andamento (ela continua rodando em segundo plano, só escondida).
+function showMainPanel(panel) {
+  els.welcomePanel.classList.toggle('hidden', panel !== 'welcome');
+  els.textChannel.classList.toggle('hidden', panel !== 'text');
+  els.room.classList.toggle('hidden', panel !== 'voice');
 }
 
 function openChannel(channel) {
@@ -1070,8 +1179,7 @@ async function openTextChannel(channel) {
   activeTextChannel = channel;
   els.textChannelName.textContent = channel.name;
   els.textChannelMessages.innerHTML = '';
-  els.lobby.classList.add('hidden');
-  els.textChannel.classList.remove('hidden');
+  showMainPanel('text');
 
   const { data, error } = await window.supabaseClient
     .from('messages')
@@ -1108,11 +1216,7 @@ function closeTextChannel() {
     textChannelRealtime = null;
   }
   activeTextChannel = null;
-  els.textChannel.classList.add('hidden');
-  els.lobby.classList.remove('hidden');
 }
-
-els.textChannelBackBtn.addEventListener('click', closeTextChannel);
 
 els.textChannelForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -1265,8 +1369,7 @@ function joinVoiceChannel(channel) {
 }
 
 function enterRoomScreen(label) {
-  els.lobby.classList.add('hidden');
-  els.room.classList.remove('hidden');
+  showMainPanel('voice');
   els.roomInfo.textContent = label;
   if (state.settings.autoMic) startMicShare();
 }
@@ -1317,8 +1420,7 @@ function leaveRoom() {
   if (state.transport) state.transport.close();
   state.transport = null;
   state.myId = null;
-  els.room.classList.add('hidden');
-  els.lobby.classList.remove('hidden');
+  showMainPanel('welcome');
 }
 
 /* ---------------- presença: quem está na sala e quem compartilha ---------------- */

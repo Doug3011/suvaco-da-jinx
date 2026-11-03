@@ -113,10 +113,14 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 
 /* ---------- Lobby ---------- */
 
+/* Shell persistente estilo Discord: trilho de servidores + lista de canais
+   ficam sempre visíveis; só o painel principal troca (boas-vindas, canal
+   de texto, sala de voz) — ver showMainPanel() no app.js. */
+
 #lobby {
   display: flex;
   align-items: stretch;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 .lobby-rail {
@@ -125,8 +129,9 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 84px 0 20px;
+  padding: 16px 0 20px;
   border-right: 1px solid var(--border);
+  overflow-y: auto;
 }
 .lobby-rail-btn {
   width: 42px;
@@ -148,28 +153,62 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 }
 
 .lobby-sidebar {
-  width: 200px;
+  width: 220px;
   flex-shrink: 0;
-  padding: 84px 10px 20px;
-  border-right: 1px solid var(--border);
-  overflow-y: auto;
-}
-
-.lobby-main {
-  flex: 1;
-  min-width: 0;
-  max-width: 560px;
-  padding: 56px 32px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  padding-top: 16px;
+  border-right: 1px solid var(--border);
+}
+.lobby-sidebar #roomGrid { flex: 1; overflow-y: auto; padding: 0 10px 10px; }
+.lobby-sidebar .channel-list-header { padding: 2px 10px 4px; }
+
+.user-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+.user-bar-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: var(--panel-2); }
+.user-bar-info { flex: 1; min-width: 0; }
+.user-bar-info strong { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-bar .icon-btn { padding: 6px; }
+.user-bar .icon-btn svg { width: 15px; height: 15px; }
+
+.lobby-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.lobby-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.lobby-panel.hidden { display: none; }
+
+.lobby-main.lobby-panel {
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 40px 32px;
   gap: 16px;
   overflow-y: auto;
 }
 
+.member-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  padding: 16px 10px;
+  overflow-y: auto;
+}
+
 @media (max-width: 820px) {
-  .lobby-rail, .lobby-sidebar { display: none; }
-  #lobby { display: block; }
-  .lobby-main { max-width: 480px; margin: 0 auto; padding: 56px 20px; }
+  .lobby-rail, .lobby-sidebar, .member-sidebar { display: none; }
+  .lobby-main.lobby-panel { max-width: 480px; margin: 0 auto; padding: 40px 20px; }
 }
 
 .lobby-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -1221,7 +1260,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 /* ---------- dock flutuante (seus controles de transmissão) ---------- */
 
 .dock {
-  position: fixed;
+  position: absolute;
   bottom: 20px;
   left: 50%;
   transform: translateX(-50%);

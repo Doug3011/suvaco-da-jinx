@@ -2691,6 +2691,11 @@ const CHANGELOG = {
     'Configurações do servidor: troque o nome, o ícone, veja o código de convite, saia ou apague o servidor.',
     'Aviso: ainda não dá pra mandar arquivo no chat de texto, e chamadas de voz em redes mais restritas (ex: 4G/5G, rede corporativa) podem não conectar ainda — chegando em breve.',
   ],
+  '3.0.1': [
+    'Ajustes visuais: cada área da tela (servidores, canais, conteúdo, membros) agora tem um tom de fundo diferente, pra ficar claro onde uma termina e a outra começa.',
+    'Ícone do soundboard no dock ficou mais simples e legível.',
+    'Corrigido: um selo decorativo da tela de login estava ficando preso no canto da tela e escondendo o primeiro servidor da lista.',
+  ],
 };
 
 const LAST_SEEN_VERSION_KEY = 'tela-radmin:last-seen-version';

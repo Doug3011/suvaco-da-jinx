@@ -1,7 +1,7 @@
 {
   "name": "tela-radmin",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.19.0",
   "description": "Compartilhamento de tela na rede local (Radmin VPN), com mute por app individual.",
   "author": "Doug Muller Burro",
   "main": "electron/main.js",

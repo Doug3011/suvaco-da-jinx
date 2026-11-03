@@ -6,6 +6,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('telaNative', {
   available: () => ipcRenderer.invoke('native:available'),
+  getVersion: () => ipcRenderer.invoke('app:getVersion'),
   listApps: () => ipcRenderer.invoke('native:listApps'),
   startCapture: (pid) => ipcRenderer.invoke('native:startCapture', pid),
   stopCapture: (handle) => ipcRenderer.invoke('native:stopCapture', handle),
@@ -13,5 +14,11 @@ contextBridge.exposeInMainWorld('telaNative', {
     const listener = (_event, payload) => cb(payload);
     ipcRenderer.on('native:audioChunk', listener);
     return () => ipcRenderer.removeListener('native:audioChunk', listener);
+  },
+  quitAndInstall: () => ipcRenderer.invoke('app:quitAndInstall'),
+  onUpdateReady: (cb) => {
+    const listener = (_event, payload) => cb(payload);
+    ipcRenderer.on('update:ready', listener);
+    return () => ipcRenderer.removeListener('update:ready', listener);
   },
 });

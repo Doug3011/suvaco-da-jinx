@@ -34,6 +34,14 @@ const ICONS = {
   camera: `<svg ${ICON_ATTRS}><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
   check: `<svg ${ICON_ATTRS}><polyline points="20 6 9 17 4 12"/></svg>`,
   pip: `<svg ${ICON_ATTRS}><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="8" height="6" rx="1"/></svg>`,
+  crown: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19h19l-1.4-9-4.8 4-3.3-6.5-3.3 6.5-4.8-4-1.4 9z"/></svg>`,
+  pencil: `<svg ${ICON_ATTRS}><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>`,
+  trash: `<svg ${ICON_ATTRS}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+  soundboard: `<svg ${ICON_ATTRS}><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 15V9M12 17V7M17 13v-2"/></svg>`,
+  file: `<svg ${ICON_ATTRS}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  stop: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>`,
+  message: `<svg ${ICON_ATTRS}><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
 };
 
 const els = {
@@ -54,16 +62,31 @@ const els = {
   bioInput: document.getElementById('bioInput'),
   profileHistorySection: document.getElementById('profileHistorySection'),
   profileHistoryList: document.getElementById('profileHistoryList'),
-  hostBtn: document.getElementById('hostBtn'),
-  roomList: document.getElementById('roomList'),
+  onlineCount: document.getElementById('onlineCount'),
+  onlinePeersList: document.getElementById('onlinePeersList'),
+  roomGrid: document.getElementById('roomGrid'),
   manualHost: document.getElementById('manualHost'),
   manualPort: document.getElementById('manualPort'),
   manualJoinBtn: document.getElementById('manualJoinBtn'),
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
   peopleBar: document.getElementById('peopleBar'),
-  micCheckWrap: document.getElementById('micCheckWrap'),
-  micCheck: document.getElementById('micCheck'),
+  chatMessages: document.getElementById('chatMessages'),
+  chatPendingAttachments: document.getElementById('chatPendingAttachments'),
+  chatForm: document.getElementById('chatForm'),
+  chatAttachBtn: document.getElementById('chatAttachBtn'),
+  chatFileInput: document.getElementById('chatFileInput'),
+  chatTextInput: document.getElementById('chatTextInput'),
+  chatNotificationsCheck: document.getElementById('chatNotificationsCheck'),
+  dmModal: document.getElementById('dmModal'),
+  dmModalClose: document.getElementById('dmModalClose'),
+  dmPeerName: document.getElementById('dmPeerName'),
+  dmMessages: document.getElementById('dmMessages'),
+  dmPendingAttachments: document.getElementById('dmPendingAttachments'),
+  dmForm: document.getElementById('dmForm'),
+  dmAttachBtn: document.getElementById('dmAttachBtn'),
+  dmFileInput: document.getElementById('dmFileInput'),
+  dmTextInput: document.getElementById('dmTextInput'),
   micMuteBtn: document.getElementById('micMuteBtn'),
   cameraBtn: document.getElementById('cameraBtn'),
   shareBtn: document.getElementById('shareBtn'),
@@ -84,9 +107,33 @@ const els = {
   sidebar: document.getElementById('sidebar'),
   peopleToggleBtn: document.getElementById('peopleToggleBtn'),
   settingsBtn: document.getElementById('settingsBtn'),
-  settingsPanel: document.getElementById('settingsPanel'),
+  settingsModal: document.getElementById('settingsModal'),
+  settingsModalClose: document.getElementById('settingsModalClose'),
+  settingsTabs: document.querySelectorAll('.settings-tab'),
+  settingsTabPanels: document.querySelectorAll('.settings-tab-panel'),
+  autoMicCheck: document.getElementById('autoMicCheck'),
+  refreshPermMuteBtn: document.getElementById('refreshPermMuteBtn'),
+  permMuteList: document.getElementById('permMuteList'),
+  soundboardBtn: document.getElementById('soundboardBtn'),
+  soundboardModal: document.getElementById('soundboardModal'),
+  soundboardModalClose: document.getElementById('soundboardModalClose'),
+  soundboardVolumeSlider: document.getElementById('soundboardVolumeSlider'),
+  addSoundBtn: document.getElementById('addSoundBtn'),
+  soundFileInput: document.getElementById('soundFileInput'),
+  soundboardList: document.getElementById('soundboardList'),
+  overlayPreview: document.getElementById('overlayPreview'),
+  overlayEmptyHint: document.getElementById('overlayEmptyHint'),
+  overlayAddBtn: document.getElementById('overlayAddBtn'),
+  overlayRemoveBtn: document.getElementById('overlayRemoveBtn'),
+  overlayFileInput: document.getElementById('overlayFileInput'),
+  overlayEnabledCheck: document.getElementById('overlayEnabledCheck'),
   resolutionSelect: document.getElementById('resolutionSelect'),
   fpsSelect: document.getElementById('fpsSelect'),
+  bandwidthSelect: document.getElementById('bandwidthSelect'),
+  hideCursorCheck: document.getElementById('hideCursorCheck'),
+  micDeviceSelect: document.getElementById('micDeviceSelect'),
+  camDeviceSelect: document.getElementById('camDeviceSelect'),
+  speakerDeviceSelect: document.getElementById('speakerDeviceSelect'),
   noiseSuppressionCheck: document.getElementById('noiseSuppressionCheck'),
   modeTabLan: document.getElementById('modeTabLan'),
   modeTabInternet: document.getElementById('modeTabInternet'),
@@ -96,6 +143,17 @@ const els = {
   joinCodeInput: document.getElementById('joinCodeInput'),
   joinCodeBtn: document.getElementById('joinCodeBtn'),
   internetModeStatus: document.getElementById('internetModeStatus'),
+  connectionPill: document.getElementById('connectionPill'),
+  connectionPillText: document.getElementById('connectionPillText'),
+  whatsNewModal: document.getElementById('whatsNewModal'),
+  whatsNewClose: document.getElementById('whatsNewClose'),
+  whatsNewVersion: document.getElementById('whatsNewVersion'),
+  whatsNewList: document.getElementById('whatsNewList'),
+  whatsNewOkBtn: document.getElementById('whatsNewOkBtn'),
+  updateReadyModal: document.getElementById('updateReadyModal'),
+  updateReadyVersion: document.getElementById('updateReadyVersion'),
+  updateReadyLaterBtn: document.getElementById('updateReadyLaterBtn'),
+  updateReadyRestartBtn: document.getElementById('updateReadyRestartBtn'),
 };
 
 // STUN públicos (gratuitos) — deixam duas máquinas em redes diferentes se
@@ -253,7 +311,22 @@ function tileKey(id, source) {
 
 const SETTINGS_KEY = 'tela-radmin:settings';
 function loadSettings() {
-  const defaults = { resolution: '1920x1080', fps: 30, noiseSuppression: true };
+  const defaults = {
+    resolution: '1920x1080',
+    fps: 30,
+    noiseSuppression: true,
+    bandwidthKbps: null,
+    hideCursor: true,
+    micDeviceId: '',
+    camDeviceId: '',
+    speakerDeviceId: '',
+    autoMic: true,
+    permanentlyMutedApps: [],
+    micMuted: false,
+    soundboardVolume: 70,
+    cameraOverlayEnabled: false,
+    chatNotifications: true,
+  };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) return { ...defaults, ...JSON.parse(raw) };
@@ -273,6 +346,7 @@ const state = {
   roomCode: null, // usado no modo internet
   myId: null,
   myName: '',
+  hostingRoomLabel: null, // preenchido quando EU virei anfitrião automático de uma Sala N (pra saber se devo host:stop ao sair)
   settings: loadSettings(),
   watchPcs: new Map(), // `${transmissorId}:${source}` -> RTCPeerConnection (eu assistindo)
   broadcastPcs: new Map(), // `${espectadorId}:${source}` -> RTCPeerConnection (eu transmitindo pra ele)
@@ -280,8 +354,10 @@ const state = {
   pinned: new Set(), // chaves marcadas pra entrar juntas na tela cheia
   focusOverlay: null,
   focusIds: null,
-  screen: { sharing: false, displayStream: null, micStream: null, micTrack: null, localTracks: [] },
+  screen: { sharing: false, displayStream: null, localTracks: [], blackFrameStop: null },
   camera: { sharing: false, camStream: null, localTracks: [] },
+  mic: { sharing: false, micStream: null, localTracks: [] },
+  dmPeer: null, // {id, deviceId, name, host, port, room} — com quem a conversa de mensagem direta aberta agora é
 };
 
 /* ---------------- configurações de transmissão (resolução/fps/ruído) ---------------- */
@@ -289,6 +365,10 @@ const state = {
 els.resolutionSelect.value = state.settings.resolution;
 els.fpsSelect.value = String(state.settings.fps);
 els.noiseSuppressionCheck.checked = state.settings.noiseSuppression;
+els.bandwidthSelect.value = state.settings.bandwidthKbps ? String(state.settings.bandwidthKbps) : 'auto';
+els.hideCursorCheck.checked = state.settings.hideCursor;
+els.autoMicCheck.checked = state.settings.autoMic;
+els.chatNotificationsCheck.checked = state.settings.chatNotifications;
 
 els.resolutionSelect.addEventListener('change', () => {
   state.settings.resolution = els.resolutionSelect.value;
@@ -302,14 +382,120 @@ els.noiseSuppressionCheck.addEventListener('change', () => {
   state.settings.noiseSuppression = els.noiseSuppressionCheck.checked;
   saveSettings();
 });
-
-els.settingsBtn.addEventListener('click', () => {
-  els.settingsPanel.classList.toggle('hidden');
+els.hideCursorCheck.addEventListener('change', () => {
+  state.settings.hideCursor = els.hideCursorCheck.checked;
+  saveSettings();
+  // só vale pra próxima vez que compartilhar — o getDisplayMedia já em
+  // andamento não aceita trocar esse parâmetro no meio da transmissão.
 });
-document.addEventListener('click', (ev) => {
-  if (els.settingsPanel.classList.contains('hidden')) return;
-  if (els.settingsPanel.contains(ev.target) || els.settingsBtn.contains(ev.target)) return;
-  els.settingsPanel.classList.add('hidden');
+els.autoMicCheck.addEventListener('change', () => {
+  state.settings.autoMic = els.autoMicCheck.checked;
+  saveSettings();
+  // só vale pra próxima sala que entrar — não liga/desliga o mic no meio da atual sozinho
+});
+els.refreshPermMuteBtn.addEventListener('click', renderPermMuteList);
+els.chatNotificationsCheck.addEventListener('change', () => {
+  state.settings.chatNotifications = els.chatNotificationsCheck.checked;
+  saveSettings();
+});
+
+/* ---------------- escolha de dispositivos (microfone / câmera / saída de áudio) ----------------
+   Os rótulos de dispositivo (device.label) só vêm preenchidos depois que o
+   navegador já teve permissão de mic/câmera concedida alguma vez — antes
+   disso vêm como string vazia, daí o fallback "Microfone 1"/"Câmera 2" etc.
+   Reconstrói as 3 listas toda vez que o painel de configurações abre, e
+   também quando o SO avisa que algo mudou (plugou/desplugou fone, etc). */
+
+function fillDeviceSelect(select, devices, kind, savedId) {
+  const current = select.value || savedId || '';
+  select.innerHTML = '<option value="">Padrão do sistema</option>';
+  devices.forEach((d, i) => {
+    const opt = document.createElement('option');
+    opt.value = d.deviceId;
+    opt.textContent = d.label || `${kind} ${i + 1}`;
+    select.appendChild(opt);
+  });
+  // só mantém selecionado se o dispositivo salvo ainda existir na lista atual
+  if (current && devices.some((d) => d.deviceId === current)) select.value = current;
+  else select.value = '';
+}
+
+async function populateDeviceSelects() {
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    fillDeviceSelect(els.micDeviceSelect, devices.filter((d) => d.kind === 'audioinput'), 'Microfone', state.settings.micDeviceId);
+    fillDeviceSelect(els.camDeviceSelect, devices.filter((d) => d.kind === 'videoinput'), 'Câmera', state.settings.camDeviceId);
+    fillDeviceSelect(els.speakerDeviceSelect, devices.filter((d) => d.kind === 'audiooutput'), 'Saída de áudio', state.settings.speakerDeviceId);
+  } catch {
+    /* enumerateDevices não suportado ou sem permissão nenhuma ainda — fica só com "Padrão do sistema" */
+  }
+}
+
+if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+  navigator.mediaDevices.addEventListener('devicechange', populateDeviceSelects);
+}
+
+els.micDeviceSelect.addEventListener('change', () => {
+  state.settings.micDeviceId = els.micDeviceSelect.value;
+  saveSettings();
+  // só vale pra próxima vez que ligar o mic — trocar ao vivo exigiria
+  // reabrir a captura de áudio no meio de uma transmissão em andamento.
+});
+
+els.camDeviceSelect.addEventListener('change', async () => {
+  state.settings.camDeviceId = els.camDeviceSelect.value;
+  saveSettings();
+  // câmera é a mais provável de precisar de troca na hora (testar qual
+  // dispositivo resolve um problema tipo "câmera toda amarela") — reinicia
+  // sozinho se já estiver ligada, em vez de exigir desligar/ligar na mão.
+  if (state.camera.sharing) {
+    stopCameraShare();
+    await startCameraShare();
+  }
+});
+
+function applySpeakerDevice(video) {
+  if (typeof video.setSinkId !== 'function') return;
+  video.setSinkId(state.settings.speakerDeviceId || '').catch(() => {
+    /* dispositivo pode ter sumido (desplugado) desde a última vez — ignora, volta pro padrão */
+  });
+}
+
+els.speakerDeviceSelect.addEventListener('change', () => {
+  state.settings.speakerDeviceId = els.speakerDeviceSelect.value;
+  saveSettings();
+  // esse aplica na hora, pra todo mundo que já está na grade — não precisa de restart
+  for (const tile of state.tiles.values()) {
+    if (!tile.isSelf) applySpeakerDevice(tile.video);
+  }
+});
+els.bandwidthSelect.addEventListener('change', () => {
+  const v = els.bandwidthSelect.value;
+  state.settings.bandwidthKbps = v === 'auto' ? null : Number(v);
+  saveSettings();
+  // reaplica já nas transmissões em andamento, sem precisar recompartilhar
+  for (const pc of state.broadcastPcs.values()) applyBandwidthLimit(pc);
+});
+
+function openSettingsModal() {
+  els.settingsModal.classList.remove('hidden');
+  populateDeviceSelects();
+  renderPermMuteList();
+}
+function closeSettingsModal() {
+  els.settingsModal.classList.add('hidden');
+}
+els.settingsBtn.addEventListener('click', openSettingsModal);
+els.settingsModalClose.addEventListener('click', closeSettingsModal);
+els.settingsModal.addEventListener('click', (ev) => {
+  if (ev.target === els.settingsModal) closeSettingsModal();
+});
+els.settingsTabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const name = tab.dataset.tab;
+    els.settingsTabs.forEach((t) => t.classList.toggle('active', t === tab));
+    els.settingsTabPanels.forEach((p) => p.classList.toggle('active', p.dataset.panel === name));
+  });
 });
 
 function screenVideoConstraints() {
@@ -319,17 +505,26 @@ function screenVideoConstraints() {
     video.width = { ideal: w };
     video.height = { ideal: h };
   }
+  // "cursor" é um campo não-padrão aceito pelo getDisplayMedia do Chromium
+  // (fora do mandatory antigo, então é seguro passar mesmo onde não tem
+  // suporte — ele é ignorado, não dá erro). "never" desliga de vez a
+  // composição do cursor pelo capturador, que é o jeito de resolver o
+  // cursor "fantasma" fixo em jogos que escondem o cursor de verdade (ex:
+  // mira fixa de FPS) — o Windows manda a posição/forma do cursor separado
+  // do quadro de vídeo, e o capturador às vezes desenha ele por cima mesmo
+  // quando o jogo pediu pra esconder. "never" evita essa composição de vez.
+  video.cursor = state.settings.hideCursor ? 'never' : 'always';
   return video;
 }
 
 function micConstraints() {
-  return {
-    audio: {
-      noiseSuppression: state.settings.noiseSuppression,
-      echoCancellation: true,
-      autoGainControl: true,
-    },
+  const audio = {
+    noiseSuppression: state.settings.noiseSuppression,
+    echoCancellation: true,
+    autoGainControl: true,
   };
+  if (state.settings.micDeviceId) audio.deviceId = { exact: state.settings.micDeviceId };
+  return { audio };
 }
 
 // Prioriza H264 (que costuma ter aceleração por hardware — NVENC/QuickSync/
@@ -356,7 +551,30 @@ function preferH264(pc) {
   }
 }
 
-const PRESENCE_FIELD = { screen: 'sharingScreen', camera: 'sharingCamera' };
+// Limita o bitrate máximo de upload por transmissão (cada espectador tem
+// sua própria RTCPeerConnection, então isso é por-espectador, não total).
+// Sem isso, o WebRTC tenta empurrar o máximo que o codec permite — em VPN
+// tunelada (Radmin) ou internet com upload fraco/instável, isso é a causa
+// mais comum de travamento/engasgo do lado de quem assiste, bem mais do que
+// a resolução/fps em si. "Automático" (padrão) mantém o comportamento de
+// sempre, sem limite artificial.
+function applyBandwidthLimit(pc) {
+  const kbps = state.settings.bandwidthKbps;
+  for (const sender of pc.getSenders()) {
+    if (!sender.track || sender.track.kind !== 'video') continue;
+    const params = sender.getParameters();
+    if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+    for (const enc of params.encodings) {
+      if (kbps) enc.maxBitrate = kbps * 1000;
+      else delete enc.maxBitrate;
+    }
+    sender.setParameters(params).catch(() => {
+      /* alguns navegadores recusam mudar parâmetros antes da negociação terminar; a próxima chamada tenta de novo */
+    });
+  }
+}
+
+const PRESENCE_FIELD = { screen: 'sharingScreen', camera: 'sharingCamera', mic: 'sharingMic' };
 
 /* ---------------- áudio por app (mixagem via Web Audio, só no Electron) ----------------
    Cada app vira sua própria captura nativa (PCM cru); aqui a gente agenda os
@@ -374,8 +592,6 @@ const PRESENCE_FIELD = { screen: 'sharingScreen', camera: 'sharingCamera' };
 const appAudio = {
   ctx: null,
   destination: null,
-  micSource: null,
-  micGain: null,
   groups: new Map(), // nome -> { muted, pids: Map(pid -> { gainNode, nextTime, handle }) }
 };
 let audioChunkUnsub = null;
@@ -427,7 +643,7 @@ function startCapturingApp(pid, name) {
   ensureAudioGraph();
   let group = appAudio.groups.get(name);
   if (!group) {
-    group = { muted: false, pids: new Map() };
+    group = { muted: state.settings.permanentlyMutedApps.includes(name), pids: new Map() };
     appAudio.groups.set(name, group);
   }
   const gainNode = appAudio.ctx.createGain();
@@ -492,12 +708,12 @@ function renderAppMuteList(apps) {
   }
 }
 
-function toggleAppMute(name, btn) {
+function setAppMuted(name, muted) {
   const group = appAudio.groups.get(name);
   if (!group) return;
-  group.muted = !group.muted;
+  group.muted = muted;
   for (const [pid, entry] of group.pids) {
-    if (group.muted) {
+    if (muted) {
       if (entry.handle != null) {
         window.telaNative.stopCapture(entry.handle);
         entry.handle = null;
@@ -506,7 +722,53 @@ function toggleAppMute(name, btn) {
       window.telaNative.startCapture(pid).then((handle) => { entry.handle = handle; });
     }
   }
+}
+
+function toggleAppMute(name, btn) {
+  const group = appAudio.groups.get(name);
+  if (!group) return;
+  setAppMuted(name, !group.muted);
   btn.innerHTML = group.muted ? ICONS.volumeMute : ICONS.volume;
+}
+
+// Lista de "sempre mutar" — vive na aba "Apps mutados" das configurações,
+// separada do painel de mute da sessão na barra lateral (que só existe
+// enquanto a tela está sendo compartilhada). Essa funciona a qualquer
+// momento (não precisa estar compartilhando) e persiste entre sessões —
+// resolve o pedido de "mutei o Discord uma vez, quero que já comece mutado
+// da próxima vez".
+async function renderPermMuteList() {
+  if (!isElectron) {
+    els.permMuteList.innerHTML = '<p class="hint">Esse recurso só existe na versão instalada do app.</p>';
+    return;
+  }
+  const available = await window.telaNative.available();
+  if (!available) {
+    els.permMuteList.innerHTML = '<p class="hint">Módulo nativo de áudio por app ainda não compilado neste PC.</p>';
+    return;
+  }
+  const apps = await window.telaNative.listApps();
+  if (!apps.length) {
+    els.permMuteList.innerHTML = '<p class="hint">Nenhum app com áudio ativo agora. Toca algo num app e clica em "Atualizar lista".</p>';
+    return;
+  }
+  const names = [...new Set(apps.map((a) => a.name))];
+  els.permMuteList.innerHTML = '';
+  for (const name of names) {
+    const row = document.createElement('label');
+    row.className = 'app-audio-row app-audio-row-check';
+    const checked = state.settings.permanentlyMutedApps.includes(name);
+    row.innerHTML = `<input type="checkbox" ${checked ? 'checked' : ''} /><span>${escapeHtml(name)}</span>`;
+    row.querySelector('input').addEventListener('change', (ev) => {
+      const list = state.settings.permanentlyMutedApps;
+      const idx = list.indexOf(name);
+      if (ev.target.checked && idx === -1) list.push(name);
+      else if (!ev.target.checked && idx !== -1) list.splice(idx, 1);
+      saveSettings();
+      if (appAudio.groups.has(name)) setAppMuted(name, ev.target.checked);
+    });
+    els.permMuteList.appendChild(row);
+  }
 }
 
 function teardownAppAudio() {
@@ -517,8 +779,6 @@ function teardownAppAudio() {
     }
   }
   appAudio.groups.clear();
-  if (appAudio.micSource) { appAudio.micSource.disconnect(); appAudio.micSource = null; }
-  if (appAudio.micGain) { appAudio.micGain.disconnect(); appAudio.micGain = null; }
   if (appAudio.ctx) { appAudio.ctx.close(); appAudio.ctx = null; appAudio.destination = null; }
   els.appAudioPanel.classList.add('hidden');
   els.appAudioList.innerHTML = '';
@@ -534,35 +794,137 @@ function connectCtl() {
   ctlWs = new WebSocket(`ws://${location.host}/lan/ctl`);
   ctlWs.addEventListener('open', () => {
     ctlWs.send(JSON.stringify({ type: 'discover:start' }));
+    ctlWs.send(JSON.stringify({ type: 'presence:name', name: (els.nameInput.value || 'Convidado').trim() || 'Convidado' }));
+    if (myAvatar) ctlWs.send(JSON.stringify({ type: 'presence:avatar', avatar: myAvatar }));
   });
   ctlWs.addEventListener('message', (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === 'rooms') renderRoomList(msg.rooms);
+    if (msg.type === 'rooms') {
+      latestRooms = msg.rooms;
+      renderRoomGrid();
+    } else if (msg.type === 'peers') {
+      latestPeers = msg.peers;
+      renderOnlinePeers();
+    } else if (msg.type === 'dm:history') {
+      if (state.dmPeer && state.dmPeer.deviceId === msg.deviceId) {
+        els.dmMessages.innerHTML = '';
+        for (const entry of msg.messages || []) renderDmEntry(entry, { skipNotify: true });
+      }
+    } else if (msg.type === 'dm:sent') {
+      if (state.dmPeer && state.dmPeer.deviceId === msg.deviceId) {
+        renderDmEntry(msg.entry, { skipNotify: true });
+      }
+    } else if (msg.type === 'dm:incoming') {
+      const dmOpenForThisPeer = state.dmPeer && state.dmPeer.deviceId === msg.deviceId && !els.dmModal.classList.contains('hidden');
+      if (dmOpenForThisPeer) {
+        renderDmEntry(msg.entry, {});
+      } else {
+        if (state.settings.chatNotifications) notifyChatMessage(msg.entry);
+        showToast(`Mensagem de ${msg.entry.name || 'alguém'}`, 4000);
+      }
+    }
   });
 }
 connectCtl();
 
-function renderRoomList(rooms) {
-  if (!rooms.length) {
-    els.roomList.innerHTML = '<p class="hint">Nenhuma sala encontrada na rede ainda.</p>';
+els.nameInput.addEventListener('change', () => {
+  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
+  localStorage.setItem(NAME_KEY, name);
+  if (ctlWs && ctlWs.readyState === ctlWs.OPEN) {
+    ctlWs.send(JSON.stringify({ type: 'presence:name', name }));
+  }
+});
+
+/* ---------------- lobby: "amigos online" (presença) + salas numeradas ----------------
+   Presença é independente de sala: o app avisa "estou online" assim que abre,
+   sem ninguém precisar hospedar nada (beacon UDP separado, sempre ligado —
+   ver server/main.cjs). As salas viram slots numerados (Sala 1, Sala 2...)
+   em vez de nome livre: clicar num slot vazio te vira anfitrião dele na
+   hora; clicar num ocupado te faz entrar como convidado — sem precisar
+   escolher "hospedar" ou "entrar" manualmente. */
+
+let latestRooms = [];
+let latestPeers = [];
+const MIN_ROOM_SLOTS = 6;
+const ROOM_NAME_RE = /^Sala (\d+)$/;
+
+function roomNumberFromName(name) {
+  const m = ROOM_NAME_RE.exec(name || '');
+  return m ? Number(m[1]) : null;
+}
+
+function renderOnlinePeers() {
+  els.onlineCount.textContent = latestPeers.length ? `· ${latestPeers.length}` : '';
+  if (!latestPeers.length) {
+    els.onlinePeersList.innerHTML = '<p class="hint">Ninguém mais com o app aberto na rede agora.</p>';
     return;
   }
-  els.roomList.innerHTML = '';
-  for (const r of rooms) {
-    const item = document.createElement('div');
-    item.className = 'room-item';
-    item.innerHTML = `
-      <div>
-        <div class="name">${escapeHtml(r.name)}</div>
-        <div class="meta">${r.host}:${r.port} · ${r.people} na sala</div>
-      </div>
+  els.onlinePeersList.innerHTML = '';
+  for (const p of latestPeers) {
+    const row = document.createElement('div');
+    row.className = 'online-peer-row';
+    row.title = 'Mandar mensagem';
+    row.innerHTML = `
+      <span class="status-dot-standalone"></span>
+      <span class="online-peer-name">${escapeHtml(p.name)}</span>
+      <span class="online-peer-status">${p.room ? `em ${escapeHtml(p.room)}` : 'no lobby'}</span>
+      <span class="online-peer-dm-icon">${ICONS.message}</span>
     `;
-    const btn = document.createElement('button');
-    btn.className = 'primary';
-    btn.textContent = 'Entrar';
-    btn.addEventListener('click', () => joinRoom(r.host, r.port));
-    item.appendChild(btn);
-    els.roomList.appendChild(item);
+    row.addEventListener('click', () => openDmModal(p));
+    els.onlinePeersList.appendChild(row);
+  }
+}
+
+function renderRoomGrid() {
+  const occupied = new Map(); // número -> info da sala
+  for (const r of latestRooms) {
+    const n = roomNumberFromName(r.name);
+    if (n) occupied.set(n, r);
+  }
+  const highest = occupied.size ? Math.max(...occupied.keys()) : 0;
+  const slotCount = Math.max(MIN_ROOM_SLOTS, highest + 1);
+
+  els.roomGrid.innerHTML = '';
+  for (let n = 1; n <= slotCount; n++) {
+    const room = occupied.get(n);
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'channel-row' + (room ? ' occupied' : '');
+    row.title = room ? `${room.people} ${room.people === 1 ? 'pessoa' : 'pessoas'}` : 'Vazia — clique pra criar';
+    row.innerHTML = `
+      ${ICONS.volume}
+      <span>Sala ${n}</span>
+      <span class="channel-row-dot"></span>
+    `;
+    row.addEventListener('click', () => enterNumberedRoom(n, room));
+    els.roomGrid.appendChild(row);
+
+    // gente já dentro da sala aparece aninhada embaixo do nome — igual um
+    // canal de voz do Discord mostrando quem está conectado nele.
+    if (room && room.members && room.members.length) {
+      const membersWrap = document.createElement('div');
+      membersWrap.className = 'channel-members';
+      for (const memberName of room.members) {
+        const memberRow = document.createElement('div');
+        memberRow.className = 'channel-member';
+        memberRow.innerHTML = `<span class="member-dot"></span><span>${escapeHtml(memberName)}</span>`;
+        membersWrap.appendChild(memberRow);
+      }
+      els.roomGrid.appendChild(membersWrap);
+    }
+  }
+}
+
+function enterNumberedRoom(n, room) {
+  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
+  localStorage.setItem(NAME_KEY, name);
+  const label = `Sala ${n}`;
+  if (room) {
+    joinLanRoom(room.host, room.port, label);
+  } else {
+    ctlWs.send(JSON.stringify({ type: 'host:start', name: label }));
+    state.hostingRoomLabel = label;
+    joinLanRoom(lanInfo ? lanInfo.localIp : location.hostname, lanInfo ? lanInfo.port : location.port, label);
   }
 }
 
@@ -572,24 +934,25 @@ function escapeHtml(s) {
 
 /* ---------------- abas de modo: rede local (Radmin) vs internet ---------------- */
 
+function updateConnectionPill(mode) {
+  if (!els.connectionPill) return;
+  els.connectionPill.classList.toggle('internet', mode === 'internet');
+  els.connectionPillText.textContent = mode === 'internet' ? 'Internet' : 'Radmin VPN';
+}
+
 els.modeTabLan.addEventListener('click', () => {
   els.modeTabLan.classList.add('active');
   els.modeTabInternet.classList.remove('active');
   els.lanModeSection.classList.remove('hidden');
   els.internetModeSection.classList.add('hidden');
+  updateConnectionPill('lan');
 });
 els.modeTabInternet.addEventListener('click', () => {
   els.modeTabInternet.classList.add('active');
   els.modeTabLan.classList.remove('active');
   els.internetModeSection.classList.remove('hidden');
   els.lanModeSection.classList.add('hidden');
-});
-
-els.hostBtn.addEventListener('click', () => {
-  const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
-  localStorage.setItem(NAME_KEY, name);
-  ctlWs.send(JSON.stringify({ type: 'host:start', name: `Sala de ${name}` }));
-  joinLanRoom(lanInfo ? lanInfo.localIp : location.hostname, lanInfo ? lanInfo.port : location.port);
+  updateConnectionPill('internet');
 });
 
 els.manualJoinBtn.addEventListener('click', () => {
@@ -613,10 +976,14 @@ function handleTransportMessage(msg) {
     onPresence(msg.clients);
   } else if (msg.type === 'signal') {
     onSignal(msg.from, msg.data);
+  } else if (msg.type === 'chat') {
+    onChatMessage(msg);
+  } else if (msg.type === 'chat:history') {
+    for (const entry of msg.messages || []) onChatMessage(entry, { skipNotify: true });
   }
 }
 
-function joinLanRoom(host, port) {
+function joinLanRoom(host, port, roomLabel) {
   const name = (els.nameInput.value || 'Convidado').trim() || 'Convidado';
   localStorage.setItem(NAME_KEY, name);
   state.myName = name;
@@ -624,19 +991,31 @@ function joinLanRoom(host, port) {
   state.roomAddr = `${host}:${port}`;
 
   const ws = new WebSocket(`ws://${host}:${port}/relay`);
+  // Fila pra cobrir a corrida entre o WS ainda CONNECTING e algo que já quer
+  // mandar mensagem assim que a sala abre (ex: o mic ligando sozinho via
+  // `enterRoomScreen` -> `startMicShare`, que tem um `await getUserMedia`
+  // no meio e pode terminar antes do handshake do WebSocket completar).
+  const sendQueue = [];
   state.transport = {
-    send(obj) { ws.send(JSON.stringify(obj)); },
+    send(obj) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+      else sendQueue.push(obj);
+    },
     close() { ws.close(); },
   };
 
   ws.addEventListener('open', () => {
+    for (const queued of sendQueue.splice(0)) ws.send(JSON.stringify(queued));
     state.transport.send({ type: 'hello', name, avatar: myAvatar, banner: myBanner, bio: myBio });
+    if (roomLabel && ctlWs && ctlWs.readyState === ctlWs.OPEN) {
+      ctlWs.send(JSON.stringify({ type: 'presence:room', room: roomLabel }));
+    }
   });
   ws.addEventListener('message', (ev) => handleTransportMessage(JSON.parse(ev.data)));
   ws.addEventListener('close', () => leaveRoom());
   ws.addEventListener('error', () => {}); // 'close' já cuida de avisar/limpar
 
-  enterRoomScreen(`Sala em ${host}`);
+  enterRoomScreen(roomLabel || `Sala em ${host}`);
 }
 
 /* ---------------- modo internet: código de sala via PeerJS (sem Radmin) ----------------
@@ -668,6 +1047,11 @@ function hostInternetRoom() {
   const peer = new Peer(`svj-${code}`);
   const members = new Map(); // id -> { conn: DataConnection|null (null = eu mesmo), ...dados... }
   let selfId = null;
+  // Mesma ideia do relay LAN: histórico só na memória de quem hospedou,
+  // dura enquanto essa pessoa estiver com o app aberto (sala vazia e
+  // voltando depois continua vendo o chat; fechar o app zera).
+  const chatHistory = [];
+  const CHAT_HISTORY_MAX = 200;
 
   function deliver(id, msg) {
     const m = members.get(id);
@@ -679,7 +1063,8 @@ function hostInternetRoom() {
   function broadcastPresence() {
     const list = [...members.entries()].map(([id, m]) => ({
       id, name: m.name, avatar: m.avatar, banner: m.banner, bio: m.bio,
-      sharingScreen: m.sharingScreen, sharingCamera: m.sharingCamera,
+      sharingScreen: m.sharingScreen, sharingCamera: m.sharingCamera, sharingMic: m.sharingMic,
+      isHost: id === selfId,
     }));
     for (const id of members.keys()) deliver(id, { type: 'presence', clients: list });
   }
@@ -694,19 +1079,29 @@ function hostInternetRoom() {
       if (typeof msg.bio === 'string') m.bio = msg.bio.slice(0, 190);
       broadcastPresence();
     } else if (msg.type === 'share:start') {
-      if (msg.source === 'camera') m.sharingCamera = true; else m.sharingScreen = true;
+      const field = PRESENCE_FIELD[msg.source];
+      if (field) m[field] = true;
       broadcastPresence();
     } else if (msg.type === 'share:stop') {
-      if (msg.source === 'camera') m.sharingCamera = false; else m.sharingScreen = false;
+      const field = PRESENCE_FIELD[msg.source];
+      if (field) m[field] = false;
       broadcastPresence();
     } else if (msg.type === 'signal' && msg.to) {
       deliver(msg.to, { type: 'signal', from: fromId, data: msg.data });
+    } else if (msg.type === 'chat') {
+      const text = typeof msg.text === 'string' ? msg.text.slice(0, 2000) : '';
+      const attachments = Array.isArray(msg.attachments) ? msg.attachments.slice(0, 4).map(sanitizeChatAttachment) : [];
+      if (!text && !attachments.length) return;
+      const chatMsg = { type: 'chat', from: fromId, name: m.name, avatar: m.avatar, text, attachments, ts: Date.now() };
+      chatHistory.push(chatMsg);
+      if (chatHistory.length > CHAT_HISTORY_MAX) chatHistory.shift();
+      for (const memberId of members.keys()) deliver(memberId, chatMsg);
     }
   }
 
   peer.on('open', (id) => {
     selfId = id;
-    members.set(id, { conn: null, name, avatar: myAvatar, banner: myBanner, bio: myBio, sharingScreen: false, sharingCamera: false });
+    members.set(id, { conn: null, name, avatar: myAvatar, banner: myBanner, bio: myBio, sharingScreen: false, sharingCamera: false, sharingMic: false });
     state.transport = {
       send(obj) { handleIncoming(selfId, obj); },
       close() { peer.destroy(); },
@@ -717,9 +1112,12 @@ function hostInternetRoom() {
 
   peer.on('connection', (conn) => {
     const id = conn.peer;
-    members.set(id, { conn, name: 'Convidado', avatar: null, banner: null, bio: '', sharingScreen: false, sharingCamera: false });
+    members.set(id, { conn, name: 'Convidado', avatar: null, banner: null, bio: '', sharingScreen: false, sharingCamera: false, sharingMic: false });
     conn.on('data', (msg) => handleIncoming(id, msg));
     conn.on('close', () => { members.delete(id); broadcastPresence(); });
+    conn.on('open', () => {
+      if (chatHistory.length) deliver(id, { type: 'chat:history', messages: chatHistory });
+    });
   });
 
   peer.on('error', (err) => {
@@ -774,23 +1172,18 @@ function enterRoomScreen(label, roomCode) {
   els.room.classList.remove('hidden');
   els.roomInfo.textContent = roomCode ? `${label} · código ${roomCode}` : label;
   state.roomCode = roomCode || null;
+  if (state.settings.autoMic) startMicShare();
 }
 
-els.leaveBtn.addEventListener('click', () => {
-  if (state.transport) state.transport.close();
-  leaveRoom();
-});
-els.leaveCallBtn.addEventListener('click', () => {
-  if (state.transport) state.transport.close();
-  leaveRoom();
-});
+els.leaveBtn.addEventListener('click', leaveRoom);
+els.leaveCallBtn.addEventListener('click', leaveRoom);
 
 let toastTimer = null;
-function showToast(message) {
+function showToast(message, duration = 2500) {
   els.toast.innerHTML = `${ICONS.check}<span>${message}</span>`;
   els.toast.classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => els.toast.classList.add('hidden'), 2500);
+  toastTimer = setTimeout(() => els.toast.classList.add('hidden'), duration);
 }
 
 els.peopleToggleBtn.addEventListener('click', () => {
@@ -816,11 +1209,22 @@ els.inviteBtn.addEventListener('click', async () => {
 function leaveRoom() {
   stopScreenShare();
   stopCameraShare();
+  stopMicShare();
+  clearChat();
   for (const key of [...state.watchPcs.keys()]) {
     const sep = key.lastIndexOf(':');
     teardownWatch(key.slice(0, sep), key.slice(sep + 1));
   }
   exitFocusIfActive();
+  if (ctlWs && ctlWs.readyState === ctlWs.OPEN) {
+    if (state.hostingRoomLabel) ctlWs.send(JSON.stringify({ type: 'host:stop' }));
+    ctlWs.send(JSON.stringify({ type: 'presence:room', room: null }));
+  }
+  state.hostingRoomLabel = null;
+  // fecha o transporte só DEPOIS de mandar os "parei de compartilhar" acima
+  // (stopScreenShare/stopCameraShare/stopMicShare) — fechar antes fazia o
+  // `.send()` deles cair num WebSocket já em CLOSING, gerando erro no console.
+  if (state.transport) state.transport.close();
   state.transport = null;
   state.myId = null;
   state.roomMode = null;
@@ -839,7 +1243,7 @@ function onPresence(list) {
   const currentIds = new Set(list.map((c) => c.id));
   const infoById = new Map(list.map((c) => [c.id, c]));
 
-  for (const source of ['screen', 'camera']) {
+  for (const source of ['screen', 'camera', 'mic']) {
     const field = PRESENCE_FIELD[source];
     const sharingIds = new Set(list.filter((c) => c[field] && c.id !== state.myId).map((c) => c.id));
 
@@ -878,7 +1282,14 @@ function renderPeopleBar(list) {
     let badges = '';
     if (c.sharingScreen) badges += `<span class="chip-badge">${ICONS.monitor}</span>`;
     if (c.sharingCamera) badges += `<span class="chip-badge">${ICONS.camera}</span>`;
-    row.innerHTML = `<img src="${c.avatar || DEFAULT_AVATAR}" alt="" /><span class="name">${escapeHtml(c.name)}${isMe ? ' (você)' : ''}</span><span class="badges">${badges}</span>`;
+    const statusText = c.isHost ? 'Online · Anfitrião' : 'Online';
+    row.innerHTML = `
+      <div class="avatar-status-wrap"><img src="${c.avatar || DEFAULT_AVATAR}" alt="" /><span class="status-dot"></span></div>
+      <span class="person-info">
+        <span class="name-row"><span class="name">${escapeHtml(c.name)}${isMe ? ' (você)' : ''}</span>${c.isHost ? `<span class="host-crown" title="Anfitrião">${ICONS.crown}</span>` : ''}</span>
+        <span class="status-text">${statusText}</span>
+      </span>
+      <span class="badges">${badges}</span>`;
     row.addEventListener('click', () => {
       if (isMe) openOwnProfile();
       else openProfileModal({ readOnly: true, name: c.name, avatar: c.avatar, banner: c.banner, bio: c.bio });
@@ -888,8 +1299,444 @@ function renderPeopleBar(list) {
 }
 
 function updateEmptyHint() {
-  els.emptyHint.classList.toggle('hidden', state.tiles.size > 0);
+  let visibleTiles = 0;
+  for (const tile of state.tiles.values()) if (!tile.audioOnly) visibleTiles++;
+  els.emptyHint.classList.toggle('hidden', visibleTiles > 0);
 }
+
+/* ---------------- chat da sala ----------------
+   Passa pelo MESMO canal de presença/sinalização que já existe (WebSocket
+   do relay no modo LAN, PeerJS no modo Internet) — por isso, no modo LAN
+   (Radmin), o chat já nasce privado só pra quem está naquela rede, de
+   graça: o relay nem é alcançável por quem não está nela, então não tem
+   "vazamento" possível sem precisar de nenhum código extra de permissão.
+   O servidor é quem retransmite pra todo mundo (igual já faz com a
+   presença) — o remetente só vê a própria mensagem quando ela volta pelo
+   mesmo caminho, não é desenhada localmente antes, pra evitar qualquer
+   duplicação ou mensagem "fantasma" se o envio falhar no meio do caminho. */
+
+// No modo LAN o anexo vai por upload HTTP de verdade (streamed pro disco do
+// anfitrião, servidor que já existe) — por isso aguenta até 500MB. No modo
+// Internet não tem servidor compartilhado nenhum alcançável entre as
+// pessoas (cada um só tem o próprio `localhost`), então o anexo continua
+// embutido em base64 dentro da própria mensagem — por isso fica no limite
+// antigo de 25MB, bem mais conservador.
+const CHAT_MAX_ATTACHMENTS = 4;
+const CHAT_FILE_MAX_BYTES_LAN = 500 * 1024 * 1024;
+const CHAT_FILE_MAX_BYTES_INTERNET = 25 * 1024 * 1024;
+const CHAT_TOTAL_MAX_BYTES_LAN = 1200 * 1024 * 1024;
+const CHAT_TOTAL_MAX_BYTES_INTERNET = 50 * 1024 * 1024;
+function currentChatFileMaxBytes() {
+  return state.roomMode === 'lan' ? CHAT_FILE_MAX_BYTES_LAN : CHAT_FILE_MAX_BYTES_INTERNET;
+}
+function currentChatTotalMaxBytes() {
+  return state.roomMode === 'lan' ? CHAT_TOTAL_MAX_BYTES_LAN : CHAT_TOTAL_MAX_BYTES_INTERNET;
+}
+let pendingChatFiles = [];
+
+// Mesma validação que o relay LAN (`server/main.cjs`) faz — duplicada aqui
+// porque o modo Internet retransmite pelo PRÓPRIO navegador de quem
+// hospedou a sala (`hostInternetRoom`), não pelo servidor Node.
+const CHAT_ATTACHMENT_DATAURL_MAX = 34 * 1024 * 1024;
+function sanitizeChatAttachment(a) {
+  const dataUrl = a && typeof a.dataUrl === 'string' && a.dataUrl.startsWith('data:') ? a.dataUrl.slice(0, CHAT_ATTACHMENT_DATAURL_MAX) : '';
+  return {
+    name: String((a && a.name) || 'arquivo').slice(0, 120),
+    type: String((a && a.type) || '').slice(0, 100),
+    size: Number(a && a.size) || 0,
+    dataUrl,
+  };
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// Upload de verdade (streamed, não base64) pro servidor de quem vai ficar
+// com o arquivo — pro chat da sala, é `roomAddr` (servidor de quem
+// hospedou); pra mensagem direta, é o MEU próprio servidor (`lanInfo`), já
+// que não tem "sala" nenhuma, cada lado guarda a própria cópia da
+// conversa. É sempre uma origem DIFERENTE da página atual (cada um carrega
+// a própria página via localhost) — o servidor já libera CORS pra essas
+// rotas especificamente por causa disso (ver `/chat/` em main.cjs).
+function uploadFileTo(baseAddr, file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const url = `http://${baseAddr}/chat/upload?name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type || 'application/octet-stream')}`;
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.upload.addEventListener('progress', (ev) => {
+      if (ev.lengthComputable && onProgress) onProgress(ev.loaded / ev.total);
+    });
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(JSON.parse(xhr.responseText));
+        } catch (err) {
+          reject(err);
+        }
+      } else {
+        reject(new Error(`upload falhou (status ${xhr.status})`));
+      }
+    });
+    xhr.addEventListener('error', () => reject(new Error('erro de rede no upload')));
+    xhr.send(file);
+  });
+}
+
+function chatFileUrl(fileId) {
+  return `http://${state.roomAddr}/chat/files/${fileId}`;
+}
+
+function renderPendingAttachments() {
+  if (!pendingChatFiles.length) {
+    els.chatPendingAttachments.classList.add('hidden');
+    els.chatPendingAttachments.innerHTML = '';
+    return;
+  }
+  els.chatPendingAttachments.classList.remove('hidden');
+  els.chatPendingAttachments.innerHTML = '';
+  pendingChatFiles.forEach((file, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'chat-pending-chip';
+    chip.innerHTML = `<span>${escapeHtml(file.name)} <span class="chat-pending-size">(${formatFileSize(file.size)})</span></span><button type="button" class="chat-pending-remove">${ICONS.close}</button>`;
+    chip.querySelector('button').addEventListener('click', () => {
+      pendingChatFiles.splice(idx, 1);
+      renderPendingAttachments();
+    });
+    els.chatPendingAttachments.appendChild(chip);
+  });
+}
+
+// Mostra "Enviando arquivo.zip... 42%" no lugar da lista de pendentes
+// enquanto o upload HTTP de um anexo grande está rolando — sem isso, uma
+// transferência de centenas de MB fica sem feedback nenhum de progresso.
+function setChatSendingStatus(text) {
+  if (!text) {
+    renderPendingAttachments();
+    return;
+  }
+  els.chatPendingAttachments.classList.remove('hidden');
+  els.chatPendingAttachments.innerHTML = `<div class="chat-sending-status">${escapeHtml(text)}</div>`;
+}
+
+els.chatAttachBtn.addEventListener('click', () => els.chatFileInput.click());
+els.chatFileInput.addEventListener('change', () => {
+  const files = [...els.chatFileInput.files];
+  els.chatFileInput.value = '';
+  const maxBytes = currentChatFileMaxBytes();
+  const totalMaxBytes = currentChatTotalMaxBytes();
+  const maxMb = Math.round(maxBytes / (1024 * 1024));
+  let pendingTotal = pendingChatFiles.reduce((sum, f) => sum + f.size, 0);
+  for (const file of files) {
+    if (pendingChatFiles.length >= CHAT_MAX_ATTACHMENTS) {
+      showToast(`Máximo de ${CHAT_MAX_ATTACHMENTS} anexos por mensagem.`, 3000);
+      break;
+    }
+    if (file.size > maxBytes) {
+      showToast(`"${file.name}" é maior que ${maxMb}MB — escolhe um arquivo menor.`, 3500);
+      continue;
+    }
+    if (pendingTotal + file.size > totalMaxBytes) {
+      showToast(`Isso passaria de ${Math.round(totalMaxBytes / (1024 * 1024))}MB somando os anexos dessa mensagem — manda em mensagens separadas.`, 4000);
+      continue;
+    }
+    pendingChatFiles.push(file);
+    pendingTotal += file.size;
+  }
+  renderPendingAttachments();
+});
+
+els.chatForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!state.transport) return;
+  const text = els.chatTextInput.value.trim().slice(0, 2000);
+  const files = pendingChatFiles;
+  pendingChatFiles = [];
+  if (!text && !files.length) {
+    renderPendingAttachments();
+    return;
+  }
+  els.chatTextInput.value = '';
+
+  const attachments = [];
+  for (const file of files) {
+    try {
+      if (state.roomMode === 'lan') {
+        setChatSendingStatus(`Enviando "${file.name}"... 0%`);
+        const uploaded = await uploadFileTo(state.roomAddr, file, (frac) => {
+          setChatSendingStatus(`Enviando "${file.name}"... ${Math.round(frac * 100)}%`);
+        });
+        attachments.push({ name: uploaded.name, type: uploaded.type, size: uploaded.size, fileId: uploaded.id });
+      } else {
+        const dataUrl = await fileToDataUrl(file);
+        attachments.push({ name: file.name, type: file.type, size: file.size, dataUrl });
+      }
+    } catch {
+      showToast(`Não consegui enviar "${file.name}".`, 3500);
+    }
+  }
+  setChatSendingStatus(null);
+  state.transport.send({ type: 'chat', text, attachments });
+});
+
+function onChatMessage(msg, opts) {
+  const isSelf = msg.from === state.myId;
+  const row = document.createElement('div');
+  row.className = 'chat-msg' + (isSelf ? ' self' : '');
+  const time = new Date(msg.ts || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  let attachmentsHtml = '';
+  for (const att of msg.attachments || []) {
+    const url = att.fileId ? chatFileUrl(att.fileId) : att.dataUrl;
+    if (!url) continue;
+    if (att.type && att.type.startsWith('image/')) {
+      attachmentsHtml += `<a href="${url}" target="_blank" rel="noopener"><img class="chat-attachment-img" src="${url}" alt="${escapeHtml(att.name)}" /></a>`;
+    } else {
+      attachmentsHtml += `<a class="chat-attachment-file" href="${url}" download="${escapeHtml(att.name)}">${ICONS.file}<span>${escapeHtml(att.name)}</span><span class="chat-attachment-size">${formatFileSize(att.size)}</span></a>`;
+    }
+  }
+
+  row.innerHTML = `
+    <img class="chat-msg-avatar" src="${msg.avatar || DEFAULT_AVATAR}" alt="" />
+    <div class="chat-msg-body">
+      <div class="chat-msg-meta">
+        <span class="chat-msg-name">${escapeHtml(msg.name || 'Convidado')}</span>
+        <span class="chat-msg-time">${time}</span>
+      </div>
+      ${msg.text ? `<div class="chat-msg-text">${escapeHtml(msg.text)}</div>` : ''}
+      ${attachmentsHtml ? `<div class="chat-msg-attachments">${attachmentsHtml}</div>` : ''}
+    </div>
+  `;
+  els.chatMessages.appendChild(row);
+  els.chatMessages.scrollTop = els.chatMessages.scrollHeight;
+
+  const skipNotify = opts && opts.skipNotify;
+  if (!isSelf && !skipNotify && state.settings.chatNotifications) {
+    notifyChatMessage(msg);
+  }
+}
+
+function notifyChatMessage(msg) {
+  if (!('Notification' in window)) return;
+  // não incomoda se a pessoa já está com o app em foco olhando pro chat —
+  // notificação é só pra quando ela não ia ver a mensagem de outro jeito
+  if (document.hasFocus() && !document.hidden) return;
+  const body = msg.text
+    ? msg.text.slice(0, 120)
+    : msg.attachments && msg.attachments.length
+      ? `enviou ${msg.attachments.length > 1 ? `${msg.attachments.length} arquivos` : 'um arquivo'}`
+      : '';
+  const show = () => {
+    try {
+      const notif = new Notification(msg.name || 'Convidado', { body, icon: msg.avatar || undefined });
+      notif.onclick = () => {
+        window.focus();
+        notif.close();
+      };
+    } catch {
+      /* alguns ambientes (ex: sem foco de SO nenhum) recusam o construtor — ignora */
+    }
+  };
+  if (Notification.permission === 'granted') show();
+  else if (Notification.permission !== 'denied') {
+    Notification.requestPermission().then((perm) => {
+      if (perm === 'granted') show();
+    });
+  }
+}
+
+function clearChat() {
+  els.chatMessages.innerHTML = '';
+  pendingChatFiles = [];
+  renderPendingAttachments();
+}
+
+/* ---------------- mensagem direta (DM) ----------------
+   Clicar em alguém "online" na página inicial abre essa conversa com ela —
+   não precisa dos dois estarem na mesma sala. Por baixo, é o MEU servidor
+   (não a renderer) que gerencia a conexão de verdade com o servidor da
+   outra pessoa; aqui só pede as coisas pelo canal de controle local
+   (`ctlWs`) que já existe — ver bloco de DM em `server/main.cjs`. */
+
+let dmPendingFiles = [];
+
+function openDmModal(peer) {
+  state.dmPeer = peer;
+  els.dmPeerName.textContent = peer.name || 'Convidado';
+  els.dmMessages.innerHTML = '';
+  dmPendingFiles = [];
+  renderDmPendingAttachments();
+  els.dmModal.classList.remove('hidden');
+  if (ctlWs && ctlWs.readyState === ctlWs.OPEN) {
+    ctlWs.send(JSON.stringify({ type: 'dm:get-history', deviceId: peer.deviceId }));
+  }
+}
+
+function closeDmModal() {
+  els.dmModal.classList.add('hidden');
+  state.dmPeer = null;
+}
+
+els.dmModalClose.addEventListener('click', closeDmModal);
+els.dmModal.addEventListener('click', (ev) => {
+  if (ev.target === els.dmModal) closeDmModal();
+});
+
+function dmFileUrl(att) {
+  if (att.fileId) {
+    const host = att.fileHost || (state.dmPeer && state.dmPeer.host);
+    const port = att.filePort || (state.dmPeer && state.dmPeer.port);
+    return `http://${host}:${port}/chat/files/${att.fileId}`;
+  }
+  return att.dataUrl || '';
+}
+
+function renderDmEntry(entry, opts) {
+  const isSelf = entry.from === 'me';
+  const row = document.createElement('div');
+  row.className = 'chat-msg' + (isSelf ? ' self' : '');
+  const time = new Date(entry.ts || Date.now()).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  let attachmentsHtml = '';
+  for (const att of entry.attachments || []) {
+    const url = dmFileUrl(att);
+    if (!url) continue;
+    if (att.type && att.type.startsWith('image/')) {
+      attachmentsHtml += `<a href="${url}" target="_blank" rel="noopener"><img class="chat-attachment-img" src="${url}" alt="${escapeHtml(att.name)}" /></a>`;
+    } else {
+      attachmentsHtml += `<a class="chat-attachment-file" href="${url}" download="${escapeHtml(att.name)}">${ICONS.file}<span>${escapeHtml(att.name)}</span><span class="chat-attachment-size">${formatFileSize(att.size)}</span></a>`;
+    }
+  }
+
+  row.innerHTML = `
+    <img class="chat-msg-avatar" src="${entry.avatar || DEFAULT_AVATAR}" alt="" />
+    <div class="chat-msg-body">
+      <div class="chat-msg-meta">
+        <span class="chat-msg-name">${escapeHtml(isSelf ? 'Você' : entry.name || 'Convidado')}</span>
+        <span class="chat-msg-time">${time}</span>
+      </div>
+      ${entry.text ? `<div class="chat-msg-text">${escapeHtml(entry.text)}</div>` : ''}
+      ${attachmentsHtml ? `<div class="chat-msg-attachments">${attachmentsHtml}</div>` : ''}
+    </div>
+  `;
+  els.dmMessages.appendChild(row);
+  els.dmMessages.scrollTop = els.dmMessages.scrollHeight;
+
+  if (!isSelf && !(opts && opts.skipNotify) && state.settings.chatNotifications) {
+    notifyChatMessage(entry);
+  }
+}
+
+function renderDmPendingAttachments() {
+  if (!dmPendingFiles.length) {
+    els.dmPendingAttachments.classList.add('hidden');
+    els.dmPendingAttachments.innerHTML = '';
+    return;
+  }
+  els.dmPendingAttachments.classList.remove('hidden');
+  els.dmPendingAttachments.innerHTML = '';
+  dmPendingFiles.forEach((file, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'chat-pending-chip';
+    chip.innerHTML = `<span>${escapeHtml(file.name)} <span class="chat-pending-size">(${formatFileSize(file.size)})</span></span><button type="button" class="chat-pending-remove">${ICONS.close}</button>`;
+    chip.querySelector('button').addEventListener('click', () => {
+      dmPendingFiles.splice(idx, 1);
+      renderDmPendingAttachments();
+    });
+    els.dmPendingAttachments.appendChild(chip);
+  });
+}
+
+function setDmSendingStatus(text) {
+  if (!text) {
+    renderDmPendingAttachments();
+    return;
+  }
+  els.dmPendingAttachments.classList.remove('hidden');
+  els.dmPendingAttachments.innerHTML = `<div class="chat-sending-status">${escapeHtml(text)}</div>`;
+}
+
+els.dmAttachBtn.addEventListener('click', () => els.dmFileInput.click());
+els.dmFileInput.addEventListener('change', () => {
+  const files = [...els.dmFileInput.files];
+  els.dmFileInput.value = '';
+  const maxMb = Math.round(CHAT_FILE_MAX_BYTES_LAN / (1024 * 1024));
+  let pendingTotal = dmPendingFiles.reduce((sum, f) => sum + f.size, 0);
+  for (const file of files) {
+    if (dmPendingFiles.length >= CHAT_MAX_ATTACHMENTS) {
+      showToast(`Máximo de ${CHAT_MAX_ATTACHMENTS} anexos por mensagem.`, 3000);
+      break;
+    }
+    if (file.size > CHAT_FILE_MAX_BYTES_LAN) {
+      showToast(`"${file.name}" é maior que ${maxMb}MB — escolhe um arquivo menor.`, 3500);
+      continue;
+    }
+    if (pendingTotal + file.size > CHAT_TOTAL_MAX_BYTES_LAN) {
+      showToast(`Isso passaria de ${Math.round(CHAT_TOTAL_MAX_BYTES_LAN / (1024 * 1024))}MB somando os anexos — manda em mensagens separadas.`, 4000);
+      continue;
+    }
+    dmPendingFiles.push(file);
+    pendingTotal += file.size;
+  }
+  renderDmPendingAttachments();
+});
+
+els.dmForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (!state.dmPeer || !ctlWs || ctlWs.readyState !== ctlWs.OPEN) return;
+  const text = els.dmTextInput.value.trim().slice(0, 2000);
+  const files = dmPendingFiles;
+  dmPendingFiles = [];
+  if (!text && !files.length) {
+    renderDmPendingAttachments();
+    return;
+  }
+  els.dmTextInput.value = '';
+
+  const attachments = [];
+  const myAddr = lanInfo ? `${lanInfo.localIp}:${lanInfo.port}` : `${location.hostname}:${location.port}`;
+  for (const file of files) {
+    try {
+      setDmSendingStatus(`Enviando "${file.name}"... 0%`);
+      const uploaded = await uploadFileTo(myAddr, file, (frac) => {
+        setDmSendingStatus(`Enviando "${file.name}"... ${Math.round(frac * 100)}%`);
+      });
+      attachments.push({
+        name: uploaded.name,
+        type: uploaded.type,
+        size: uploaded.size,
+        fileId: uploaded.id,
+        fileHost: lanInfo ? lanInfo.localIp : location.hostname,
+        filePort: lanInfo ? lanInfo.port : Number(location.port),
+      });
+    } catch {
+      showToast(`Não consegui enviar "${file.name}".`, 3500);
+    }
+  }
+  setDmSendingStatus(null);
+  ctlWs.send(
+    JSON.stringify({
+      type: 'dm:send',
+      deviceId: state.dmPeer.deviceId,
+      host: state.dmPeer.host,
+      port: state.dmPeer.port,
+      text,
+      attachments,
+    }),
+  );
+});
 
 /* ---------------- sinalização ---------------- */
 
@@ -962,6 +1809,55 @@ els.shareBtn.addEventListener('click', () => {
   else startScreenShare();
 });
 
+// Amostra o próprio vídeo da tela (só o meu lado, não mexe no que chega pra
+// quem assiste) pra avisar SE a captura estiver saindo toda preta — causa
+// mais comum: jogo em tela cheia exclusiva (não "janela sem borda") ou
+// conteúdo com DRM de vídeo (Netflix etc.) — em ambos os casos o Windows
+// entrega frame preto pra qualquer captura de tela, não só a nossa.
+function watchForBlackFrames(track) {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = new MediaStream([track]);
+  video.play().catch(() => {});
+  const canvas = document.createElement('canvas');
+  canvas.width = 32;
+  canvas.height = 18;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  let blackStreak = 0;
+  let warned = false;
+  const timer = setInterval(() => {
+    if (track.readyState !== 'live' || video.readyState < 2) return;
+    try {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i + 1] + data[i + 2];
+      const avg = sum / ((data.length / 4) * 3);
+      if (avg < 4) {
+        blackStreak++;
+        if (blackStreak >= 3 && !warned) {
+          warned = true;
+          showToast(
+            'Sua tela compartilhada parece estar toda preta pros outros. Se for um jogo em tela cheia, troca pro modo "janela sem borda" nas configs gráficas dele — tela cheia exclusiva e vídeo com DRM (Netflix etc.) sempre saem pretos em qualquer captura de tela.',
+            9000,
+          );
+        }
+      } else {
+        blackStreak = 0;
+        warned = false; // se normalizou, pode avisar de novo se ficar preto de novo depois
+      }
+    } catch {
+      /* drawImage pode falhar num frame isolado (ex: troca de resolução); ignora e tenta no próximo */
+    }
+  }, 4000);
+  return () => {
+    clearInterval(timer);
+    video.pause();
+    video.srcObject = null;
+  };
+}
+
 async function startScreenShare() {
   let display;
   try {
@@ -980,58 +1876,28 @@ async function startScreenShare() {
   // vazio até alguém clicar em "Atualizar lista" manualmente).
   state.screen.sharing = true;
 
-  let hasMic = false;
-
+  // O microfone NÃO é mais capturado aqui — ele é uma fonte independente
+  // (ver startMicShare), ligada assim que você entra na sala, pra dar pra
+  // conversar com os outros sem precisar compartilhar tela/câmera. Aqui só
+  // sobra o áudio dos OUTROS apps do seu PC (mixagem por app, Electron) ou o
+  // áudio da própria aba/tela (getDisplayMedia com audio, fora do Electron).
   if (isElectron) {
     ensureAudioGraph();
     initAudioChunkRouter();
-
-    if (els.micCheck.checked) {
-      try {
-        const mic = await navigator.mediaDevices.getUserMedia(micConstraints());
-        state.screen.micStream = mic;
-        appAudio.micSource = appAudio.ctx.createMediaStreamSource(mic);
-        appAudio.micGain = appAudio.ctx.createGain();
-        appAudio.micSource.connect(appAudio.micGain).connect(appAudio.destination);
-        hasMic = true;
-      } catch {
-        /* usuário negou o microfone; segue só com a tela */
-      }
-    }
-
     els.appAudioPanel.classList.remove('hidden');
     await refreshAppList();
-
     const mixedAudioTrack = appAudio.destination.stream.getAudioTracks()[0];
     state.screen.localTracks = [...display.getVideoTracks(), mixedAudioTrack];
   } else {
-    let micTrack = null;
-    if (els.micCheck.checked) {
-      try {
-        const mic = await navigator.mediaDevices.getUserMedia(micConstraints());
-        state.screen.micStream = mic;
-        micTrack = mic.getAudioTracks()[0];
-        hasMic = true;
-      } catch {
-        /* usuário negou o microfone; segue só com a tela */
-      }
-    }
-    state.screen.micTrack = micTrack;
-    state.screen.localTracks = [...display.getTracks(), ...(micTrack ? [micTrack] : [])];
+    state.screen.localTracks = [...display.getTracks()];
   }
 
   setBtnLabel(els.shareBtn, 'Parar de compartilhar');
   els.shareBtn.classList.remove('primary');
   els.shareBtn.classList.add('danger');
-  els.micCheckWrap.classList.add('hidden');
-  els.settingsBtn.classList.add('hidden');
-  els.settingsPanel.classList.add('hidden');
-  if (hasMic) {
-    els.micMuteBtn.classList.remove('hidden');
-    setMicMuteBtn(false);
-  }
 
   display.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
+  state.screen.blackFrameStop = watchForBlackFrames(display.getVideoTracks()[0]);
 
   addOrUpdateTile(tileKey(state.myId, 'screen'), `${state.myName} (você)`, myAvatar, display, true, 'screen');
   updateEmptyHint();
@@ -1044,6 +1910,71 @@ function setBtnLabel(btn, text) {
   btn.title = text; // a barra agora é só ícones — o texto vira dica ao passar o mouse
 }
 
+/* ---------------- voz: microfone independente de tela/câmera ----------------
+   Liga sozinho assim que você entra na sala (se "autoMic" estiver ativo nas
+   configurações) — dá pra conversar com quem está na sala igual uma chamada
+   de voz normal, sem precisar compartilhar nada.
+
+   O mic passa por um grafo Web Audio (em vez de ir direto, cru, pro
+   RTCPeerConnection) só por causa do soundboard: precisa de um ponto comum
+   onde misturar "minha voz" + "o som que cliquei pra tocar" antes de virar a
+   track que vai pros outros. Mutar é zerar o gain do mic nesse grafo (não
+   `track.enabled`) — dá no mesmo resultado, mas agora o mic de verdade é a
+   entrada do grafo, não a track que sai pro RTCPeerConnection. */
+
+const micMix = { ctx: null, destination: null, micSource: null, micGain: null };
+
+async function startMicShare() {
+  if (state.mic.sharing || !state.transport) return;
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(micConstraints());
+  } catch {
+    return; // sem microfone ou permissão negada — segue sem voz, só texto/tela
+  }
+  state.mic.micStream = stream;
+
+  micMix.ctx = new AudioContext();
+  micMix.destination = micMix.ctx.createMediaStreamDestination();
+  micMix.micSource = micMix.ctx.createMediaStreamSource(stream);
+  micMix.micGain = micMix.ctx.createGain();
+  // lembra se você tinha mutado antes de sair — o mic já liga mutado de
+  // novo na próxima vez, não importa quanto tempo passou (preferência
+  // persistida, não um estado de sessão que reseta a cada entrada na sala).
+  micMix.micGain.gain.value = state.settings.micMuted ? 0 : 1;
+  micMix.micSource.connect(micMix.micGain).connect(micMix.destination);
+
+  state.mic.localTracks = micMix.destination.stream.getAudioTracks();
+  state.mic.sharing = true;
+  stream.getAudioTracks()[0].addEventListener('ended', stopMicShare);
+  els.micMuteBtn.classList.remove('hidden');
+  setMicMuteBtn(state.settings.micMuted);
+  state.transport.send({ type: 'share:start', source: 'mic' });
+}
+
+function stopMicShare() {
+  if (!state.mic.sharing) return;
+  state.mic.sharing = false;
+  if (state.mic.micStream) {
+    for (const t of state.mic.micStream.getTracks()) t.stop();
+    state.mic.micStream = null;
+  }
+  state.mic.localTracks = [];
+  if (micMix.micSource) { micMix.micSource.disconnect(); micMix.micSource = null; }
+  if (micMix.micGain) { micMix.micGain.disconnect(); micMix.micGain = null; }
+  if (micMix.ctx) { micMix.ctx.close(); micMix.ctx = null; micMix.destination = null; }
+  // qualquer som do soundboard que estivesse tocando nesse contexto morreu
+  // junto com ele — limpa as referências pra não ficar lixo apontando pra
+  // nós de um AudioContext já fechado.
+  playingSounds.clear();
+  soundMonitorGain.mix = null;
+  for (const key of [...state.broadcastPcs.keys()]) {
+    if (key.endsWith(':mic')) teardownBroadcast(key);
+  }
+  els.micMuteBtn.classList.add('hidden');
+  if (state.transport) state.transport.send({ type: 'share:stop', source: 'mic' });
+}
+
 function setMicMuteBtn(muted) {
   const text = muted ? 'Microfone mutado' : 'Mutar microfone';
   els.micMuteBtn.innerHTML = `${muted ? ICONS.micOff : ICONS.mic}<span>${text}</span>`;
@@ -1052,16 +1983,261 @@ function setMicMuteBtn(muted) {
 }
 
 els.micMuteBtn.addEventListener('click', () => {
-  if (isElectron) {
-    if (!appAudio.micGain) return;
-    const wasMuted = appAudio.micGain.gain.value === 0;
-    appAudio.micGain.gain.value = wasMuted ? 1 : 0;
-    setMicMuteBtn(!wasMuted);
-  } else {
-    if (!state.screen.micTrack) return;
-    state.screen.micTrack.enabled = !state.screen.micTrack.enabled;
-    setMicMuteBtn(!state.screen.micTrack.enabled);
+  if (!micMix.micGain) return;
+  const nowMuted = micMix.micGain.gain.value !== 0;
+  micMix.micGain.gain.value = nowMuted ? 0 : 1;
+  state.settings.micMuted = nowMuted;
+  saveSettings();
+  setMicMuteBtn(nowMuted);
+});
+
+/* ---------------- soundboard ----------------
+   Sons curtos salvos no próprio PC (IndexedDB — blobs de áudio não cabem
+   direito no localStorage) que tocam DENTRO da call (misturados no grafo de
+   voz acima) quando você clica. O volume configurável é só o quanto VOCÊ
+   escuta de volta, não o que os outros recebem (isso mandamos num nível
+   fixo, senão a pessoa que clica no som também controlaria sem querer o
+   volume que sai pros outros). Funciona mesmo sem a voz ligada — nesse caso
+   só toca localmente (pra testar o som), sem mandar pra ninguém. */
+
+const SOUND_DB_NAME = 'tela-radmin-sounds';
+const SOUND_STORE = 'sounds';
+const soundBufferCache = new Map(); // id -> AudioBuffer decodado (evita redecodificar a cada clique)
+let previewCtx = null;
+
+function openSoundDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(SOUND_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(SOUND_STORE, { keyPath: 'id', autoIncrement: true });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbAddSound(name, blob) {
+  const db = await openSoundDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SOUND_STORE, 'readwrite');
+    const req = tx.objectStore(SOUND_STORE).add({ name, blob, createdAt: Date.now() });
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbListSounds() {
+  const db = await openSoundDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(SOUND_STORE, 'readonly').objectStore(SOUND_STORE).getAll();
+    req.onsuccess = () => resolve(req.result.sort((a, b) => a.createdAt - b.createdAt));
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbDeleteSound(id) {
+  const db = await openSoundDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SOUND_STORE, 'readwrite');
+    tx.objectStore(SOUND_STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function dbRenameSound(id, name) {
+  const db = await openSoundDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SOUND_STORE, 'readwrite');
+    const store = tx.objectStore(SOUND_STORE);
+    const getReq = store.get(id);
+    getReq.onsuccess = () => {
+      if (getReq.result) {
+        getReq.result.name = name;
+        store.put(getReq.result);
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getDecodedBuffer(sound) {
+  if (soundBufferCache.has(sound.id)) return soundBufferCache.get(sound.id);
+  const ctx = micMix.ctx || getPreviewCtx();
+  const arrayBuffer = await sound.blob.arrayBuffer();
+  const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+  soundBufferCache.set(sound.id, audioBuffer);
+  return audioBuffer;
+}
+
+function getPreviewCtx() {
+  if (!previewCtx) previewCtx = new AudioContext();
+  return previewCtx;
+}
+
+// Um único GainNode "de monitor" por contexto, reaproveitado por TODAS as
+// reproduções — é o que deixa o volume reagir na hora quando você mexe no
+// slider, mesmo com um som já tocando (antes cada clique criava um GainNode
+// novo, isolado, que não tinha como ser alcançado pelo slider depois —
+// por isso o volume "não fazia nada": ele só valia pra reproduções futuras
+// que nem chegavam a existir enquanto o mesmo som tocava).
+const soundMonitorGain = { mix: null, preview: null };
+function getMonitorGainFor(ctx) {
+  const key = ctx === micMix.ctx ? 'mix' : 'preview';
+  const current = soundMonitorGain[key];
+  if (current && current.context === ctx) return current;
+  const gainNode = ctx.createGain();
+  gainNode.gain.value = state.settings.soundboardVolume / 100;
+  gainNode.connect(ctx.destination);
+  soundMonitorGain[key] = gainNode;
+  return gainNode;
+}
+
+const playingSounds = new Map(); // sound.id -> AudioBufferSourceNode tocando agora
+
+async function playSoundboardClip(sound) {
+  // clicar de novo num som que já está tocando para ele — serve pra cortar
+  // um áudio longo no meio sem precisar esperar acabar.
+  const playing = playingSounds.get(sound.id);
+  if (playing) {
+    playing.stop(); // dispara 'ended' abaixo, que já limpa o map e a UI
+    return;
   }
+
+  let buffer;
+  try {
+    buffer = await getDecodedBuffer(sound);
+  } catch {
+    showToast(`Não consegui tocar "${sound.name}" — o arquivo pode estar corrompido.`, 3500);
+    return;
+  }
+
+  const ctx = micMix.ctx || getPreviewCtx();
+  const source = ctx.createBufferSource();
+  source.buffer = buffer;
+  if (micMix.ctx) {
+    // voz ligada: além de tocar pra você, manda pros outros também (nível fixo)
+    const sendGain = ctx.createGain();
+    sendGain.gain.value = 0.9;
+    source.connect(sendGain).connect(micMix.destination);
+  }
+  source.connect(getMonitorGainFor(ctx));
+  source.addEventListener('ended', () => {
+    playingSounds.delete(sound.id);
+    updateSoundboardRowPlaying(sound.id, false);
+  });
+  playingSounds.set(sound.id, source);
+  source.start();
+  updateSoundboardRowPlaying(sound.id, true);
+}
+
+function updateSoundboardRowPlaying(id, isPlaying) {
+  const row = els.soundboardList.querySelector(`[data-id="${id}"]`);
+  if (!row) return;
+  row.classList.toggle('playing', isPlaying);
+  row.querySelector('.soundboard-row-play').innerHTML = isPlaying ? ICONS.stop : ICONS.volume;
+  row.title = isPlaying ? 'Parar' : 'Tocar';
+}
+
+async function renderSoundboardList() {
+  let sounds;
+  try {
+    sounds = await dbListSounds();
+  } catch {
+    els.soundboardList.innerHTML = '<p class="hint">Não consegui carregar seus sons salvos.</p>';
+    return;
+  }
+  if (!sounds.length) {
+    els.soundboardList.innerHTML = '<p class="hint">Nenhum som ainda. Clica em "Adicionar som" pra importar um arquivo de áudio.</p>';
+    return;
+  }
+  els.soundboardList.innerHTML = '';
+  for (const sound of sounds) {
+    const isPlaying = playingSounds.has(sound.id);
+    const row = document.createElement('div');
+    row.className = 'soundboard-row' + (isPlaying ? ' playing' : '');
+    row.dataset.id = sound.id;
+    row.title = isPlaying ? 'Parar' : 'Tocar';
+    row.innerHTML = `
+      <span class="soundboard-row-play">${isPlaying ? ICONS.stop : ICONS.volume}</span>
+      <span class="soundboard-row-name">${escapeHtml(sound.name)}</span>
+      <span class="soundboard-row-actions">
+        <button type="button" class="icon-btn ghost soundboard-rename" title="Renomear">${ICONS.pencil}</button>
+        <button type="button" class="icon-btn ghost danger-hover soundboard-delete" title="Remover">${ICONS.trash}</button>
+      </span>
+    `;
+    row.addEventListener('click', () => playSoundboardClip(sound));
+    row.querySelector('.soundboard-rename').addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      startSoundRename(row, sound);
+    });
+    row.querySelector('.soundboard-delete').addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      if (playingSounds.has(sound.id)) playingSounds.get(sound.id).stop();
+      await dbDeleteSound(sound.id);
+      soundBufferCache.delete(sound.id);
+      renderSoundboardList();
+    });
+    els.soundboardList.appendChild(row);
+  }
+}
+
+function startSoundRename(row, sound) {
+  const nameEl = row.querySelector('.soundboard-row-name');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = sound.name;
+  input.maxLength = 40;
+  input.className = 'soundboard-rename-input';
+  input.addEventListener('click', (ev) => ev.stopPropagation());
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = async () => {
+    if (done) return;
+    done = true;
+    const newName = input.value.trim() || sound.name;
+    await dbRenameSound(sound.id, newName);
+    renderSoundboardList();
+  };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') input.blur();
+    if (ev.key === 'Escape') { done = true; renderSoundboardList(); }
+  });
+  input.addEventListener('blur', commit);
+}
+
+els.soundboardBtn.addEventListener('click', () => {
+  els.soundboardModal.classList.remove('hidden');
+  els.soundboardVolumeSlider.value = String(state.settings.soundboardVolume);
+  renderSoundboardList();
+});
+els.soundboardModalClose.addEventListener('click', () => els.soundboardModal.classList.add('hidden'));
+els.soundboardModal.addEventListener('click', (ev) => {
+  if (ev.target === els.soundboardModal) els.soundboardModal.classList.add('hidden');
+});
+els.soundboardVolumeSlider.addEventListener('input', () => {
+  state.settings.soundboardVolume = Number(els.soundboardVolumeSlider.value);
+  saveSettings();
+  const vol = state.settings.soundboardVolume / 100;
+  // aplica na hora em quem já estiver tocando agora, não só nas próximas vezes
+  if (soundMonitorGain.mix) soundMonitorGain.mix.gain.value = vol;
+  if (soundMonitorGain.preview) soundMonitorGain.preview.gain.value = vol;
+});
+els.addSoundBtn.addEventListener('click', () => els.soundFileInput.click());
+els.soundFileInput.addEventListener('change', async () => {
+  const file = els.soundFileInput.files[0];
+  els.soundFileInput.value = '';
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('Esse arquivo é maior que 10MB — escolhe um som mais curto.', 3500);
+    return;
+  }
+  const name = file.name.replace(/\.[^.]+$/, '').slice(0, 40) || 'Som sem nome';
+  await dbAddSound(name, file);
+  renderSoundboardList();
 });
 
 function stopScreenShare() {
@@ -1070,19 +2246,15 @@ function stopScreenShare() {
   setBtnLabel(els.shareBtn, 'Compartilhar tela');
   els.shareBtn.classList.remove('danger');
   els.shareBtn.classList.add('primary');
-  els.micCheckWrap.classList.remove('hidden');
-  els.micMuteBtn.classList.add('hidden');
-  els.settingsBtn.classList.remove('hidden');
 
+  if (state.screen.blackFrameStop) {
+    state.screen.blackFrameStop();
+    state.screen.blackFrameStop = null;
+  }
   if (state.screen.displayStream) {
     for (const t of state.screen.displayStream.getTracks()) t.stop();
     state.screen.displayStream = null;
   }
-  if (state.screen.micStream) {
-    for (const t of state.screen.micStream.getTracks()) t.stop();
-    state.screen.micStream = null;
-  }
-  state.screen.micTrack = null;
   state.screen.localTracks = [];
   if (isElectron) teardownAppAudio();
 
@@ -1097,6 +2269,172 @@ function stopScreenShare() {
   }
 }
 
+/* ---------------- overlay da câmera ----------------
+   Imagem (PNG com transparência, tipicamente exportada do Outro Lado da
+   Mesa com a arte/moldura do personagem) desenhada por cima do vídeo da
+   câmera antes de sair pra transmissão. Guardada no IndexedDB (igual o
+   soundboard — uma imagem de alguns MB não cabe direito no localStorage),
+   só 1 overlay por vez (chave fixa). Implementado compondo câmera + overlay
+   num <canvas> a cada quadro e mandando `canvas.captureStream()` em vez do
+   vídeo cru da câmera — por isso o botão/checkbox de ativar funciona AO
+   VIVO, sem precisar desligar/religar a câmera: o loop de desenho já está
+   rodando o tempo todo enquanto a câmera está ligada, só decide a cada
+   quadro se desenha o overlay por cima ou não. */
+
+const OVERLAY_DB_NAME = 'tela-radmin-overlay';
+const OVERLAY_STORE = 'overlay';
+const OVERLAY_KEY = 'camera';
+const cameraOverlay = { bitmap: null, previewUrl: null };
+
+function openOverlayDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(OVERLAY_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(OVERLAY_STORE, { keyPath: 'key' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbSetOverlay(blob) {
+  const db = await openOverlayDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OVERLAY_STORE, 'readwrite');
+    tx.objectStore(OVERLAY_STORE).put({ key: OVERLAY_KEY, blob });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function dbGetOverlay() {
+  const db = await openOverlayDb();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(OVERLAY_STORE, 'readonly').objectStore(OVERLAY_STORE).get(OVERLAY_KEY);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbClearOverlay() {
+  const db = await openOverlayDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(OVERLAY_STORE, 'readwrite');
+    tx.objectStore(OVERLAY_STORE).delete(OVERLAY_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function loadCameraOverlayBitmap() {
+  if (cameraOverlay.previewUrl) {
+    URL.revokeObjectURL(cameraOverlay.previewUrl);
+    cameraOverlay.previewUrl = null;
+  }
+  try {
+    const record = await dbGetOverlay();
+    if (record) {
+      cameraOverlay.bitmap = await createImageBitmap(record.blob);
+      cameraOverlay.previewUrl = URL.createObjectURL(record.blob);
+    } else {
+      cameraOverlay.bitmap = null;
+    }
+  } catch {
+    cameraOverlay.bitmap = null;
+  }
+  renderOverlayUI();
+}
+
+function renderOverlayUI() {
+  const has = !!cameraOverlay.previewUrl;
+  els.overlayPreview.src = cameraOverlay.previewUrl || '';
+  els.overlayPreview.classList.toggle('hidden', !has);
+  els.overlayRemoveBtn.classList.toggle('hidden', !has);
+  els.overlayEmptyHint.classList.toggle('hidden', has);
+  els.overlayEnabledCheck.disabled = !has;
+}
+
+const cameraCompositor = { rafId: null, video: null, canvas: null, ctx: null };
+
+function startCameraCompositor(camStream) {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = camStream;
+  video.play().catch(() => {});
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 480;
+  const ctx = canvas.getContext('2d');
+
+  function draw() {
+    const w = video.videoWidth || canvas.width;
+    const h = video.videoHeight || canvas.height;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    if (video.readyState >= 2) ctx.drawImage(video, 0, 0, w, h);
+    if (state.settings.cameraOverlayEnabled && cameraOverlay.bitmap) {
+      ctx.drawImage(cameraOverlay.bitmap, 0, 0, w, h);
+    }
+    cameraCompositor.rafId = requestAnimationFrame(draw);
+  }
+  draw();
+
+  cameraCompositor.video = video;
+  cameraCompositor.canvas = canvas;
+  cameraCompositor.ctx = ctx;
+  return canvas.captureStream(30);
+}
+
+function stopCameraCompositor() {
+  if (cameraCompositor.rafId) cancelAnimationFrame(cameraCompositor.rafId);
+  cameraCompositor.rafId = null;
+  if (cameraCompositor.video) {
+    cameraCompositor.video.srcObject = null;
+    cameraCompositor.video = null;
+  }
+  cameraCompositor.canvas = null;
+  cameraCompositor.ctx = null;
+}
+
+loadCameraOverlayBitmap();
+els.overlayEnabledCheck.checked = state.settings.cameraOverlayEnabled;
+
+els.overlayAddBtn.addEventListener('click', () => els.overlayFileInput.click());
+els.overlayFileInput.addEventListener('change', async () => {
+  const file = els.overlayFileInput.files[0];
+  els.overlayFileInput.value = '';
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) {
+    showToast('Essa imagem é maior que 10MB — escolhe um arquivo menor.', 3500);
+    return;
+  }
+  await dbSetOverlay(file);
+  await loadCameraOverlayBitmap();
+  if (!state.settings.cameraOverlayEnabled) {
+    // escolher uma imagem pela primeira vez já liga o overlay sozinho —
+    // sem isso a pessoa escolhe a imagem e "não acontece nada", porque o
+    // checkbox continua desmarcado.
+    state.settings.cameraOverlayEnabled = true;
+    els.overlayEnabledCheck.checked = true;
+    saveSettings();
+  }
+});
+els.overlayRemoveBtn.addEventListener('click', async () => {
+  await dbClearOverlay();
+  await loadCameraOverlayBitmap();
+  state.settings.cameraOverlayEnabled = false;
+  els.overlayEnabledCheck.checked = false;
+  saveSettings();
+});
+els.overlayEnabledCheck.addEventListener('change', () => {
+  state.settings.cameraOverlayEnabled = els.overlayEnabledCheck.checked;
+  saveSettings();
+});
+
 /* ---------------- lado de quem transmite: câmera ---------------- */
 
 els.cameraBtn.addEventListener('click', () => {
@@ -1106,13 +2444,18 @@ els.cameraBtn.addEventListener('click', () => {
 
 async function startCameraShare() {
   let cam;
+  const video = state.settings.camDeviceId ? { deviceId: { exact: state.settings.camDeviceId } } : true;
   try {
-    cam = await navigator.mediaDevices.getUserMedia({ video: true });
+    cam = await navigator.mediaDevices.getUserMedia({ video });
   } catch {
     return; // sem câmera ou permissão negada
   }
   state.camera.camStream = cam;
-  state.camera.localTracks = cam.getVideoTracks();
+  // o vídeo que sai pros outros é o do <canvas> (câmera + overlay desenhados
+  // juntos a cada quadro), não a track crua da câmera — é o que permite
+  // ligar/desligar o overlay ao vivo sem reiniciar a câmera.
+  const composited = startCameraCompositor(cam);
+  state.camera.localTracks = composited.getVideoTracks();
   state.camera.sharing = true;
 
   setBtnLabel(els.cameraBtn, 'Desligar câmera');
@@ -1120,7 +2463,7 @@ async function startCameraShare() {
 
   cam.getVideoTracks()[0].addEventListener('ended', stopCameraShare);
 
-  addOrUpdateTile(tileKey(state.myId, 'camera'), `${state.myName} (você)`, myAvatar, cam, true, 'camera');
+  addOrUpdateTile(tileKey(state.myId, 'camera'), `${state.myName} (você)`, myAvatar, composited, true, 'camera');
   updateEmptyHint();
   state.transport.send({ type: 'share:start', source: 'camera' });
 }
@@ -1135,7 +2478,9 @@ function stopCameraShare() {
     for (const t of state.camera.camStream.getTracks()) t.stop();
     state.camera.camStream = null;
   }
+  for (const t of state.camera.localTracks) t.stop(); // track do <canvas>, não da câmera
   state.camera.localTracks = [];
+  stopCameraCompositor();
 
   for (const key of [...state.broadcastPcs.keys()]) {
     if (key.endsWith(':camera')) teardownBroadcast(key);
@@ -1151,7 +2496,8 @@ function stopCameraShare() {
 /* ---------------- transmissão genérica (comum às duas fontes) ---------------- */
 
 async function createBroadcastPeer(viewerId, source) {
-  const localTracks = source === 'camera' ? state.camera.localTracks : state.screen.localTracks;
+  const localTracks =
+    source === 'camera' ? state.camera.localTracks : source === 'mic' ? state.mic.localTracks : state.screen.localTracks;
   if (!localTracks.length) return; // pedido chegou depois que eu já parei essa fonte
   const key = tileKey(viewerId, source);
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -1160,6 +2506,7 @@ async function createBroadcastPeer(viewerId, source) {
   const combined = new MediaStream(localTracks);
   for (const track of localTracks) pc.addTrack(track, combined);
   preferH264(pc);
+  applyBandwidthLimit(pc);
 
   pc.addEventListener('icecandidate', (ev) => {
     if (ev.candidate) sendSignal(viewerId, { kind: 'ice', candidate: ev.candidate.toJSON(), source });
@@ -1179,6 +2526,23 @@ function teardownBroadcast(key) {
 /* ---------------- grade de vídeos ---------------- */
 
 function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
+  // Mic não tem vídeo — é só áudio tocando em segundo plano, sem quadro na
+  // grade (senão a tela ficava cheia de "quadros vazios" só de gente
+  // conversando, igual uma chamada de voz normal não mostra nada visual).
+  if (source === 'mic') {
+    let micTile = state.tiles.get(key);
+    if (!micTile) {
+      const audio = document.createElement('audio');
+      audio.autoplay = true;
+      document.body.appendChild(audio);
+      applySpeakerDevice(audio);
+      micTile = { root: audio, video: audio, isSelf, audioOnly: true };
+      state.tiles.set(key, micTile);
+    }
+    if (micTile.video.srcObject !== stream) micTile.video.srcObject = stream;
+    return;
+  }
+
   let tile = state.tiles.get(key);
   if (!tile) {
     const root = document.createElement('div');
@@ -1250,6 +2614,8 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
       else state.pinned.delete(key);
       updateFocusBar();
     });
+
+    if (!isSelf) applySpeakerDevice(video);
 
     els.grid.appendChild(root);
     tile = { root, video, isSelf };
@@ -1331,3 +2697,154 @@ function exitFocusIfActive() {
 document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement && state.focusOverlay) exitFocusIfActive();
 });
+
+/* ---------------- "novidades desta versão" ----------------
+   Toda vez que sobe uma versão nova (ver CHANGELOG.md / lembrete no fluxo
+   de publish), acrescenta uma entrada aqui. Quando o app abre numa versão
+   diferente da última vista (guardada no localStorage), mostra um modal
+   com o que mudou desde então — sem precisar de internet nem depender do
+   corpo da release no GitHub. */
+
+const CHANGELOG = {
+  '2.3.0': [
+    'HUD redesenhado: visual mais "gaming" no lobby e na sala, com pill de conexão e botões com brilho.',
+    'Coroa de anfitrião e status "Online" na lista de pessoas da sala.',
+  ],
+  '2.3.1': [
+    'Link direto pra baixar "O Outro Lado da Mesa" no rodapé do lobby.',
+  ],
+  '2.4.0': [
+    'Sidebar de salas numeradas ("Sala 1", "Sala 2"...), estilo canal de voz do Discord — clique numa vazia pra virar anfitrião na hora, numa ocupada pra entrar direto.',
+    'Lista de "quem está online" na rede, independente de estar numa sala ou não.',
+  ],
+  '2.5.0': [
+    'Esse aviso de novidades aqui — a partir de agora, toda atualização mostra o que mudou.',
+  ],
+  '2.6.0': [
+    'Limite de banda da transmissão nas configurações — se a transmissão andar travando pros seus amigos, escolher "Rede fraca" ajuda mais do que baixar a resolução.',
+    'Aviso automático pra quem está compartilhando se a tela sair toda preta pros outros (jogo em tela cheia exclusiva ou vídeo com DRM tipo Netflix).',
+  ],
+  '2.7.0': [
+    'A tela de "atualização pronta" agora tem a cara do app, em vez da caixinha genérica do Windows.',
+  ],
+  '2.8.0': [
+    'Corrigido bug de sala/pessoa duplicada na descoberta de rede quando outra VPN (ex: Cloudflare WARP) está ligada junto com o Radmin.',
+    'Corrigido bug de nenhuma sala/pessoa aparecer usando só o Radmin — a descoberta agora é enviada direto pelo adaptador de rede certo, em vez de arriscar sair pelo adaptador errado.',
+  ],
+  '2.9.0': [
+    'Nova opção "Esconder o cursor do mouse na transmissão" (configurações, ligada por padrão) — evita o cursor aparecer fixo/fantasma em jogos que escondem a mira de verdade (ex: Valorant) ou continuar visível depois que ele some da tela assistindo vídeo.',
+  ],
+  '2.10.0': [
+    'Agora dá pra escolher microfone, câmera e saída de áudio (fone/caixa) nas configurações, em vez de usar sempre o padrão do sistema.',
+    'Se a câmera aparecer com cor estranha (tipo tudo amarelo), geralmente é o dispositivo errado selecionado — agora dá pra trocar e testar direto ali.',
+  ],
+  '2.11.0': [
+    'Configurações virou uma janela própria com abas (Dispositivos/Voz/Transmissão/Apps mutados), em vez de um painel pequeno que cortava conteúdo fora da tela.',
+    'Microfone agora é independente — liga sozinho assim que você entra na sala, dá pra conversar com todo mundo sem precisar compartilhar tela ou câmera (igual uma chamada de voz). O botão de mutar fica sempre visível na barra.',
+    'Nova aba "Apps mutados": marca um app pra ele já começar mutado automaticamente toda vez que você compartilhar a tela, sem precisar mutar na mão de novo.',
+  ],
+  '2.12.0': [
+    'Mutar o microfone agora é lembrado pra sempre — se você sair da sala mutado, volta mutado da próxima vez, não importa quanto tempo passe.',
+  ],
+  '2.13.0': [
+    'Soundboard novo (botão ao lado do mic, na barra de baixo): adiciona sons curtos que ficam salvos no seu PC e toca eles na call com um clique — todo mundo ouve.',
+    'Dá pra nomear/renomear cada som e controlar o volume que só VOCÊ escuta de volta, sem afetar o volume pros outros.',
+  ],
+  '2.14.0': [
+    'Corrigido o volume do soundboard não fazer efeito nenhum — agora muda na hora, mesmo com um som já tocando.',
+    'Clicar de novo num som do soundboard que já está tocando agora para ele — útil pra cortar um áudio longo no meio.',
+  ],
+  '2.15.0': [
+    'Overlay da câmera (configurações → Dispositivos): escolhe uma imagem PNG transparente (ex: moldura/arte de personagem) e ela aparece por cima do seu vídeo pros outros — dá pra ligar/desligar na hora, sem precisar desligar a câmera.',
+  ],
+  '2.16.0': [
+    'Chat de texto em cada sala, com foto e arquivo anexado — aparece na barra lateral, do lado da lista de pessoas.',
+    'No modo Rede local (Radmin), o chat já é automaticamente privado só pra rede: quem não está conectado nela não consegue nem alcançar a sala, muito menos ler o chat.',
+  ],
+  '2.17.0': [
+    'Chat agora fica salvo enquanto quem hospeda a sala mantiver o app aberto — se todo mundo sair e voltar, o histórico continua lá.',
+    'Notificação do Windows quando chega mensagem nova no chat e o app não está em foco — com opção de desligar nas configurações (aba "Chat").',
+    'Limite de anexo subiu de 8MB pra 25MB por arquivo (até 50MB somando os anexos de uma mensagem).',
+  ],
+  '2.18.0': [
+    'Limite de anexo na rede local (Radmin) subiu pra 500MB por arquivo — agora vai por upload de verdade, em pedaços, com barra de progresso.',
+    'Chat da sala e mensagens diretas agora ficam salvos em disco de verdade — sobrevivem a fechar e abrir o app, não só a sair/voltar da sala.',
+    'Mensagem direta: clica em alguém "online" na página inicial pra conversar com ela, mesmo sem estar na mesma sala — com histórico salvo, anexo de arquivo e notificação.',
+  ],
+  '2.19.0': [
+    'Tentativa de tirar a borda que o Windows às vezes desenha em volta de uma janela específica sendo compartilhada — teste em casa e avisa se sumiu de verdade.',
+  ],
+};
+
+const LAST_SEEN_VERSION_KEY = 'tela-radmin:last-seen-version';
+
+function compareVersions(a, b) {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+async function fetchCurrentVersion() {
+  try {
+    if (isElectron) return await window.telaNative.getVersion();
+    const r = await fetch('/version');
+    return (await r.json()).version;
+  } catch {
+    return null;
+  }
+}
+
+async function checkWhatsNew() {
+  const currentVersion = await fetchCurrentVersion();
+  if (!currentVersion) return;
+
+  const lastSeen = localStorage.getItem(LAST_SEEN_VERSION_KEY);
+  if (!lastSeen) {
+    // primeira vez rodando com esse recurso — não despeja o histórico
+    // inteiro em quem já usava o app, só marca o ponto de partida.
+    localStorage.setItem(LAST_SEEN_VERSION_KEY, currentVersion);
+    return;
+  }
+  if (lastSeen === currentVersion) return;
+  localStorage.setItem(LAST_SEEN_VERSION_KEY, currentVersion);
+
+  const versions = Object.keys(CHANGELOG)
+    .filter((v) => compareVersions(v, lastSeen) > 0 && compareVersions(v, currentVersion) <= 0)
+    .sort(compareVersions);
+  if (!versions.length) return;
+
+  els.whatsNewVersion.textContent = `Atualizado pra versão ${currentVersion}`;
+  els.whatsNewList.innerHTML = versions
+    .map(
+      (v) => `
+    <div class="whats-new-version-block">
+      <span class="version-tag">v${v}</span>
+      <ul>${CHANGELOG[v].map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+    </div>`,
+    )
+    .join('');
+  els.whatsNewModal.classList.remove('hidden');
+}
+
+els.whatsNewClose.addEventListener('click', () => els.whatsNewModal.classList.add('hidden'));
+els.whatsNewOkBtn.addEventListener('click', () => els.whatsNewModal.classList.add('hidden'));
+
+checkWhatsNew();
+
+/* ---------------- "atualização pronta" ----------------
+   Substitui o dialog nativo do SO (feio, fora do padrão visual) por um
+   modal com a cara do app — main.js manda o aviso por IPC assim que o
+   electron-updater termina de baixar a atualização em segundo plano. */
+
+if (isElectron && window.telaNative.onUpdateReady) {
+  window.telaNative.onUpdateReady(({ version }) => {
+    els.updateReadyVersion.textContent = `Versão ${version} já foi baixada`;
+    els.updateReadyModal.classList.remove('hidden');
+  });
+}
+els.updateReadyLaterBtn.addEventListener('click', () => els.updateReadyModal.classList.add('hidden'));
+els.updateReadyRestartBtn.addEventListener('click', () => window.telaNative.quitAndInstall());

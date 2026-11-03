@@ -5,8 +5,22 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, desktopCapturer, session, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, session, dialog, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
+
+// Tira a borda que o Windows desenha em volta de uma JANELA sendo
+// capturada — vem da API moderna de captura (Windows Graphics Capture),
+// que o Chromium usa por padrão pra captura por janela. É o próprio
+// Windows que desenha isso (proteção contra captura escondida), não o
+// nosso app — mas dá pra pedir pro Chromium não exigir a borda, ou (se
+// isso não bastar nessa versão do Chromium) cair pro capturador mais
+// antigo que nunca desenhava borda nenhuma. Nomes de feature "errados"
+// aqui não quebram nada — o Chromium ignora silenciosamente o que não
+// reconhece em --disable-features.
+app.commandLine.appendSwitch(
+  'disable-features',
+  'WgcRequireBorder,WebRtcWgcRequireBorder,WebRtcAllowWgcWindowCapturer,WebRtcAllowWgcScreenCapturer',
+);
 
 // Atualização automática via GitHub Releases (github.com/Doug3011/suvaco-da-jinx).
 // Só roda no app empacotado de verdade — em dev (`npm start`) não tem update
@@ -14,19 +28,27 @@ const { autoUpdater } = require('electron-updater');
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.on('update-downloaded', (info) => {
-  dialog
-    .showMessageBox({
-      type: 'info',
-      title: 'Atualização pronta',
-      message: `Uma nova versão (${info.version}) do Suvaco da Jinx foi baixada.`,
-      detail: 'Reiniciar agora pra aplicar, ou continuar usando e aplicar só quando fechar o app.',
-      buttons: ['Reiniciar agora', 'Depois'],
-      defaultId: 0,
-      cancelId: 1,
-    })
-    .then(({ response }) => {
-      if (response === 0) autoUpdater.quitAndInstall();
-    });
+  // Avisa em HTML/CSS dentro da própria janela (em vez do dialog nativo do
+  // SO) pra manter o visual igual ao resto do app — ver #updateReadyModal
+  // em index.html/app.js. Se a janela ainda não existir por algum motivo,
+  // cai de volta pro dialog nativo pra não perder o aviso.
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('update:ready', { version: info.version });
+  } else {
+    dialog
+      .showMessageBox({
+        type: 'info',
+        title: 'Atualização pronta',
+        message: `Uma nova versão (${info.version}) do Suvaco da Jinx foi baixada.`,
+        detail: 'Reiniciar agora pra aplicar, ou continuar usando e aplicar só quando fechar o app.',
+        buttons: ['Reiniciar agora', 'Depois'],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      .then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall();
+      });
+  }
 });
 autoUpdater.on('error', (err) => {
   console.warn('[auto-update] erro ao checar/baixar atualização:', err.message);
@@ -40,6 +62,10 @@ try {
 }
 
 process.env.TELA_NO_OPEN = '1';
+// Onde o chat (histórico + arquivos anexados) fica salvo de verdade em
+// disco, sobrevivendo a fechar/abrir o app — pasta de dados do usuário
+// (ex: %APPDATA%\Suvaco da Jinx\), não dentro da instalação do programa.
+process.env.TELA_DATA_DIR = app.getPath('userData');
 require(path.join(__dirname, '..', 'server', 'main.cjs'));
 
 const PORT = Number(process.env.TELA_PORT) || 47400;
@@ -59,6 +85,10 @@ function createMainWindow() {
     },
   });
   mainWindow.loadURL(`http://localhost:${PORT}/`);
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
 }
 
 function createPickerWindow() {
@@ -158,6 +188,9 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('native:available', () => !!nativeAddon);
+
+  ipcMain.handle('app:getVersion', () => app.getVersion());
+  ipcMain.handle('app:quitAndInstall', () => autoUpdater.quitAndInstall());
 
   createMainWindow();
 

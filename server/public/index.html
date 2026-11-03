@@ -211,6 +211,31 @@
         </button>
       </div>
     </section>
+
+    <!-- CANAL DE TEXTO -->
+    <section id="textChannel" class="screen hidden">
+      <header class="room-topbar">
+        <div class="room-topbar-brand">
+          <button type="button" id="textChannelBackBtn" class="icon-btn ghost" title="Voltar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </button>
+          <div class="room-topbar-info">
+            <strong id="textChannelName">canal</strong>
+          </div>
+        </div>
+      </header>
+      <div class="room-body">
+        <div class="room-content text-channel-content">
+          <div id="textChannelMessages" class="chat-messages text-channel-messages"></div>
+          <form id="textChannelForm" class="chat-input-row">
+            <input type="text" id="textChannelTextInput" placeholder="Mandar mensagem..." maxlength="2000" autocomplete="off" />
+            <button type="submit" class="icon-btn primary" title="Enviar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </form>
+        </div>
+      </div>
+    </section>
   </div>
 
   <!-- modal de servidor: criar um novo ou entrar com código de convite -->

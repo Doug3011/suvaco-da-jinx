@@ -84,6 +84,12 @@ const els = {
   serverJoinCodeInput: document.getElementById('serverJoinCodeInput'),
   serverJoinBtn: document.getElementById('serverJoinBtn'),
   serverModalError: document.getElementById('serverModalError'),
+  textChannel: document.getElementById('textChannel'),
+  textChannelBackBtn: document.getElementById('textChannelBackBtn'),
+  textChannelName: document.getElementById('textChannelName'),
+  textChannelMessages: document.getElementById('textChannelMessages'),
+  textChannelForm: document.getElementById('textChannelForm'),
+  textChannelTextInput: document.getElementById('textChannelTextInput'),
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
   peopleBar: document.getElementById('peopleBar'),
@@ -174,6 +180,12 @@ let currentProfile = null; // public.profiles
 function showAuthScreen() {
   els.authScreen.classList.remove('hidden');
   els.lobby.classList.add('hidden');
+  els.textChannel.classList.add('hidden');
+  if (textChannelRealtime) {
+    window.supabaseClient.removeChannel(textChannelRealtime);
+    textChannelRealtime = null;
+  }
+  activeTextChannel = null;
   myServers = [];
   activeServerId = null;
   activeChannels = [];
@@ -1008,8 +1020,120 @@ function renderChannelList() {
 }
 
 function openChannel(channel) {
-  showToast(`Em breve: canal "${channel.name}" (${channel.type === 'voice' ? 'voz' : 'texto'})`, 2500);
+  if (channel.type === 'text') openTextChannel(channel);
+  else showToast(`Em breve: canal de voz "${channel.name}" (Fase 4)`, 2500);
 }
+
+/* ---------------- canal de texto: mensagens persistidas (Supabase) ----------------
+   Historico vem de uma tabela de verdade (nao mais memoria/disco local do
+   host) e atualiza em tempo real via postgres_changes - todo mundo que
+   tiver o canal aberto ve a mensagem nova sem precisar recarregar. */
+
+let activeTextChannel = null;
+let textChannelRealtime = null;
+const profileCache = new Map(); // userId -> {display_name, avatar_url}
+
+async function getProfileCached(userId) {
+  if (profileCache.has(userId)) return profileCache.get(userId);
+  const { data } = await window.supabaseClient
+    .from('profiles')
+    .select('display_name, avatar_url')
+    .eq('id', userId)
+    .single();
+  const profile = data || { display_name: 'Convidado', avatar_url: null };
+  profileCache.set(userId, profile);
+  return profile;
+}
+
+function renderTextChannelMessage(row, authorProfile) {
+  const isSelf = row.author_id === currentUser.id;
+  const name = authorProfile ? authorProfile.display_name : 'Convidado';
+  const avatar = authorProfile && authorProfile.avatar_url ? authorProfile.avatar_url : DEFAULT_AVATAR;
+  const time = new Date(row.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg' + (isSelf ? ' self' : '');
+  wrap.innerHTML = `
+    <img class="chat-msg-avatar" src="${avatar}" alt="" />
+    <div class="chat-msg-body">
+      <div class="chat-msg-meta">
+        <span class="chat-msg-name">${escapeHtml(name)}</span>
+        <span class="chat-msg-time">${time}</span>
+      </div>
+      ${row.content ? `<div class="chat-msg-text">${escapeHtml(row.content)}</div>` : ''}
+    </div>
+  `;
+  els.textChannelMessages.appendChild(wrap);
+  els.textChannelMessages.scrollTop = els.textChannelMessages.scrollHeight;
+
+  if (!isSelf && state.settings.chatNotifications) {
+    notifyChatMessage({ name, avatar, text: row.content });
+  }
+}
+
+async function openTextChannel(channel) {
+  activeTextChannel = channel;
+  els.textChannelName.textContent = channel.name;
+  els.textChannelMessages.innerHTML = '';
+  els.lobby.classList.add('hidden');
+  els.textChannel.classList.remove('hidden');
+
+  const { data, error } = await window.supabaseClient
+    .from('messages')
+    .select('*')
+    .eq('channel_id', channel.id)
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (error) {
+    console.error('Erro ao buscar mensagens:', error);
+  } else {
+    for (const row of data) {
+      const profile = await getProfileCached(row.author_id);
+      renderTextChannelMessage(row, profile);
+    }
+  }
+
+  if (textChannelRealtime) window.supabaseClient.removeChannel(textChannelRealtime);
+  textChannelRealtime = window.supabaseClient
+    .channel(`messages:${channel.id}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'messages', filter: `channel_id=eq.${channel.id}` },
+      async (payload) => {
+        const profile = await getProfileCached(payload.new.author_id);
+        renderTextChannelMessage(payload.new, profile);
+      },
+    )
+    .subscribe();
+}
+
+function closeTextChannel() {
+  if (textChannelRealtime) {
+    window.supabaseClient.removeChannel(textChannelRealtime);
+    textChannelRealtime = null;
+  }
+  activeTextChannel = null;
+  els.textChannel.classList.add('hidden');
+  els.lobby.classList.remove('hidden');
+}
+
+els.textChannelBackBtn.addEventListener('click', closeTextChannel);
+
+els.textChannelForm.addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const content = els.textChannelTextInput.value.trim();
+  if (!content || !activeTextChannel) return;
+  els.textChannelTextInput.value = '';
+  const { error } = await window.supabaseClient
+    .from('messages')
+    .insert({ channel_id: activeTextChannel.id, author_id: currentUser.id, content });
+  if (error) {
+    console.error('Erro ao enviar mensagem:', error);
+    showToast('Não deu pra enviar a mensagem.', 2500);
+  }
+  // a propria mensagem some renderizada pela assinatura postgres_changes,
+  // igual pra todo mundo - nao precisa desenhar localmente aqui.
+});
 
 /* ---------------- modal: criar servidor / entrar com código de convite ---------------- */
 

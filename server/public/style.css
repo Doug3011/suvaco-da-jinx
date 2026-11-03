@@ -676,6 +676,21 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .server-modal { width: 380px; max-width: 100%; padding: 28px 24px 24px; }
 #serverJoinCodeInput { text-transform: lowercase; }
 
+/* ---------- canal de texto (tela cheia) ---------- */
+
+#textChannel .room-body { padding: 0 24px 20px; }
+.text-channel-content {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding-top: 20px;
+}
+.text-channel-messages { padding-right: 8px; }
+.text-channel-content .chat-msg-avatar { width: 36px; height: 36px; }
+.text-channel-content .chat-msg-name { font-size: 14px; }
+.text-channel-content .chat-msg-text { font-size: 14.5px; }
+.text-channel-content .chat-input-row { margin-top: 10px; }
+
 .manual-join { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .manual-join summary {
   cursor: pointer;

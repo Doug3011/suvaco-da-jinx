@@ -367,8 +367,16 @@ function resizeImageToBlob(file, width, height) {
   });
 }
 
+// path FIXO (sem timestamp) de propósito: upsert:true só sobrescreve de
+// verdade se o caminho for sempre o mesmo - com timestamp cada troca de
+// foto deixava a versão anterior pra trás pra sempre, vazando aos pouco
+// o 1GB grátis do Storage. Cache do navegador fica só 1h (padrão do
+// Supabase Storage); quem acabou de trocar a própria foto vê a nova na
+// hora porque quem chama isso bota um "?t=" na própria tela (ver
+// els.modalAvatarInput/bannerInput abaixo) - o resto da galera só vê
+// depois que o cache deles expirar, troca aceitável por não vazar espaço.
 async function uploadProfileImage(blob, folder) {
-  const path = `${folder}/${currentUser.id}-${Date.now()}.jpg`;
+  const path = `${folder}/${currentUser.id}.jpg`;
   const { error: uploadError } = await window.supabaseClient.storage
     .from('avatars')
     .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
@@ -519,8 +527,11 @@ els.modalAvatarInput.addEventListener('change', async (ev) => {
     const { error } = await window.supabaseClient.from('profiles').update({ avatar_url: url }).eq('id', currentUser.id);
     if (error) throw error;
     currentProfile = { ...currentProfile, avatar_url: url };
-    els.modalAvatarPreview.src = url;
-    els.userBarAvatar.src = url;
+    // "?t=" so' pra furar o cache do navegador NA SUA TELA agora - o que
+    // fica salvo no banco (acima) e' a URL limpa, sem isso
+    const freshUrl = `${url}?t=${Date.now()}`;
+    els.modalAvatarPreview.src = freshUrl;
+    els.userBarAvatar.src = freshUrl;
   } catch (err) {
     console.error('Erro ao trocar avatar:', err);
     showToast('Não deu pra trocar a foto.', 2500);
@@ -537,7 +548,7 @@ els.bannerInput.addEventListener('change', async (ev) => {
     const { error } = await window.supabaseClient.from('profiles').update({ banner_url: url }).eq('id', currentUser.id);
     if (error) throw error;
     currentProfile = { ...currentProfile, banner_url: url };
-    renderProfileBanner(els.profileBanner, url);
+    renderProfileBanner(els.profileBanner, `${url}?t=${Date.now()}`);
   } catch (err) {
     console.error('Erro ao trocar banner:', err);
     showToast('Não deu pra trocar o banner.', 2500);
@@ -1852,11 +1863,16 @@ els.serverIconInput.addEventListener('change', async () => {
   if (!file) return;
   els.serverSettingsError.classList.add('hidden');
   try {
-    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-    const path = `server-icons/${activeServerId}-${Date.now()}.${ext}`;
+    // redimensiona/comprime igual avatar/banner (ícone só aparece a
+    // 42px, não faz sentido guardar/servir a foto original de alguns
+    // MB) e usa path FIXO (sempre .jpg, sem timestamp) pra upsert
+    // sobrescrever de verdade em vez de deixar a versão antiga pra trás
+    // vazando o Storage grátis - mesma lição do avatar/banner.
+    const blob = await resizeImageToBlob(file, 256, 256);
+    const path = `server-icons/${activeServerId}.jpg`;
     const { error: uploadError } = await window.supabaseClient.storage
       .from('avatars')
-      .upload(path, file, { upsert: true });
+      .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
     if (uploadError) throw uploadError;
     const { data: publicUrlData } = window.supabaseClient.storage.from('avatars').getPublicUrl(path);
     const { error: updateError } = await window.supabaseClient
@@ -1864,7 +1880,7 @@ els.serverIconInput.addEventListener('change', async () => {
       .update({ icon_url: publicUrlData.publicUrl })
       .eq('id', activeServerId);
     if (updateError) throw updateError;
-    els.serverIconPreview.src = publicUrlData.publicUrl;
+    els.serverIconPreview.src = `${publicUrlData.publicUrl}?t=${Date.now()}`;
     await fetchMyServers();
   } catch (err) {
     showServerSettingsError(err.message || 'Não deu pra trocar o ícone.');
@@ -3373,6 +3389,10 @@ const CHANGELOG = {
   ],
   '3.1.2': [
     'Corrigido de vez o botão "Trocar ícone" do servidor — um bug no próprio código cancelava o seletor de arquivo antes dele abrir.',
+  ],
+  '3.1.3': [
+    'Fotos (avatar, banner, ícone de servidor) agora são comprimidas antes de subir — bem mais leve, economiza o espaço grátis do banco.',
+    'Trocar de foto várias vezes não deixa mais versões antigas acumulando por aí — cada troca substitui a anterior em vez de empilhar.',
   ],
 };
 

@@ -48,17 +48,10 @@ const ICONS = {
 
 const els = {
   authScreen: document.getElementById('authScreen'),
-  authEmailForm: document.getElementById('authEmailForm'),
-  authEmailInput: document.getElementById('authEmailInput'),
+  authForm: document.getElementById('authForm'),
   authDisplayNameInput: document.getElementById('authDisplayNameInput'),
   authError: document.getElementById('authError'),
   authSubmitBtn: document.getElementById('authSubmitBtn'),
-  authCodeForm: document.getElementById('authCodeForm'),
-  authCodeInput: document.getElementById('authCodeInput'),
-  authCodeError: document.getElementById('authCodeError'),
-  authCodeSubmitBtn: document.getElementById('authCodeSubmitBtn'),
-  authResendBtn: document.getElementById('authResendBtn'),
-  authBackBtn: document.getElementById('authBackBtn'),
   lobby: document.getElementById('lobby'),
   welcomePanel: document.getElementById('welcomePanel'),
   userBarAvatar: document.getElementById('userBarAvatar'),
@@ -79,14 +72,6 @@ const els = {
   modalAvatarInput: document.getElementById('modalAvatarInput'),
   profileModalName: document.getElementById('profileModalName'),
   profileModalHandle: document.getElementById('profileModalHandle'),
-  profileEmailUpsell: document.getElementById('profileEmailUpsell'),
-  profileEmailStep: document.getElementById('profileEmailStep'),
-  profileEmailInput: document.getElementById('profileEmailInput'),
-  profileEmailSaveBtn: document.getElementById('profileEmailSaveBtn'),
-  profileEmailCodeStep: document.getElementById('profileEmailCodeStep'),
-  profileEmailCodeInput: document.getElementById('profileEmailCodeInput'),
-  profileEmailCodeBtn: document.getElementById('profileEmailCodeBtn'),
-  profileEmailError: document.getElementById('profileEmailError'),
   profileNameField: document.getElementById('profileNameField'),
   profileNameInput: document.getElementById('profileNameInput'),
   bioInput: document.getElementById('bioInput'),
@@ -230,9 +215,6 @@ let currentProfile = null; // public.profiles
 function showAuthScreen() {
   if (activeVoiceChannel) leaveRoom(); // fecha mic/camera/tela e desconecta do Realtime antes de deslogar
   els.authScreen.classList.remove('hidden');
-  els.authCodeForm.classList.add('hidden');
-  els.authEmailForm.classList.remove('hidden');
-  els.authError.classList.add('hidden');
   els.lobby.classList.add('hidden');
   els.textChannel.classList.add('hidden');
   if (textChannelRealtime) {
@@ -284,76 +266,24 @@ function showLobbyScreen() {
   fetchFriends();
 }
 
-// login por codigo de 6 digitos (sem senha, sem link clicavel - ver nota
-// no index.html sobre por que nao da' link: abriria fora da sessao
-// isolada do Electron). O mesmo signInWithOtp serve pra conta nova
-// (shouldCreateUser cria com o apelido vindo em options.data, lido pela
-// trigger handle_new_user() que ja existia) e pra conta que ja existe.
-let pendingAuthEmail = '';
-
-els.authEmailForm.addEventListener('submit', async (ev) => {
+els.authForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const email = els.authEmailInput.value.trim();
   const displayName = els.authDisplayNameInput.value.trim();
-  if (!email) return;
+  if (!displayName) return;
   els.authError.classList.add('hidden');
   els.authSubmitBtn.disabled = true;
   try {
-    const { error } = await window.supabaseClient.auth.signInWithOtp({
-      email,
-      options: { data: { display_name: displayName || 'Convidado' }, shouldCreateUser: true },
+    const { error } = await window.supabaseClient.auth.signInAnonymously({
+      options: { data: { display_name: displayName } },
     });
     if (error) throw error;
-    pendingAuthEmail = email;
-    els.authEmailForm.classList.add('hidden');
-    els.authCodeForm.classList.remove('hidden');
-    els.authCodeError.classList.add('hidden');
-    els.authCodeInput.value = '';
-    els.authCodeInput.focus();
+    // onAuthStateChange cuida do resto (busca o perfil, mostra o lobby).
   } catch (err) {
-    els.authError.textContent = err.message || 'Não deu pra mandar o código.';
+    els.authError.textContent = err.message || 'Erro ao entrar.';
     els.authError.classList.remove('hidden');
   } finally {
     els.authSubmitBtn.disabled = false;
   }
-});
-
-els.authCodeForm.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const token = els.authCodeInput.value.trim();
-  if (!token) return;
-  els.authCodeError.classList.add('hidden');
-  els.authCodeSubmitBtn.disabled = true;
-  try {
-    const { error } = await window.supabaseClient.auth.verifyOtp({ email: pendingAuthEmail, token, type: 'email' });
-    if (error) throw error;
-    // onAuthStateChange cuida do resto (busca o perfil, mostra o lobby).
-  } catch (err) {
-    els.authCodeError.textContent = err.message || 'Código inválido ou expirado.';
-    els.authCodeError.classList.remove('hidden');
-  } finally {
-    els.authCodeSubmitBtn.disabled = false;
-  }
-});
-
-els.authResendBtn.addEventListener('click', async () => {
-  if (!pendingAuthEmail) return;
-  els.authResendBtn.disabled = true;
-  try {
-    const { error } = await window.supabaseClient.auth.signInWithOtp({ email: pendingAuthEmail });
-    if (error) throw error;
-    showToast('Código reenviado!', 2000);
-  } catch (err) {
-    els.authCodeError.textContent = err.message || 'Não deu pra reenviar.';
-    els.authCodeError.classList.remove('hidden');
-  } finally {
-    els.authResendBtn.disabled = false;
-  }
-});
-
-els.authBackBtn.addEventListener('click', () => {
-  els.authCodeForm.classList.add('hidden');
-  els.authEmailForm.classList.remove('hidden');
 });
 
 els.userBarLogoutBtn.addEventListener('click', async () => {
@@ -492,8 +422,6 @@ function openProfileModal({ readOnly, userId, name, handle, avatar, banner, bio,
   if (!readOnly) {
     els.profileNameInput.value = currentProfile ? currentProfile.display_name || '' : '';
     renderProfileHistory();
-    resetProfileEmailUpsell();
-    els.profileEmailUpsell.classList.toggle('hidden', !(currentUser && currentUser.is_anonymous));
     return;
   }
 
@@ -525,59 +453,6 @@ function openOwnProfile() {
     bio: currentProfile ? currentProfile.bio : '',
   });
 }
-
-/* ---------------- upgrade de conta anônima: adicionar email ----------------
-   Quem já está logado anonimamente (conta antiga, ou quem entrou sem
-   email antes dessa versão) não é forçado a nada - só ganha esse aviso
-   não-bloqueante no próprio perfil. updateUser({email}) converte a MESMA
-   conta (mesmo id, mesmos servidores/amigos/mensagens) em vez de criar
-   uma nova - só precisa confirmar o código que chega no email novo. */
-
-function resetProfileEmailUpsell() {
-  els.profileEmailStep.classList.remove('hidden');
-  els.profileEmailCodeStep.classList.add('hidden');
-  els.profileEmailInput.value = '';
-  els.profileEmailCodeInput.value = '';
-  els.profileEmailError.classList.add('hidden');
-}
-
-els.profileEmailSaveBtn.addEventListener('click', async () => {
-  const email = els.profileEmailInput.value.trim();
-  if (!email) return;
-  els.profileEmailError.classList.add('hidden');
-  els.profileEmailSaveBtn.disabled = true;
-  try {
-    const { error } = await window.supabaseClient.auth.updateUser({ email });
-    if (error) throw error;
-    els.profileEmailStep.classList.add('hidden');
-    els.profileEmailCodeStep.classList.remove('hidden');
-    els.profileEmailCodeInput.focus();
-  } catch (err) {
-    els.profileEmailError.textContent = err.message || 'Não deu pra mandar o código.';
-    els.profileEmailError.classList.remove('hidden');
-  } finally {
-    els.profileEmailSaveBtn.disabled = false;
-  }
-});
-
-els.profileEmailCodeBtn.addEventListener('click', async () => {
-  const token = els.profileEmailCodeInput.value.trim();
-  const email = els.profileEmailInput.value.trim();
-  if (!token || !email) return;
-  els.profileEmailError.classList.add('hidden');
-  els.profileEmailCodeBtn.disabled = true;
-  try {
-    const { error } = await window.supabaseClient.auth.verifyOtp({ email, token, type: 'email_change' });
-    if (error) throw error;
-    showToast('Email confirmado! Sua conta agora tem recuperação.', 3000);
-    els.profileEmailUpsell.classList.add('hidden');
-  } catch (err) {
-    els.profileEmailError.textContent = err.message || 'Código inválido ou expirado.';
-    els.profileEmailError.classList.remove('hidden');
-  } finally {
-    els.profileEmailCodeBtn.disabled = false;
-  }
-});
 
 // busca perfil + servidores em comum + amigos em comum (RPC, ve' so' a
 // intersecao - a policy de friend_requests nao deixa listar os amigos de
@@ -3518,10 +3393,6 @@ const CHANGELOG = {
   '3.1.3': [
     'Fotos (avatar, banner, ícone de servidor) agora são comprimidas antes de subir — bem mais leve, economiza o espaço grátis do banco.',
     'Trocar de foto várias vezes não deixa mais versões antigas acumulando por aí — cada troca substitui a anterior em vez de empilhar.',
-  ],
-  '3.2.0': [
-    'Login agora é por email: entra com um código de 6 dígitos mandado pro seu email, sem senha nenhuma — identifica de verdade quem usa o app.',
-    'Se você já tinha conta (só com apelido, sem email), ela continua funcionando normalmente — nada foi apagado. No seu perfil (clique no seu nome/foto embaixo) tem a opção de adicionar um email, pra não perder a conta se precisar trocar de PC.',
   ],
 };
 

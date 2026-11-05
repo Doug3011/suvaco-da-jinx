@@ -318,20 +318,6 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
   text-align: left;
 }
 .auth-credits { text-align: center; }
-.auth-code-links { display: flex; justify-content: space-between; margin-top: 10px; }
-.auth-code-links button { padding: 6px 4px; font-size: 12.5px; }
-
-.profile-email-upsell {
-  margin-top: 16px;
-  padding: 12px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-.profile-email-upsell-text { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); line-height: 1.4; }
-.profile-email-upsell .field { flex-direction: row; margin-top: 0; }
-.profile-email-upsell .field + .field { margin-top: 8px; }
-.profile-email-upsell .input-with-icon { flex: 1; }
 
 .chevron-right { width: 16px; height: 16px; color: var(--muted); flex-shrink: 0; }
 

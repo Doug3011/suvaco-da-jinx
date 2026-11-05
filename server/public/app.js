@@ -3394,6 +3394,9 @@ const CHANGELOG = {
     'Fotos (avatar, banner, ícone de servidor) agora são comprimidas antes de subir — bem mais leve, economiza o espaço grátis do banco.',
     'Trocar de foto várias vezes não deixa mais versões antigas acumulando por aí — cada troca substitui a anterior em vez de empilhar.',
   ],
+  '3.2.1': [
+    'Login voltou a ser só com apelido, sem email — a versão anterior (3.2.0) deu problema de entrega de email e foi desfeita.',
+  ],
 };
 
 const LAST_SEEN_VERSION_KEY = 'tela-radmin:last-seen-version';

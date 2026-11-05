@@ -593,6 +593,38 @@ function tileKey(id, source) {
   return `${id}:${source}`;
 }
 
+/* ---------------- tolerância a queda de conexão WebRTC ----------------
+   'disconnected' é quase sempre transitório (blip de rede, troca de
+   rota) e se recupera sozinho em poucos segundos - tratar igual a
+   'failed'/'closed' (como o código fazia antes) derrubava a
+   transmissão/chamada por qualquer oscilação normal de rede, o que
+   pareceria "a transmissão fica caindo" ou "às vezes não aparece".
+   Agora só desiste de verdade se continuar desconectado além de um
+   prazo de tolerância. Prefixo no Map evita colisão entre uma chave de
+   watchPcs e a mesma chave em broadcastPcs (podem coincidir: eu
+   assistindo a tela de alguém e transmitindo a minha pra essa mesma
+   pessoa usam o mesmo tileKey(outroId, 'screen') em Maps diferentes). */
+
+const DISCONNECT_GRACE_MS = 8000;
+const disconnectTimers = new Map();
+
+function scheduleDisconnectTimeout(timerKey, isStillDown, onGiveUp) {
+  clearDisconnectTimeout(timerKey);
+  const timeoutId = setTimeout(() => {
+    disconnectTimers.delete(timerKey);
+    if (isStillDown()) onGiveUp();
+  }, DISCONNECT_GRACE_MS);
+  disconnectTimers.set(timerKey, timeoutId);
+}
+
+function clearDisconnectTimeout(timerKey) {
+  const existing = disconnectTimers.get(timerKey);
+  if (existing) {
+    clearTimeout(existing);
+    disconnectTimers.delete(timerKey);
+  }
+}
+
 const SETTINGS_KEY = 'tela-radmin:settings';
 function loadSettings() {
   const defaults = {
@@ -2360,7 +2392,22 @@ function requestWatch(id, source, name, avatar) {
     addOrUpdateTile(key, name, avatar, ev.streams[0], false, source);
   });
   pc.addEventListener('connectionstatechange', () => {
-    if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) teardownWatch(id, source);
+    const timerKey = `watch:${key}`;
+    if (pc.connectionState === 'connected') {
+      clearDisconnectTimeout(timerKey);
+    } else if (pc.connectionState === 'closed') {
+      clearDisconnectTimeout(timerKey);
+      teardownWatch(id, source);
+    } else if (pc.connectionState === 'failed') {
+      teardownWatch(id, source);
+    } else if (pc.connectionState === 'disconnected') {
+      // da' um tempo pra recuperar sozinho antes de desistir de verdade
+      scheduleDisconnectTimeout(
+        timerKey,
+        () => pc.connectionState === 'disconnected',
+        () => teardownWatch(id, source),
+      );
+    }
   });
 
   sendSignal(id, { kind: 'watch-request', source });
@@ -3095,6 +3142,36 @@ async function createBroadcastPeer(viewerId, source) {
     if (ev.candidate) sendSignal(viewerId, { kind: 'ice', candidate: ev.candidate.toJSON(), source });
   });
 
+  // sem esse listener antes, uma conexao que caia (rede instavel) ficava
+  // transmitindo pro vazio pra sempre - quem assiste via o tile sumir
+  // (corrigido em requestWatch), mas o lado de quem transmite nunca
+  // nem sabia e nunca tentava reconectar. Aqui e' quem oferta (criou o
+  // offer original), entao e' quem PODE reiniciar o ICE de verdade via
+  // renegociacao (restartIce + novo offer pelo mesmo canal de
+  // sinalizacao) em vez de só esperar passivamente.
+  pc.addEventListener('connectionstatechange', () => {
+    const timerKey = `broadcast:${key}`;
+    if (pc.connectionState === 'connected') {
+      clearDisconnectTimeout(timerKey);
+    } else if (pc.connectionState === 'closed') {
+      clearDisconnectTimeout(timerKey);
+    } else if (pc.connectionState === 'failed') {
+      clearDisconnectTimeout(timerKey);
+      pc.restartIce();
+      pc.createOffer().then((retryOffer) => {
+        return pc.setLocalDescription(retryOffer).then(() => {
+          sendSignal(viewerId, { kind: 'offer', sdp: retryOffer, source });
+        });
+      }).catch(() => teardownBroadcast(key));
+    } else if (pc.connectionState === 'disconnected') {
+      scheduleDisconnectTimeout(
+        timerKey,
+        () => pc.connectionState === 'disconnected',
+        () => teardownBroadcast(key),
+      );
+    }
+  });
+
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   sendSignal(viewerId, { kind: 'offer', sdp: offer, source });
@@ -3396,6 +3473,9 @@ const CHANGELOG = {
   ],
   '3.2.1': [
     'Login voltou a ser só com apelido, sem email — a versão anterior (3.2.0) deu problema de entrega de email e foi desfeita.',
+  ],
+  '3.2.2': [
+    'Corrigido bug real nas chamadas/transmissões: qualquer oscilação normal de rede (bem comum, principalmente sem um servidor TURN ainda) derrubava a transmissão na hora e não tentava voltar sozinha — agora o app espera alguns segundos pra ver se reconecta antes de desistir de verdade, e quem transmite agora também tenta reconectar ativamente em vez de ficar transmitindo pro vazio.',
   ],
 };
 

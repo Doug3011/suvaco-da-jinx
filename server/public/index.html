@@ -14,26 +14,54 @@
   </div>
 
   <div id="app">
-    <!-- LOGIN: so' apelido (login anonimo do Supabase) - fica salvo nesta
-         instalacao, so' pede de novo se a sessao for apagada -->
+    <!-- LOGIN: email + codigo de 6 digitos (sem senha, sem link clicavel -
+         um link abriria no navegador do Windows, fora da sessao isolada
+         do Electron). Sessao fica salva nesta instalacao, so' pede de
+         novo se for apagada. -->
     <section id="authScreen" class="screen">
       <div class="auth-card">
         <img src="/logo.png" alt="" class="auth-logo" />
         <h1>Suvaco da <span class="accent-text">Jinx</span></h1>
-        <p class="subtitle auth-subtitle">Escolhe um nome pra entrar</p>
 
-        <form id="authForm" class="auth-form">
+        <form id="authEmailForm" class="auth-form">
+          <p class="subtitle auth-subtitle">Entra com seu email</p>
           <label class="field">
-            <span>Como quer ser chamado</span>
+            <span>Email</span>
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" fill="none"/><path d="M22 6l-10 7L2 6"/></svg>
+              <input id="authEmailInput" type="email" placeholder="seu@email.com" required />
+            </div>
+          </label>
+          <label class="field">
+            <span>Como quer ser chamado (só na primeira vez)</span>
             <div class="input-with-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              <input id="authDisplayNameInput" type="text" maxlength="30" placeholder="Seu apelido" required />
+              <input id="authDisplayNameInput" type="text" maxlength="30" placeholder="Seu apelido" />
             </div>
           </label>
 
           <p id="authError" class="auth-error hidden"></p>
 
-          <button type="submit" id="authSubmitBtn" class="primary auth-submit-btn">Entrar</button>
+          <button type="submit" id="authSubmitBtn" class="primary auth-submit-btn">Mandar código</button>
+        </form>
+
+        <form id="authCodeForm" class="auth-form hidden">
+          <p class="subtitle auth-subtitle">Digita o código que mandamos pro seu email</p>
+          <label class="field">
+            <span>Código (6 dígitos)</span>
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input id="authCodeInput" type="text" inputmode="numeric" maxlength="6" placeholder="000000" required />
+            </div>
+          </label>
+
+          <p id="authCodeError" class="auth-error hidden"></p>
+
+          <button type="submit" id="authCodeSubmitBtn" class="primary auth-submit-btn">Confirmar</button>
+          <div class="auth-code-links">
+            <button type="button" id="authResendBtn" class="ghost">Reenviar código</button>
+            <button type="button" id="authBackBtn" class="ghost">Voltar</button>
+          </div>
         </form>
       </div>
       <p class="credits auth-credits">Desenvolvido por <strong>Doug Muller Burro</strong></p>
@@ -393,6 +421,25 @@
           <button type="button" id="profileAcceptFriendBtn" class="primary hidden">Aceitar pedido</button>
           <button type="button" id="profileMessageBtn" class="ghost hidden">Mensagem</button>
           <button type="button" id="profileRemoveFriendBtn" class="ghost danger-hover hidden">Remover amigo</button>
+        </div>
+
+        <div id="profileEmailUpsell" class="profile-email-upsell hidden">
+          <p class="profile-email-upsell-text">Sua conta ainda não tem email — adiciona um pra não perder tudo se precisar trocar de PC ou reinstalar.</p>
+          <div id="profileEmailStep" class="field">
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z" fill="none"/><path d="M22 6l-10 7L2 6"/></svg>
+              <input type="email" id="profileEmailInput" placeholder="seu@email.com" />
+            </div>
+            <button type="button" id="profileEmailSaveBtn" class="ghost btn-sm">Adicionar email</button>
+          </div>
+          <div id="profileEmailCodeStep" class="field hidden">
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="text" id="profileEmailCodeInput" inputmode="numeric" maxlength="6" placeholder="Código recebido por email" />
+            </div>
+            <button type="button" id="profileEmailCodeBtn" class="ghost btn-sm">Confirmar</button>
+          </div>
+          <p id="profileEmailError" class="auth-error hidden"></p>
         </div>
 
         <div id="profileHistorySection" class="profile-history">

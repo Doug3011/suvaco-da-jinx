@@ -11,7 +11,7 @@
       "msvs_settings": {
         "VCCLCompilerTool": { "ExceptionHandling": 1 }
       },
-      "libraries": ["Mmdevapi.lib", "ole32.lib", "Propsys.lib", "runtimeobject.lib"]
+      "libraries": ["Mmdevapi.lib", "ole32.lib", "Propsys.lib", "runtimeobject.lib", "User32.lib"]
     }
   ]
 }

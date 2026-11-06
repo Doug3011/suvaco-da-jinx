@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('telaNative', {
   quitAndInstall: () => ipcRenderer.invoke('app:quitAndInstall'),
   getCloseBehavior: () => ipcRenderer.invoke('app:getCloseBehavior'),
   setCloseBehavior: (value) => ipcRenderer.invoke('app:setCloseBehavior', value),
+  sendRemoteInput: (msg) => ipcRenderer.invoke('native:remoteInput', msg),
   onUpdateReady: (cb) => {
     const listener = (_event, payload) => cb(payload);
     ipcRenderer.on('update:ready', listener);

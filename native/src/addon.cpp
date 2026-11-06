@@ -338,12 +338,101 @@ Napi::Value StopCapture(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+/* ---------------- controle remoto: mouse/teclado via SendInput ----------------
+   Usado só pelo "modo admin" (ver app.js/electron/main.js) — nunca chamado
+   sem a dupla trava do lado JS (flag is_remote_admin no banco + toggle
+   local). Recebe coordenadas de mouse NORMALIZADAS (0..1, relativas ao
+   monitor principal) e converte pro intervalo 0..65535 que o Windows
+   espera em modo absoluto (MOUSEEVENTF_ABSOLUTE). */
+
+Napi::Value SendMouseMove(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsNumber()) {
+    Napi::TypeError::New(env, "esperado (xNorm, yNorm)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  double xNorm = info[0].As<Napi::Number>().DoubleValue();
+  double yNorm = info[1].As<Napi::Number>().DoubleValue();
+  if (xNorm < 0.0) xNorm = 0.0; else if (xNorm > 1.0) xNorm = 1.0;
+  if (yNorm < 0.0) yNorm = 0.0; else if (yNorm > 1.0) yNorm = 1.0;
+
+  INPUT input = {};
+  input.type = INPUT_MOUSE;
+  input.mi.dwFlags = MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE;
+  input.mi.dx = (LONG)(xNorm * 65535.0);
+  input.mi.dy = (LONG)(yNorm * 65535.0);
+  SendInput(1, &input, sizeof(INPUT));
+  return env.Undefined();
+}
+
+Napi::Value SendMouseButton(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2 || !info[0].IsString() || !info[1].IsBoolean()) {
+    Napi::TypeError::New(env, "esperado (button, down)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  std::string button = info[0].As<Napi::String>().Utf8Value();
+  bool down = info[1].As<Napi::Boolean>().Value();
+
+  DWORD flag = 0;
+  if (button == "left") flag = down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
+  else if (button == "right") flag = down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP;
+  else if (button == "middle") flag = down ? MOUSEEVENTF_MIDDLEDOWN : MOUSEEVENTF_MIDDLEUP;
+  else return env.Undefined(); // botão desconhecido — ignora em silêncio, não é motivo de crash
+
+  INPUT input = {};
+  input.type = INPUT_MOUSE;
+  input.mi.dwFlags = flag;
+  SendInput(1, &input, sizeof(INPUT));
+  return env.Undefined();
+}
+
+Napi::Value SendMouseWheel(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 1 || !info[0].IsNumber()) {
+    Napi::TypeError::New(env, "esperado (deltaY)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  int deltaY = info[0].As<Napi::Number>().Int32Value();
+
+  INPUT input = {};
+  input.type = INPUT_MOUSE;
+  input.mi.dwFlags = MOUSEEVENTF_WHEEL;
+  // WHEEL_DELTA (120) por "clique" de roda — sinal invertido porque o JS
+  // manda deltaY positivo pra "rolar pra baixo" (convenção de wheel event
+  // do browser), e o Windows espera o oposto disso em mouseData.
+  input.mi.mouseData = (DWORD)(-deltaY);
+  SendInput(1, &input, sizeof(INPUT));
+  return env.Undefined();
+}
+
+Napi::Value SendKeyEvent(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+  if (info.Length() < 2 || !info[0].IsNumber() || !info[1].IsBoolean()) {
+    Napi::TypeError::New(env, "esperado (vkCode, down)").ThrowAsJavaScriptException();
+    return env.Null();
+  }
+  WORD vk = (WORD)info[0].As<Napi::Number>().Uint32Value();
+  bool down = info[1].As<Napi::Boolean>().Value();
+
+  INPUT input = {};
+  input.type = INPUT_KEYBOARD;
+  input.ki.wVk = vk;
+  input.ki.dwFlags = down ? 0 : KEYEVENTF_KEYUP;
+  SendInput(1, &input, sizeof(INPUT));
+  return env.Undefined();
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("listAudioApps", Napi::Function::New(env, ListAudioApps));
   exports.Set("startCapture", Napi::Function::New(env, StartCapture));
   exports.Set("stopCapture", Napi::Function::New(env, StopCapture));
   exports.Set("sampleRate", Napi::Number::New(env, kSampleRate));
   exports.Set("channels", Napi::Number::New(env, kChannels));
+  exports.Set("sendMouseMove", Napi::Function::New(env, SendMouseMove));
+  exports.Set("sendMouseButton", Napi::Function::New(env, SendMouseButton));
+  exports.Set("sendMouseWheel", Napi::Function::New(env, SendMouseWheel));
+  exports.Set("sendKeyEvent", Napi::Function::New(env, SendKeyEvent));
   return exports;
 }
 

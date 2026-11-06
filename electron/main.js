@@ -232,6 +232,22 @@ app.whenReady().then(() => {
     return sources.map((s) => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() }));
   });
 
+  // Modo admin: entrada de mouse/teclado vinda do renderer (via DataChannel,
+  // já filtrada do outro lado pelas duas travas — flag do banco + toggle
+  // local). Aqui só traduz pra chamada de addon nativo, sem checar nada de
+  // novo (a decisão de aceitar o pedido já foi tomada no app.js).
+  ipcMain.handle('native:remoteInput', (_event, msg) => {
+    if (!nativeAddon || !msg) return;
+    try {
+      if (msg.type === 'mousemove') nativeAddon.sendMouseMove(msg.x, msg.y);
+      else if (msg.type === 'mousebutton') nativeAddon.sendMouseButton(msg.button, !!msg.down);
+      else if (msg.type === 'wheel') nativeAddon.sendMouseWheel(msg.deltaY);
+      else if (msg.type === 'key') nativeAddon.sendKeyEvent(msg.vkCode, !!msg.down);
+    } catch (err) {
+      console.warn('[modo admin] erro ao executar input remoto:', err.message);
+    }
+  });
+
   ipcMain.handle('native:listApps', () => {
     if (!nativeAddon) return [];
     try {

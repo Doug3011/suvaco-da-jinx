@@ -153,6 +153,9 @@ const els = {
   peopleCount: document.getElementById('peopleCount'),
   chatNotificationsCheck: document.getElementById('chatNotificationsCheck'),
   closeBehaviorSelect: document.getElementById('closeBehaviorSelect'),
+  remoteAdminRow: document.getElementById('remoteAdminRow'),
+  remoteAdminCheck: document.getElementById('remoteAdminCheck'),
+  settingsModalTitle: document.querySelector('.settings-modal-title'),
   micMuteBtn: document.getElementById('micMuteBtn'),
   cameraBtn: document.getElementById('cameraBtn'),
   shareBtn: document.getElementById('shareBtn'),
@@ -662,6 +665,7 @@ function loadSettings() {
     soundboardVolume: 70,
     cameraOverlayEnabled: false,
     chatNotifications: true,
+    remoteAdminEnabled: false,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -700,6 +704,7 @@ els.bandwidthSelect.value = state.settings.bandwidthKbps ? String(state.settings
 els.hideCursorCheck.checked = state.settings.hideCursor;
 els.autoMicCheck.checked = state.settings.autoMic;
 els.chatNotificationsCheck.checked = state.settings.chatNotifications;
+els.remoteAdminCheck.checked = state.settings.remoteAdminEnabled;
 
 els.resolutionSelect.addEventListener('change', () => {
   state.settings.resolution = els.resolutionSelect.value;
@@ -2341,10 +2346,25 @@ function renderChannelList() {
 // só quem já está na call), estendida com voiceChannelId/sharingScreen em
 // retrackServerPresence().
 function voiceChannelOccupants(channelId) {
-  if (!serverPresenceChannel) return [];
-  const state_ = serverPresenceChannel.presenceState();
   const out = [];
-  for (const metas of Object.values(state_)) {
+  // minha própria entrada vem sempre do estado LOCAL (activeVoiceChannel/
+  // state.screen.sharing), nunca do cache remoto de presença — o cache só
+  // atualiza depois de um round-trip pro servidor, então logo após sair de
+  // uma call (ou entrar), minha própria leitura remota fica desatualizada
+  // por um instante (às vezes mais, se o sync atrasar) e eu continuava
+  // aparecendo preso na call pra mim mesmo. Assim minha parte fica sempre
+  // certa na hora; só o resto da galera depende do presence sincronizado.
+  if (currentUser && activeVoiceChannel && activeVoiceChannel.id === channelId) {
+    out.push({
+      name: currentProfile ? currentProfile.display_name : 'Convidado',
+      avatar: currentProfile ? currentProfile.avatar_url : null,
+      sharingScreen: state.screen.sharing,
+    });
+  }
+  if (!serverPresenceChannel) return out;
+  const state_ = serverPresenceChannel.presenceState();
+  for (const [userId, metas] of Object.entries(state_)) {
+    if (userId === currentUser.id) continue; // já tratado acima com o estado local
     const meta = metas[0];
     if (meta && meta.voiceChannelId === channelId) out.push(meta);
   }
@@ -2914,8 +2934,15 @@ function leaveRoom() {
   state.transport = null;
   state.myId = null;
   activeVoiceChannel = null;
-  renderChannelList();
   retrackServerPresence();
+  renderChannelList();
+  // reforça a atualização pouco depois — stopScreenShare/stopCameraShare/
+  // stopMicShare acima já dispararam seus próprios re-tracks com o estado
+  // intermediário (ainda "na call", só sem compartilhar nada); se algum
+  // deles chegar no servidor DEPOIS deste (fora de ordem), o roster de
+  // outras pessoas fica preso mostrando que eu ainda estou na call. Esse
+  // reforço garante que o estado final (fora da call) vença de qualquer jeito.
+  setTimeout(() => retrackServerPresence(), 1500);
   // volta pro canal de texto ou DM que estava aberto antes (se tinha
   // algum), senao cai na tela de amigos.
   showMainPanel(activeTextChannel ? 'text' : activeDmPeerId ? 'dm' : 'friends');
@@ -3041,6 +3068,8 @@ function onSignal(from, data) {
   } else if (data.kind === 'ice') {
     const pc = state.broadcastPcs.get(key) || state.watchPcs.get(key);
     if (pc && data.candidate) pc.addIceCandidate(data.candidate).catch(() => {});
+  } else if (data.kind === 'control-request') {
+    startBeingControlledBy(from, source);
   }
 }
 
@@ -3059,6 +3088,16 @@ function requestWatch(id, source, name, avatar) {
   });
   pc.addEventListener('track', (ev) => {
     addOrUpdateTile(key, name, avatar, ev.streams[0], false, source);
+  });
+  // canal de controle remoto (modo admin): só chega aqui se EU pedi
+  // "Controlar tela" antes (startRemoteControl -> sendSignal 'control-request')
+  // e a outra pessoa topou renegociar oferecendo o canal — nunca chega sem eu
+  // ter pedido primeiro, já que é quem transmite quem cria o canal.
+  pc.addEventListener('datachannel', (ev) => {
+    if (ev.channel.label !== 'control') return;
+    const tile = state.tiles.get(key);
+    if (!tile) return;
+    setupControllerChannel(ev.channel, tile.video);
   });
   pc.addEventListener('connectionstatechange', () => {
     const timerKey = `watch:${key}`;
@@ -3860,6 +3899,222 @@ function teardownBroadcast(key) {
   state.broadcastPcs.delete(key);
 }
 
+/* ---------------- modo admin: controle remoto (mouse/teclado) ----------------
+   Recurso restrito — precisa das DUAS travas pra funcionar: a flag
+   `profiles.is_remote_admin` (só setável via SQL manual, nunca pela UI) E o
+   toggle local nas Configurações (revelado só com um gesto escondido, ver
+   mais abaixo). Sem pedido de confirmação em tempo real pro lado
+   controlado — em troca, enquanto o controle estiver ativo, quem está
+   sendo controlado vê uma borda vermelha fixa na tela inteira que só ele
+   consegue encerrar (showRemoteControlOverlay), não o controlador.
+
+   Transporte: RTCDataChannel dentro da MESMA RTCPeerConnection de
+   broadcast/watch já existente (sem rodear pelo Supabase) — quem
+   transmite é sempre quem cria o canal e renegocia (mesmo padrão já usado
+   na reconexão de ICE), porque é quem já tem o papel de "ofertante"
+   nessa conexão. */
+
+function canUseRemoteAdmin() {
+  return isElectron && !!(currentProfile && currentProfile.is_remote_admin) && state.settings.remoteAdminEnabled;
+}
+
+function openTileContextMenu(x, y, key, name) {
+  openContextMenu(x, y, (menu) => {
+    const title = document.createElement('div');
+    title.className = 'context-menu-title';
+    title.textContent = name;
+    menu.appendChild(title);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'context-menu-action';
+    btn.textContent = 'Controlar tela';
+    btn.addEventListener('click', () => {
+      closeContextMenu();
+      startRemoteControl(key);
+    });
+    menu.appendChild(btn);
+  });
+}
+
+function startRemoteControl(key) {
+  if (remoteControlChannel) {
+    showToast('Você já está controlando uma tela — encerra antes de começar outra.');
+    return;
+  }
+  const sep = key.lastIndexOf(':');
+  const peerId = key.slice(0, sep);
+  const source = key.slice(sep + 1);
+  sendSignal(peerId, { kind: 'control-request', source });
+  showToast('Pedido de controle enviado.');
+}
+
+// lado de quem está transmitindo (sendo controlado): cria o canal e
+// renegocia, igual ao restartIce já existente em createBroadcastPeer.
+async function startBeingControlledBy(viewerId, source) {
+  const key = tileKey(viewerId, source);
+  const pc = state.broadcastPcs.get(key);
+  if (!pc) return;
+  const channel = pc.createDataChannel('control');
+  setupControlledChannel(channel, viewerId);
+  try {
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    sendSignal(viewerId, { kind: 'offer', sdp: offer, source });
+  } catch {
+    /* renegociação falhou — sem canal, o controlador nunca recebe nada e desiste sozinho */
+  }
+}
+
+function setupControlledChannel(channel, controllerId) {
+  channel.addEventListener('open', () => showRemoteControlOverlay(controllerId, channel));
+  channel.addEventListener('close', () => hideRemoteControlOverlay());
+  channel.addEventListener('message', (ev) => {
+    if (!isElectron) return;
+    let msg;
+    try {
+      msg = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    window.telaNative.sendRemoteInput(msg);
+  });
+}
+
+function showRemoteControlOverlay(controllerId, channel) {
+  hideRemoteControlOverlay();
+  const overlay = document.createElement('div');
+  overlay.id = 'remoteControlOverlay';
+  overlay.innerHTML = `
+    <div class="remote-control-banner">
+      <span>Alguém está controlando sua tela</span>
+      <button type="button" id="remoteControlEndBtn">Encerrar controle</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#remoteControlEndBtn').addEventListener('click', () => {
+    try {
+      channel.send(JSON.stringify({ type: 'control-ended' }));
+    } catch {
+      /* canal já pode ter caído sozinho — fecha de qualquer jeito abaixo */
+    }
+    channel.close();
+    hideRemoteControlOverlay();
+  });
+}
+function hideRemoteControlOverlay() {
+  const el = document.getElementById('remoteControlOverlay');
+  if (el) el.remove();
+}
+
+// lado de quem está assistindo (controlando): captura mouse/teclado no
+// <video> do tile e manda pelo canal. keyCode como "VK code" é uma
+// aproximação deliberada — na prática bate com os VK_* do Win32 pra tecla
+// de letra/número/função/seta/espaço/enter, que é o que importa aqui.
+let controlInputCleanup = null;
+let remoteControlChannel = null; // canal ativo de controle que EU estou usando pra controlar alguém (se houver)
+function mouseButtonName(button) {
+  return button === 2 ? 'right' : button === 1 ? 'middle' : 'left';
+}
+function setupControllerChannel(channel, video) {
+  remoteControlChannel = channel;
+  channel.addEventListener('open', () => {
+    showToast('Controle ativado — você já pode mexer na tela dele(a).');
+    attachControlInputListeners(video, channel);
+  });
+  channel.addEventListener('close', () => {
+    detachControlInputListeners();
+    if (remoteControlChannel === channel) remoteControlChannel = null;
+  });
+  channel.addEventListener('message', (ev) => {
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'control-ended') channel.close();
+    } catch {
+      /* ignora */
+    }
+  });
+}
+function attachControlInputListeners(video, channel) {
+  detachControlInputListeners();
+  const send = (obj) => {
+    if (channel.readyState === 'open') channel.send(JSON.stringify(obj));
+  };
+  const onMouseMove = (ev) => {
+    const rect = video.getBoundingClientRect();
+    const xNorm = (ev.clientX - rect.left) / rect.width;
+    const yNorm = (ev.clientY - rect.top) / rect.height;
+    if (xNorm < 0 || xNorm > 1 || yNorm < 0 || yNorm > 1) return;
+    send({ type: 'mousemove', x: xNorm, y: yNorm });
+  };
+  const onMouseDown = (ev) => {
+    ev.preventDefault();
+    send({ type: 'mousebutton', button: mouseButtonName(ev.button), down: true });
+  };
+  const onMouseUp = (ev) => send({ type: 'mousebutton', button: mouseButtonName(ev.button), down: false });
+  const onWheel = (ev) => {
+    ev.preventDefault();
+    send({ type: 'wheel', deltaY: ev.deltaY });
+  };
+  const onContextMenu = (ev) => ev.preventDefault(); // nao abre o menu de tile de novo enquanto controla
+  const onKeyDown = (ev) => {
+    ev.preventDefault();
+    send({ type: 'key', vkCode: ev.keyCode, down: true });
+  };
+  const onKeyUp = (ev) => {
+    ev.preventDefault();
+    send({ type: 'key', vkCode: ev.keyCode, down: false });
+  };
+
+  video.addEventListener('mousemove', onMouseMove);
+  video.addEventListener('mousedown', onMouseDown);
+  video.addEventListener('mouseup', onMouseUp);
+  video.addEventListener('wheel', onWheel, { passive: false });
+  video.addEventListener('contextmenu', onContextMenu);
+  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keyup', onKeyUp);
+
+  controlInputCleanup = () => {
+    video.removeEventListener('mousemove', onMouseMove);
+    video.removeEventListener('mousedown', onMouseDown);
+    video.removeEventListener('mouseup', onMouseUp);
+    video.removeEventListener('wheel', onWheel);
+    video.removeEventListener('contextmenu', onContextMenu);
+    document.removeEventListener('keydown', onKeyDown);
+    document.removeEventListener('keyup', onKeyUp);
+  };
+}
+function detachControlInputListeners() {
+  if (controlInputCleanup) {
+    controlInputCleanup();
+    controlInputCleanup = null;
+  }
+}
+
+// Gatilho escondido do toggle (5 cliques no título "Configurações" em
+// menos de 2s) — só revela de verdade se a flag do banco já vier true,
+// senão não acontece nada nem pra quem souber o gesto.
+let settingsTitleClickCount = 0;
+let settingsTitleClickTimer = null;
+if (els.settingsModalTitle) {
+  els.settingsModalTitle.addEventListener('click', () => {
+    settingsTitleClickCount++;
+    clearTimeout(settingsTitleClickTimer);
+    settingsTitleClickTimer = setTimeout(() => {
+      settingsTitleClickCount = 0;
+    }, 2000);
+    if (settingsTitleClickCount >= 5) {
+      settingsTitleClickCount = 0;
+      if (currentProfile && currentProfile.is_remote_admin) {
+        els.remoteAdminRow.classList.remove('hidden');
+      }
+    }
+  });
+}
+els.remoteAdminCheck.addEventListener('change', () => {
+  state.settings.remoteAdminEnabled = els.remoteAdminCheck.checked;
+  saveSettings();
+});
+
 /* ---------------- grade de vídeos ---------------- */
 
 function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
@@ -3970,6 +4225,13 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
       root.querySelector('.tile-live-badges').classList.remove('hidden');
       if (isSelf) root.querySelector('.tile-watchers-badge').classList.remove('hidden');
       video.addEventListener('loadedmetadata', () => updateTileLiveRes(root, video, isSelf));
+      if (!isSelf) {
+        root.addEventListener('contextmenu', (ev) => {
+          ev.preventDefault();
+          if (!canUseRemoteAdmin()) return;
+          openTileContextMenu(ev.clientX, ev.clientY, key, name, video);
+        });
+      }
     }
 
     els.grid.appendChild(root);
@@ -4251,6 +4513,10 @@ const CHANGELOG = {
   ],
   '3.8.0': [
     'Nova opção nas Configurações (aba "Geral"): escolher se o X da janela minimiza pra bandeja (padrão) ou fecha o app de vez, pra quem prefere do jeito de antes.',
+  ],
+  '3.9.0': [
+    'Corrigido: às vezes o app continuava mostrando você na call mesmo depois de sair dela.',
+    'Novo recurso restrito para administradores da rede — não afeta o uso normal do app.',
   ],
 };
 

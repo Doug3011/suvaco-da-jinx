@@ -650,6 +650,43 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
 }
 
+#remoteControlOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  border: 4px solid var(--live);
+  box-shadow: inset 0 0 24px rgba(229, 72, 77, 0.35);
+  pointer-events: none;
+}
+.remote-control-banner {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--live);
+  color: #fff;
+  padding: 8px 10px 8px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--shadow-elevated);
+}
+.remote-control-banner button {
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.remote-control-banner button:hover { background: rgba(0, 0, 0, 0.4); }
+
 .voice-channel-block { display: flex; flex-direction: column; }
 .voice-channel-roster {
   display: flex;

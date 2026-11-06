@@ -1,20 +1,24 @@
 // Edge Function: lê um bug_reports pelo id, manda um e-mail pro
-// desenvolvedor (via Gmail SMTP com senha de app) com a descrição e o print
-// anexado (se tiver), e marca email_sent_at no registro.
+// desenvolvedor (via Resend) com a descrição e o print anexado (se tiver),
+// e marca email_sent_at no registro.
 //
-// Segredos necessários (Dashboard > Edge Functions > send-bug-report > Secrets,
+// Segredo necessário (Dashboard > Edge Functions > send-bug-report > Secrets,
 // ou "supabase secrets set" se usar a CLI):
-//   GMAIL_USER          -> o Gmail que vai ENVIAR o e-mail (precisa ter
-//                           verificação em 2 etapas ligada pra gerar senha de app)
-//   GMAIL_APP_PASSWORD  -> a senha de app de 16 caracteres gerada em
-//                           myaccount.google.com/apppasswords
+//   RESEND_API_KEY  -> a API key gerada em resend.com (começa com "re_")
 // SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY já existem automaticamente em
 // toda Edge Function, não precisa configurar.
+//
+// Observação sobre o remetente: sem verificar um domínio próprio no Resend,
+// só dá pra mandar usando o remetente de teste deles (onboarding@resend.dev)
+// — e, no plano grátis sem domínio verificado, o Resend só entrega pro
+// e-mail da conta que criou a API key. Se DEST_EMAIL abaixo não for esse
+// e-mail, o envio vai falhar com erro 403 do Resend (visível nos Logs da
+// function) até você verificar um domínio em resend.com/domains.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts';
 
 const DEST_EMAIL = 'gilbertodinossaro01@gmail.com';
+const FROM_EMAIL = 'Suvaco da Jinx <onboarding@resend.dev>';
 
 Deno.serve(async (req) => {
   try {
@@ -37,35 +41,20 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'report não encontrado' }), { status: 404 });
     }
 
-    const attachments: { filename: string; content: Uint8Array; encoding: 'binary' }[] = [];
+    const attachments: { filename: string; content: string }[] = [];
     if (report.screenshot_path) {
       const { data: file, error: dlErr } = await supabase.storage
         .from('bug-reports')
         .download(report.screenshot_path);
       if (!dlErr && file) {
-        attachments.push({
-          filename: 'print.jpg',
-          content: new Uint8Array(await file.arrayBuffer()),
-          encoding: 'binary',
-        });
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let binary = '';
+        for (const b of bytes) binary += String.fromCharCode(b);
+        attachments.push({ filename: 'print.jpg', content: btoa(binary) });
       }
     }
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: 'smtp.gmail.com',
-        port: 465,
-        tls: true,
-        auth: {
-          username: Deno.env.get('GMAIL_USER')!,
-          password: Deno.env.get('GMAIL_APP_PASSWORD')!,
-        },
-      },
-    });
-
     const body = [
-      'Novo bug report no Suvaco da Jinx',
-      '',
       `De: ${report.reporter_name || 'desconhecido'}`,
       `Versão do app: ${report.app_version || '?'}`,
       `Plataforma: ${report.platform || '?'}`,
@@ -75,14 +64,24 @@ Deno.serve(async (req) => {
       report.description || '(sem descrição)',
     ].join('\n');
 
-    await client.send({
-      from: Deno.env.get('GMAIL_USER')!,
-      to: DEST_EMAIL,
-      subject: `[Suvaco da Jinx] Bug report de ${report.reporter_name || 'alguém'}`,
-      content: body,
-      attachments,
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: FROM_EMAIL,
+        to: [DEST_EMAIL],
+        subject: `[Suvaco da Jinx] Bug report de ${report.reporter_name || 'alguém'}`,
+        text: body,
+        attachments,
+      }),
     });
-    await client.close();
+    if (!resendRes.ok) {
+      const errText = await resendRes.text();
+      throw new Error(`Resend falhou (${resendRes.status}): ${errText}`);
+    }
 
     await supabase
       .from('bug_reports')

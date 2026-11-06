@@ -5,7 +5,7 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, ipcMain, desktopCapturer, session, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, session, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
 // Tira a borda que o Windows desenha em volta de uma JANELA sendo
@@ -46,7 +46,10 @@ autoUpdater.on('update-downloaded', (info) => {
         cancelId: 1,
       })
       .then(({ response }) => {
-        if (response === 0) autoUpdater.quitAndInstall();
+        if (response === 0) {
+          isQuitting = true;
+          autoUpdater.quitAndInstall();
+        }
       });
   }
 });
@@ -67,6 +70,8 @@ require(path.join(__dirname, '..', 'server', 'main.cjs'));
 const PORT = Number(process.env.TELA_PORT) || 47400;
 
 let mainWindow = null;
+let tray = null;
+let isQuitting = false;
 const captureHandles = new Map(); // handle -> true (só controle local)
 
 function createMainWindow() {
@@ -84,6 +89,43 @@ function createMainWindow() {
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+  // Fechar com o X não encerra o app (igual Discord) — só esconde a janela,
+  // pra não derrubar chamada/transmissão em andamento. Só sai de verdade
+  // pelo "Sair" da bandeja ou pelo fluxo de atualização (isQuitting=true).
+  mainWindow.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
+}
+
+function createTray() {
+  const iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
+  tray = new Tray(nativeImage.createFromPath(iconPath));
+  tray.setToolTip('Suvaco da Jinx');
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Abrir',
+      click: () => {
+        mainWindow.show();
+        mainWindow.focus();
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Sair',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      },
+    },
+  ]);
+  tray.setContextMenu(menu);
+  tray.on('double-click', () => {
+    mainWindow.show();
+    mainWindow.focus();
   });
 }
 
@@ -186,12 +228,20 @@ app.whenReady().then(() => {
   ipcMain.handle('native:available', () => !!nativeAddon);
 
   ipcMain.handle('app:getVersion', () => app.getVersion());
-  ipcMain.handle('app:quitAndInstall', () => autoUpdater.quitAndInstall());
+  ipcMain.handle('app:quitAndInstall', () => {
+    isQuitting = true;
+    return autoUpdater.quitAndInstall();
+  });
 
   createMainWindow();
+  createTray();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    else {
+      mainWindow.show();
+      mainWindow.focus();
+    }
   });
 
   if (app.isPackaged) {
@@ -202,5 +252,8 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  // A janela nunca é de fato destruída ao fechar (ver mainWindow.on('close')
+  // acima) — só escondida, com a bandeja mantendo o app vivo. Isso só
+  // dispara mesmo quando isQuitting já é true (Sair da bandeja, ou update).
+  if (process.platform !== 'darwin' && isQuitting) app.quit();
 });

@@ -157,11 +157,8 @@ const els = {
   focusBtn: document.getElementById('focusBtn'),
   grid: document.getElementById('grid'),
   emptyHint: document.getElementById('emptyHint'),
-  appAudioPanel: document.getElementById('appAudioPanel'),
   appAudioList: document.getElementById('appAudioList'),
   leaveCallBtn: document.getElementById('leaveCallBtn'),
-  appAudioToggle: document.getElementById('appAudioToggle'),
-  appAudioBody: document.getElementById('appAudioBody'),
   refreshAppsBtn: document.getElementById('refreshAppsBtn'),
   settingsBtn: document.getElementById('settingsBtn'),
   settingsModal: document.getElementById('settingsModal'),
@@ -792,6 +789,7 @@ function openSettingsModal() {
   els.settingsModal.classList.remove('hidden');
   populateDeviceSelects();
   renderPermMuteList();
+  refreshAppList();
 }
 function closeSettingsModal() {
   els.settingsModal.classList.add('hidden');
@@ -878,7 +876,13 @@ function applyBandwidthLimit(pc) {
     for (const enc of params.encodings) {
       if (kbps) enc.maxBitrate = kbps * 1000;
       else delete enc.maxBitrate;
+      enc.maxFramerate = state.settings.fps;
     }
+    // Prioriza manter o FPS configurado em vez de degradar quadros pra
+    // preservar resolução quando a rede/CPU aperta — o padrão do browser
+    // é o contrário (degrada FPS primeiro), o que é ruim pra quem tá
+    // transmitindo jogo e já configurou um FPS alvo baixo de propósito.
+    params.degradationPreference = 'maintain-framerate';
     sender.setParameters(params).catch(() => {
       /* alguns navegadores recusam mudar parâmetros antes da negociação terminar; a próxima chamada tenta de novo */
     });
@@ -1091,8 +1095,7 @@ function teardownAppAudio() {
   }
   appAudio.groups.clear();
   if (appAudio.ctx) { appAudio.ctx.close(); appAudio.ctx = null; appAudio.destination = null; }
-  els.appAudioPanel.classList.add('hidden');
-  els.appAudioList.innerHTML = '';
+  els.appAudioList.innerHTML = '<p class="hint">Só aparece enquanto você está compartilhando a tela.</p>';
 }
 
 els.refreshAppsBtn.addEventListener('click', refreshAppList);
@@ -1442,12 +1445,59 @@ function joinGlobalPresence() {
   globalPresenceChannel = rt;
 }
 
+// Camada de segurança pro "às vezes fulano não aparece online": o socket do
+// Realtime caindo e reconectando (PC voltando do sono, troca de rede, app
+// minimizado na bandeja por um tempo) às vezes não re-anuncia a presença de
+// verdade pros outros, mesmo com o canal tecnicamente "inscrito" de novo —
+// em vez de confiar só no evento 'sync', reforça com um re-track periódico
+// e reage na hora quando o socket volta a abrir.
+const PRESENCE_REFRESH_MS = 20000;
+
+function retrackGlobalPresence() {
+  if (globalPresenceChannel) globalPresenceChannel.track({});
+}
+function retrackServerPresence() {
+  if (serverPresenceChannel) {
+    serverPresenceChannel.track({
+      name: currentProfile ? currentProfile.display_name : 'Convidado',
+      avatar: currentProfile ? currentProfile.avatar_url : null,
+    });
+  }
+}
+let presenceRefreshTimer = null;
+function startPresenceRefreshLoop() {
+  if (presenceRefreshTimer) return;
+  presenceRefreshTimer = setInterval(() => {
+    retrackGlobalPresence();
+    retrackServerPresence();
+  }, PRESENCE_REFRESH_MS);
+}
+startPresenceRefreshLoop();
+// Essa versão do cliente Realtime não expõe onOpen/onClose público — usa o
+// próprio heartbeat do socket (dispara a cada ciclo, inclusive logo após
+// reconectar) como gatilho pra reanunciar presença sem esperar o intervalo.
+if (window.supabaseClient.realtime && typeof window.supabaseClient.realtime.onHeartbeat === 'function') {
+  window.supabaseClient.realtime.onHeartbeat(() => {
+    retrackGlobalPresence();
+    retrackServerPresence();
+    renderFriendsPanels();
+    renderMemberSidebar();
+  });
+}
+
 /* ---------------- mensagens diretas ----------------
    Decalque quase 1:1 do canal de texto (fetch inicial + postgres_changes),
    so' que filtrando por par de usuários em vez de channel_id. */
 
+// Mensagens consecutivas do mesmo autor, dentro dessa janela, agrupam
+// visualmente (sem repetir avatar/nome) — mesmo critério usado no chat
+// de canal de texto e nas mensagens diretas.
+const MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000;
+
 let activeDmPeerId = null;
 let dmRealtime = null;
+let dmLastAuthorId = null;
+let dmLastAt = null;
 
 function renderDmSidebar() {
   // o cabecalho (#activeServerName) ja' diz "Mensagens diretas" aqui -
@@ -1481,9 +1531,15 @@ function renderDmMessage(row) {
   const name = isSelf ? (currentProfile ? currentProfile.display_name : 'Você') : friend ? friend.name : 'Convidado';
   const avatar = isSelf ? currentProfile && currentProfile.avatar_url : friend && friend.avatar;
   const time = new Date(row.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const createdAt = new Date(row.created_at);
+  const authorId = isSelf ? currentUser.id : otherId;
+  const grouped =
+    dmLastAuthorId === authorId && dmLastAt && createdAt - dmLastAt < MESSAGE_GROUP_WINDOW_MS;
+  dmLastAuthorId = authorId;
+  dmLastAt = createdAt;
 
   const wrap = document.createElement('div');
-  wrap.className = 'chat-msg' + (isSelf ? ' self' : '');
+  wrap.className = 'chat-msg' + (isSelf ? ' self' : '') + (grouped ? ' chat-msg-grouped' : '');
   wrap.innerHTML = `
     <img class="chat-msg-avatar" src="${avatar || DEFAULT_AVATAR}" alt="" />
     <div class="chat-msg-body">
@@ -1508,6 +1564,8 @@ async function openDm(friendId) {
   els.dmPeerName.textContent = friend ? friend.name : 'Mensagem direta';
   els.dmPeerAvatar.src = (friend && friend.avatar) || DEFAULT_AVATAR;
   els.dmMessages.innerHTML = '';
+  dmLastAuthorId = null;
+  dmLastAt = null;
   renderDmSidebarIfHome();
   showMainPanel('dm');
 
@@ -1987,6 +2045,8 @@ function openChannel(channel) {
 
 let activeTextChannel = null;
 let textChannelRealtime = null;
+let textChannelLastAuthorId = null;
+let textChannelLastAt = null;
 const profileCache = new Map(); // userId -> {display_name, avatar_url}
 
 async function getProfileCached(userId) {
@@ -2006,9 +2066,16 @@ function renderTextChannelMessage(row, authorProfile) {
   const name = authorProfile ? authorProfile.display_name : 'Convidado';
   const avatar = authorProfile && authorProfile.avatar_url ? authorProfile.avatar_url : DEFAULT_AVATAR;
   const time = new Date(row.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const createdAt = new Date(row.created_at);
+  const grouped =
+    textChannelLastAuthorId === row.author_id &&
+    textChannelLastAt &&
+    createdAt - textChannelLastAt < MESSAGE_GROUP_WINDOW_MS;
+  textChannelLastAuthorId = row.author_id;
+  textChannelLastAt = createdAt;
 
   const wrap = document.createElement('div');
-  wrap.className = 'chat-msg' + (isSelf ? ' self' : '');
+  wrap.className = 'chat-msg' + (isSelf ? ' self' : '') + (grouped ? ' chat-msg-grouped' : '');
   wrap.innerHTML = `
     <img class="chat-msg-avatar" src="${avatar}" alt="" />
     <div class="chat-msg-body">
@@ -2027,11 +2094,41 @@ function renderTextChannelMessage(row, authorProfile) {
   }
 }
 
+function renderTextChannelWelcome(channel) {
+  const wrap = document.createElement('div');
+  wrap.className = 'channel-welcome';
+  wrap.innerHTML = `
+    <div class="channel-welcome-icon">#</div>
+    <h2>Bem-vindo ao #${escapeHtml(channel.name)}!</h2>
+    <p>Esse é o começo do canal. Chama a galera e puxa assunto.</p>
+    <div class="channel-welcome-actions">
+      <button type="button" class="ghost" data-action="invite">Convidar amigos</button>
+      <button type="button" class="ghost" data-action="join-call">Entrar na call</button>
+      <button type="button" class="ghost" data-action="share-screen">Transmitir tela</button>
+    </div>
+  `;
+  wrap.querySelector('[data-action="invite"]').addEventListener('click', copyServerInviteCode);
+  wrap.querySelector('[data-action="join-call"]').addEventListener('click', () => {
+    const voiceChannel = activeChannels.find((c) => c.type === 'voice');
+    if (voiceChannel) joinVoiceChannel(voiceChannel);
+  });
+  wrap.querySelector('[data-action="share-screen"]').addEventListener('click', () => {
+    const voiceChannel = activeChannels.find((c) => c.type === 'voice');
+    if (!voiceChannel) return;
+    joinVoiceChannel(voiceChannel);
+    setTimeout(() => startScreenShare(), 400);
+  });
+  return wrap;
+}
+
 async function openTextChannel(channel) {
   activeTextChannel = channel;
   renderChannelList();
   els.textChannelName.textContent = channel.name;
   els.textChannelMessages.innerHTML = '';
+  els.textChannelMessages.appendChild(renderTextChannelWelcome(channel));
+  textChannelLastAuthorId = null;
+  textChannelLastAt = null;
   showMainPanel('text');
 
   const { data, error } = await window.supabaseClient
@@ -2243,12 +2340,7 @@ function showToast(message, duration = 2500) {
   toastTimer = setTimeout(() => els.toast.classList.add('hidden'), duration);
 }
 
-els.appAudioToggle.addEventListener('click', () => {
-  els.appAudioBody.classList.toggle('collapsed');
-  els.appAudioToggle.classList.toggle('open', !els.appAudioBody.classList.contains('collapsed'));
-});
-
-els.inviteBtn.addEventListener('click', async () => {
+async function copyServerInviteCode() {
   const server = myServers.find((s) => s.id === activeServerId);
   if (!server) return;
   try {
@@ -2257,7 +2349,8 @@ els.inviteBtn.addEventListener('click', async () => {
   } catch {
     showToast(`Código de convite: ${server.invite_code}`);
   }
-});
+}
+els.inviteBtn.addEventListener('click', copyServerInviteCode);
 
 function leaveRoom() {
   stopScreenShare();
@@ -2501,6 +2594,11 @@ async function startScreenShare() {
     return; // usuário cancelou o seletor de tela
   }
   state.screen.displayStream = display;
+  // 'motion' avisa o encoder do Chromium pra priorizar fluidez/FPS sobre
+  // nitidez de detalhe estático — o padrão do browser pra captura de tela
+  // otimiza pra texto parado, que é o oposto do que se quer transmitindo jogo.
+  const screenVideoTrack = display.getVideoTracks()[0];
+  if (screenVideoTrack) screenVideoTrack.contentHint = 'motion';
   // Precisa vir antes do bloco abaixo: refreshAppList() só roda se
   // state.screen.sharing já for true (senão o painel de áudio por app fica
   // vazio até alguém clicar em "Atualizar lista" manualmente).
@@ -2514,7 +2612,6 @@ async function startScreenShare() {
   if (isElectron) {
     ensureAudioGraph();
     initAudioChunkRouter();
-    els.appAudioPanel.classList.remove('hidden');
     await refreshAppList();
     const mixedAudioTrack = appAudio.destination.stream.getAudioTracks()[0];
     state.screen.localTracks = [...display.getVideoTracks(), mixedAudioTrack];
@@ -3286,6 +3383,7 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
     els.grid.appendChild(root);
     tile = { root, video, isSelf };
     state.tiles.set(key, tile);
+    updateGridTileSize();
   }
   tile.root.querySelector('.tile-identity strong').textContent = name;
   tile.root.querySelector('.tile-identity img').src = avatar || DEFAULT_AVATAR;
@@ -3300,6 +3398,30 @@ function removeTile(key) {
   tile.root.remove();
   state.tiles.delete(key);
   updateFocusBar();
+  updateGridTileSize();
+}
+
+// Com muitas transmissões simultâneas, tiles de 320px mínimo empilhavam
+// crescendo sem limite (ficava feio/ilegível). Encolhe o tamanho mínimo
+// conforme a contagem de tiles com vídeo real sobe (exclui tiles audioOnly
+// de mic, que não entram na grade visual).
+function visibleTileCount() {
+  let n = 0;
+  for (const tile of state.tiles.values()) {
+    if (!tile.audioOnly) n++;
+  }
+  return n;
+}
+
+function updateGridTileSize() {
+  const count = visibleTileCount();
+  let min;
+  if (count <= 2) min = 480;
+  else if (count <= 4) min = 360;
+  else if (count <= 9) min = 260;
+  else if (count <= 16) min = 200;
+  else min = 160;
+  els.grid.style.setProperty('--tile-min', `${min}px`);
 }
 
 /* ---------------- tela cheia (uma ou várias transmissões juntas) ---------------- */
@@ -3477,6 +3599,18 @@ const CHANGELOG = {
   '3.2.2': [
     'Corrigido bug real nas chamadas/transmissões: qualquer oscilação normal de rede (bem comum, principalmente sem um servidor TURN ainda) derrubava a transmissão na hora e não tentava voltar sozinha — agora o app espera alguns segundos pra ver se reconecta antes de desistir de verdade, e quem transmite agora também tenta reconectar ativamente em vez de ficar transmitindo pro vazio.',
   ],
+  '3.3.0': [
+    // REMOVER este item e o suporte a prefixo "!!BIG!!" em checkWhatsNew() depois da v3.5.0 — piada interna, 3 versões só.
+    '!!BIG!!Atualização para proibir sophias',
+    'Corrigido bug de presença: às vezes alguém não aparecia online pros outros mesmo estando com o app aberto — agora a presença se reanuncia sozinha periodicamente, não depende só do evento inicial.',
+    'Cores mais vivas em todo o app — o visual tava muito apagado, agora o roxo/violeta do tema e os brilhos ficaram bem mais vivos.',
+    'Transmissões simultâneas demais faziam os tiles de vídeo empilharem crescendo sem limite — agora eles encolhem automaticamente conforme a quantidade sobe.',
+    'Sidebar de membros mais estreita, liberando espaço de tela.',
+    'Painel "Áudio por app" saiu da sala e agora vive só nas Configurações (aba "Apps mutados"), junto com a lista de mute permanente.',
+    'Transmissão de tela mais leve: prioriza manter o FPS configurado (bom pra quem tá jogando) em vez de travar quadros, e o encoder agora sabe que é conteúdo em movimento.',
+    'Fechar o app no X agora só minimiza pra bandeja (igual Discord) — ele continua rodando em segundo plano, sem derrubar chamada/transmissão. Sair de vez é pelo menu da bandeja.',
+    'Chat de texto com cara nova: mensagens em bolha, agrupamento de mensagens seguidas da mesma pessoa, e um cabeçalho de boas-vindas em cada canal com atalhos (Convidar amigos / Entrar na call / Transmitir tela).',
+  ],
 };
 
 const LAST_SEEN_VERSION_KEY = 'tela-radmin:last-seen-version';
@@ -3526,7 +3660,13 @@ async function checkWhatsNew() {
       (v) => `
     <div class="whats-new-version-block">
       <span class="version-tag">v${v}</span>
-      <ul>${CHANGELOG[v].map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+      <ul>${CHANGELOG[v]
+        .map((item) => {
+          const isBig = item.startsWith('!!BIG!!');
+          const text = escapeHtml(isBig ? item.slice(7) : item);
+          return `<li class="${isBig ? 'whats-new-highlight' : ''}">${text}</li>`;
+        })
+        .join('')}</ul>
     </div>`,
     )
     .join('');

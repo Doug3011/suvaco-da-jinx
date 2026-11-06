@@ -207,21 +207,6 @@
           </div>
         </div>
 
-        <!-- barra lateral direita: so' aparece quando tem audio por app pra controlar -->
-        <aside id="sidebar" class="room-sidebar">
-          <div id="appAudioPanel" class="sidebar-section hidden">
-            <button type="button" id="appAudioToggle" class="sidebar-section-toggle">
-              <span>Áudio por app</span>
-              <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-            </button>
-            <div id="appAudioBody" class="sidebar-section-body collapsed">
-              <div class="app-audio-header">
-                <button id="refreshAppsBtn" class="ghost" type="button">Atualizar lista</button>
-              </div>
-              <div id="appAudioList" class="app-audio-list"></div>
-            </div>
-          </div>
-        </aside>
       </div>
 
       <!-- dock flutuante: seus controles de transmissão -->
@@ -501,6 +486,16 @@
           <p class="settings-hint">Resolução/fps mais baixos deixam a transmissão mais leve pro seu PC — importante se for jogar enquanto transmite. Se a transmissão andar travando pros seus amigos, tenta um limite de banda mais baixo — geralmente resolve melhor que baixar a resolução. "Esconder o cursor" evita o mouse aparecer fixo/fantasma em jogos que escondem a mira de verdade (ex: Valorant) — só vale pra próxima vez que começar a compartilhar.</p>
         </div>
         <div class="settings-tab-panel" data-panel="apps">
+          <div class="sidebar-section-title">Nesta sessão</div>
+          <div class="app-audio-header">
+            <button id="refreshAppsBtn" class="ghost" type="button">Atualizar lista</button>
+          </div>
+          <div id="appAudioList" class="app-audio-list">
+            <p class="hint">Só aparece enquanto você está compartilhando a tela.</p>
+          </div>
+          <p class="settings-hint">Muta/desmuta o áudio de um app só pra esta sessão de transmissão.</p>
+
+          <div class="divider-line"><span>sempre mutar</span></div>
           <div class="app-audio-header">
             <button id="refreshPermMuteBtn" class="ghost" type="button">Atualizar lista</button>
           </div>

@@ -7,20 +7,20 @@
   --bg-sidebar: #15171d;
   --bg-main: #1c1f27;
   --border: #2c313c;
-  --text: #eef0f4;
-  --muted: #8a90a0;
-  --accent: #5b8cff;
-  --accent-2: #8a5bff;
-  --accent-hover: #6f9aff;
+  --text: #f3f4fa;
+  --muted: #9298ad;
+  --accent: #7c6bff;
+  --accent-2: #b14aff;
+  --accent-hover: #9586ff;
   --accent-gradient: linear-gradient(135deg, var(--accent), var(--accent-2));
-  --danger: #ef5a5a;
-  --danger-hover: #ff6f6f;
-  --online: #3bd671;
+  --danger: #ff4848;
+  --danger-hover: #ff6363;
+  --online: #2fe879;
   --radius-lg: 16px;
   --radius-md: 10px;
   --radius-sm: 8px;
   --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.45);
-  --shadow-glow: 0 8px 24px rgba(91, 140, 255, 0.35);
+  --shadow-glow: 0 8px 28px rgba(124, 107, 255, 0.5);
 }
 
 * { box-sizing: border-box; }
@@ -57,7 +57,7 @@ svg { display: block; }
   height: 520px;
   border-radius: 50%;
   filter: blur(90px);
-  opacity: 0.16;
+  opacity: 0.26;
 }
 .bg-decor::before { top: -180px; left: -180px; background: var(--accent); }
 .bg-decor::after { bottom: -200px; right: -160px; background: var(--accent-2); }
@@ -209,7 +209,7 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 }
 
 .member-sidebar {
-  width: 240px;
+  width: 200px;
   flex-shrink: 0;
   background: var(--bg-sidebar);
   border-left: 1px solid var(--border);
@@ -391,12 +391,19 @@ button.primary:hover { filter: brightness(1.08); }
   font-size: 11px;
   font-weight: 600;
   color: var(--accent);
-  background: rgba(91, 140, 255, 0.12);
+  background: rgba(124, 107, 255, 0.18);
   border-radius: 999px;
   padding: 2px 10px;
 }
 .whats-new-version-block ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 .whats-new-version-block li { font-size: 13px; color: var(--text); }
+.whats-new-version-block li.whats-new-highlight {
+  list-style: none;
+  margin-left: -18px;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent);
+}
 #whatsNewOkBtn { width: 100%; }
 
 .update-ready-detail { margin: 0 0 20px; font-size: 13px; color: var(--muted); text-align: center; }
@@ -406,7 +413,7 @@ button.primary:hover { filter: brightness(1.08); }
 .profile-banner-edit { display: block; position: relative; cursor: pointer; }
 .profile-banner {
   height: 130px;
-  background: linear-gradient(135deg, var(--accent), #8a5bff);
+  background: var(--accent-gradient);
   background-size: cover;
   background-position: center;
 }
@@ -846,22 +853,6 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   flex-direction: column;
   gap: 14px;
 }
-/* so' existe espaço reservado pra barra lateral quando tem algo de verdade
-   pra mostrar nela (hoje: audio por app, durante compartilhamento de uma
-   janela específica) - sem isso, ficava uma faixa vazia à direita. */
-.room-sidebar:has(#appAudioPanel.hidden) { display: none; }
-
-.room-sidebar {
-  width: 320px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding-left: 16px;
-  border-left: 1px solid var(--border);
-  min-height: 0;
-}
-
 .sidebar-section-title {
   font-size: 12px;
   font-weight: 600;
@@ -904,6 +895,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   box-shadow: 0 0 6px var(--online);
 }
 .person-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.person-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
 .name-row { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .name-row .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .host-crown { display: inline-flex; color: #ffc93b; flex-shrink: 0; }
@@ -979,13 +971,37 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   padding-right: 2px;
 }
 .chat-msg { display: flex; gap: 8px; }
+.chat-msg + .chat-msg { margin-top: 2px; }
+.chat-msg + .chat-msg.chat-msg-grouped { margin-top: -6px; }
 .chat-msg-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; margin-top: 2px; }
 .chat-msg-body { flex: 1; min-width: 0; }
 .chat-msg-meta { display: flex; align-items: baseline; gap: 6px; margin-bottom: 2px; }
 .chat-msg-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
 .chat-msg.self .chat-msg-name { color: var(--accent); }
 .chat-msg-time { font-size: 11px; color: var(--muted); }
-.chat-msg-text { font-size: 13px; color: var(--text); line-height: 1.4; word-break: break-word; white-space: pre-wrap; }
+.chat-msg-text {
+  display: inline-block;
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 7px 12px;
+  transition: background 0.1s ease;
+}
+.chat-msg:hover .chat-msg-text { background: var(--border); }
+.chat-msg.self .chat-msg-text {
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel-2));
+}
+.chat-msg.self:hover .chat-msg-text {
+  background: color-mix(in srgb, var(--accent) 28%, var(--panel-2));
+}
+
+/* mensagem consecutiva do mesmo autor (<5min): sem repetir avatar/nome */
+.chat-msg-grouped .chat-msg-avatar { visibility: hidden; }
+.chat-msg-grouped .chat-msg-meta { display: none; }
 .chat-msg-attachments { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
 .chat-attachment-img {
   max-width: 100%;
@@ -1043,6 +1059,25 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 }
 .chat-pending-remove svg { width: 10px; height: 10px; }
 
+.channel-welcome { padding: 20px 4px 28px; }
+.channel-welcome-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--panel-2);
+  margin-bottom: 10px;
+}
+.channel-welcome h2 { margin: 0 0 4px; font-size: 22px; }
+.channel-welcome p { margin: 0 0 14px; color: var(--muted); font-size: 13.5px; }
+.channel-welcome-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.channel-welcome-actions button { font-size: 12.5px; padding: 8px 14px; }
+
 .chat-input-row { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .chat-input-row input[type="text"] {
   flex: 1;
@@ -1095,7 +1130,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   transition: background 0.15s ease;
 }
 .soundboard-row:hover { background: var(--border); }
-.soundboard-row.playing { background: rgba(91, 140, 255, 0.15); border: 1px solid var(--accent); }
+.soundboard-row.playing { background: rgba(124, 107, 255, 0.2); border: 1px solid var(--accent); }
 .soundboard-row.playing .soundboard-row-play { color: var(--danger); }
 .soundboard-row-play { display: flex; color: var(--accent); flex-shrink: 0; }
 .soundboard-row-play svg { width: 16px; height: 16px; }
@@ -1131,10 +1166,13 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 
 .grid {
   flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-min, 320px), 1fr));
+  grid-auto-rows: 1fr;
   gap: 14px;
   align-content: start;
+  overflow-y: auto;
 }
 
 .empty-state {
@@ -1157,7 +1195,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(91, 140, 255, 0.18), rgba(138, 91, 255, 0.08));
+  background: radial-gradient(circle, rgba(124, 107, 255, 0.28), rgba(177, 74, 255, 0.12));
   margin-bottom: 6px;
 }
 .empty-state-icon svg { width: 32px; height: 32px; opacity: 0.85; color: var(--accent); }
@@ -1320,7 +1358,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   color: var(--muted);
   cursor: pointer;
 }
-.dock-toggle:has(input:checked) { background: rgba(91, 140, 255, 0.16); color: var(--accent); }
+.dock-toggle:has(input:checked) { background: rgba(124, 107, 255, 0.2); color: var(--accent); }
 .dock-toggle svg { width: 18px; height: 18px; }
 .dock-toggle span { display: none; }
 .dock-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }

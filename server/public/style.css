@@ -650,6 +650,31 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
 }
 
+.voice-channel-block { display: flex; flex-direction: column; }
+.voice-channel-roster {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 10px 6px 34px;
+}
+.voice-channel-person { display: flex; align-items: center; gap: 8px; }
+.voice-channel-person-avatar { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.voice-channel-person-name { font-size: 12.5px; font-weight: 600; color: var(--text-2); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voice-channel-live-badge {
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--live);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+}
+.voice-channel-empty-hint { margin-left: auto; font-size: 11px; color: var(--dim); font-weight: 500; }
+
 .channel-members {
   display: flex;
   flex-direction: column;
@@ -887,6 +912,9 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 /* ---------- lista de pessoas (barra lateral) ---------- */
 
 .people-list { display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto; flex-shrink: 0; }
+/* lista de membros do servidor: usa a sidebar inteira em vez de um teto
+   fixo de 220px — quem rola é a própria .member-sidebar (overflow-y: auto). */
+.member-sidebar .people-list { max-height: none; overflow-y: visible; flex-shrink: 1; }
 .people-list-row {
   display: flex;
   align-items: center;

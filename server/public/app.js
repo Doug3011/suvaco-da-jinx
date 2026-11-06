@@ -1613,6 +1613,7 @@ if (window.supabaseClient.realtime && typeof window.supabaseClient.realtime.onHe
     retrackServerPresence();
     renderFriendsPanels();
     renderMemberSidebar();
+    renderChannelList();
   });
 }
 
@@ -2077,7 +2078,10 @@ function joinServerPresence(serverId) {
   const rt = window.supabaseClient.channel(`server:${serverId}`, {
     config: { presence: { key: myId } },
   });
-  rt.on('presence', { event: 'sync' }, () => renderMemberSidebar());
+  rt.on('presence', { event: 'sync' }, () => {
+    renderMemberSidebar();
+    renderChannelList();
+  });
   rt.subscribe((status) => {
     if (status === 'SUBSCRIBED') {
       rt.track({
@@ -2287,9 +2291,51 @@ function renderChannelList() {
       row.className = 'channel-row' + (isActive ? ' active-channel' : '');
       row.innerHTML = `${group.icon}<span>${escapeHtml(channel.name)}</span>`;
       row.addEventListener('click', () => openChannel(channel));
-      els.roomGrid.appendChild(row);
+
+      if (channel.type === 'voice') {
+        const occupants = voiceChannelOccupants(channel.id);
+        const block = document.createElement('div');
+        block.className = 'voice-channel-block';
+        block.appendChild(row);
+        if (occupants.length) {
+          const roster = document.createElement('div');
+          roster.className = 'voice-channel-roster';
+          for (const person of occupants) {
+            const personRow = document.createElement('div');
+            personRow.className = 'voice-channel-person';
+            personRow.innerHTML = `
+              <img class="voice-channel-person-avatar" src="${person.avatar || DEFAULT_AVATAR}" alt="" />
+              <span class="voice-channel-person-name">${escapeHtml(person.name || 'Convidado')}</span>
+              ${person.sharingScreen ? '<span class="voice-channel-live-badge">AO VIVO</span>' : ''}
+            `;
+            roster.appendChild(personRow);
+          }
+          block.appendChild(roster);
+        } else {
+          row.innerHTML += '<span class="voice-channel-empty-hint">vazio</span>';
+        }
+        els.roomGrid.appendChild(block);
+      } else {
+        els.roomGrid.appendChild(row);
+      }
     }
   }
+}
+
+// Quem está em qual canal de voz, pra mostrar o mini-roster com badge "AO
+// VIVO" direto na lista de canais (sem precisar entrar na call pra ver) —
+// lê da presença POR SERVIDOR (todo mundo olhando o servidor assina, não
+// só quem já está na call), estendida com voiceChannelId/sharingScreen em
+// retrackServerPresence().
+function voiceChannelOccupants(channelId) {
+  if (!serverPresenceChannel) return [];
+  const state_ = serverPresenceChannel.presenceState();
+  const out = [];
+  for (const metas of Object.values(state_)) {
+    const meta = metas[0];
+    if (meta && meta.voiceChannelId === channelId) out.push(meta);
+  }
+  return out;
 }
 
 /* ---------------- modal: criar canal ---------------- */
@@ -4185,6 +4231,10 @@ const CHANGELOG = {
   ],
   '3.6.1': [
     'Corrigido bug sério: abrir o app enquanto ele já estava rodando escondido na bandeja (depois de fechar com o X) fazia o app travar na hora com um erro de porta ocupada. Agora, se você tentar abrir de novo, ele só mostra a janela que já estava aberta.',
+  ],
+  '3.7.0': [
+    'Agora dá pra ver quem está numa call e quem está transmitindo direto na lista de canais de voz (com selo "AO VIVO"), sem precisar entrar na call pra saber.',
+    'Lista de membros do servidor não fica mais travada numa altura pequena com rolagem própria — agora usa o espaço da tela inteiro.',
   ],
 };
 

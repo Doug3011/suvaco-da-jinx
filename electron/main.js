@@ -5,6 +5,7 @@
 'use strict';
 
 const path = require('node:path');
+const fs = require('node:fs');
 const { app, BrowserWindow, ipcMain, desktopCapturer, session, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
@@ -93,6 +94,20 @@ let tray = null;
 let isQuitting = false;
 const captureHandles = new Map(); // handle -> true (só controle local)
 
+// Preferência de "ao fechar com o X": 'tray' (padrão, minimiza — não derruba
+// call/transmissão) ou 'quit' (fecha de vez, igual antes da v3.3.0). Guardada
+// num arquivo próprio (não dá pra ler o localStorage do renderer aqui no
+// processo principal) — lida uma vez na subida, atualizada via IPC sempre
+// que a pessoa muda a opção nas Configurações.
+const closeBehaviorFile = path.join(app.getPath('userData'), 'close-behavior.json');
+let closeBehavior = 'tray';
+try {
+  const saved = JSON.parse(fs.readFileSync(closeBehaviorFile, 'utf8'));
+  if (saved && (saved.closeBehavior === 'tray' || saved.closeBehavior === 'quit')) closeBehavior = saved.closeBehavior;
+} catch {
+  /* primeira vez rodando (arquivo não existe ainda) ou arquivo corrompido — fica no padrão */
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -109,11 +124,11 @@ function createMainWindow() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
-  // Fechar com o X não encerra o app (igual Discord) — só esconde a janela,
-  // pra não derrubar chamada/transmissão em andamento. Só sai de verdade
-  // pelo "Sair" da bandeja ou pelo fluxo de atualização (isQuitting=true).
+  // Fechar com o X: por padrão só esconde a janela (igual Discord), pra não
+  // derrubar chamada/transmissão em andamento — mas a pessoa pode trocar
+  // pra "fechar de vez" nas Configurações (closeBehavior, ver acima).
   mainWindow.on('close', (event) => {
-    if (!isQuitting) {
+    if (!isQuitting && closeBehavior === 'tray') {
       event.preventDefault();
       mainWindow.hide();
     }
@@ -252,6 +267,17 @@ app.whenReady().then(() => {
     return autoUpdater.quitAndInstall();
   });
 
+  ipcMain.handle('app:getCloseBehavior', () => closeBehavior);
+  ipcMain.handle('app:setCloseBehavior', (_event, value) => {
+    if (value !== 'tray' && value !== 'quit') return;
+    closeBehavior = value;
+    try {
+      fs.writeFileSync(closeBehaviorFile, JSON.stringify({ closeBehavior }));
+    } catch (err) {
+      console.warn('Não deu pra salvar a preferência de fechar o app:', err.message);
+    }
+  });
+
   createMainWindow();
   createTray();
 
@@ -271,8 +297,10 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  // A janela nunca é de fato destruída ao fechar (ver mainWindow.on('close')
-  // acima) — só escondida, com a bandeja mantendo o app vivo. Isso só
-  // dispara mesmo quando isQuitting já é true (Sair da bandeja, ou update).
-  if (process.platform !== 'darwin' && isQuitting) app.quit();
+  // Com closeBehavior='tray' (padrão) a janela nunca é de fato destruída ao
+  // fechar (ver mainWindow.on('close') acima) — só escondida, com a bandeja
+  // mantendo o app vivo; isso só dispara quando isQuitting já é true (Sair
+  // da bandeja, ou update). Com closeBehavior='quit', a janela fecha de
+  // verdade e cai aqui direto — também precisa encerrar o app de vez.
+  if (process.platform !== 'darwin' && (isQuitting || closeBehavior === 'quit')) app.quit();
 });

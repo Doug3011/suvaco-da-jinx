@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('telaNative', {
     return () => ipcRenderer.removeListener('native:audioChunk', listener);
   },
   quitAndInstall: () => ipcRenderer.invoke('app:quitAndInstall'),
+  getCloseBehavior: () => ipcRenderer.invoke('app:getCloseBehavior'),
+  setCloseBehavior: (value) => ipcRenderer.invoke('app:setCloseBehavior', value),
   onUpdateReady: (cb) => {
     const listener = (_event, payload) => cb(payload);
     ipcRenderer.on('update:ready', listener);

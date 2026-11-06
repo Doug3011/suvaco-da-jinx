@@ -416,6 +416,7 @@
           <button type="button" class="settings-tab" data-tab="stream" data-title="Transmissão" data-sub="Qualidade e fps da tela compartilhada"><span class="settings-tab-icon">TR</span>Transmissão</button>
           <button type="button" class="settings-tab" data-tab="apps" data-title="Apps mutados" data-sub="Apps que não entram no áudio da transmissão"><span class="settings-tab-icon">AM</span>Apps mutados</button>
           <button type="button" class="settings-tab" data-tab="chat" data-title="Chat" data-sub="Notificações e aparência das mensagens"><span class="settings-tab-icon">CH</span>Chat</button>
+          <button type="button" class="settings-tab" data-tab="general" data-title="Geral" data-sub="Comportamento do app"><span class="settings-tab-icon">GE</span>Geral</button>
         </div>
       </nav>
 
@@ -576,6 +577,16 @@
             </div>
             <p class="settings-hint">Avisa com uma notificação do Windows quando chegar mensagem nova no chat e o app não estiver em foco. Desliga aqui se não quiser ser incomodado.</p>
             <p class="settings-hint">As mensagens dos canais de texto ficam salvas de verdade (sobrevivem a fechar e abrir o app, e a todo mundo sair e voltar). Anexo de arquivo no chat ainda não existe nessa versão nova — só texto por enquanto.</p>
+          </div>
+          <div class="settings-tab-panel" data-panel="general">
+            <label class="settings-row">
+              <span>Ao clicar no X da janela</span>
+              <select id="closeBehaviorSelect">
+                <option value="tray">Minimizar pra bandeja (recomendado)</option>
+                <option value="quit">Fechar o app de vez</option>
+              </select>
+            </label>
+            <p class="settings-hint">"Minimizar pra bandeja" deixa o app rodando escondido perto do relógio — sua call/transmissão continua mesmo com a janela fechada, e dá pra reabrir clicando no ícone dele ali. "Fechar de vez" encerra o app completamente, igual antes — se você abrir de novo, começa do zero.</p>
           </div>
         </div>
 

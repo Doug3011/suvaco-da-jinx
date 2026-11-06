@@ -152,6 +152,7 @@ const els = {
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
   chatNotificationsCheck: document.getElementById('chatNotificationsCheck'),
+  closeBehaviorSelect: document.getElementById('closeBehaviorSelect'),
   micMuteBtn: document.getElementById('micMuteBtn'),
   cameraBtn: document.getElementById('cameraBtn'),
   shareBtn: document.getElementById('shareBtn'),
@@ -901,11 +902,23 @@ els.bandwidthSelect.addEventListener('change', () => {
   for (const pc of state.broadcastPcs.values()) applyBandwidthLimit(pc);
 });
 
+async function initCloseBehaviorSelect() {
+  if (!isElectron) {
+    els.closeBehaviorSelect.disabled = true;
+    return;
+  }
+  els.closeBehaviorSelect.value = await window.telaNative.getCloseBehavior();
+}
+els.closeBehaviorSelect.addEventListener('change', () => {
+  if (isElectron) window.telaNative.setCloseBehavior(els.closeBehaviorSelect.value);
+});
+
 function openSettingsModal() {
   els.settingsModal.classList.remove('hidden');
   populateDeviceSelects();
   renderPermMuteList();
   refreshAppList();
+  initCloseBehaviorSelect();
   const activeTab = document.querySelector('.settings-tab.active');
   if (activeTab && activeTab.dataset.tab === 'devices') startCameraPreview();
 }
@@ -4235,6 +4248,9 @@ const CHANGELOG = {
   '3.7.0': [
     'Agora dá pra ver quem está numa call e quem está transmitindo direto na lista de canais de voz (com selo "AO VIVO"), sem precisar entrar na call pra saber.',
     'Lista de membros do servidor não fica mais travada numa altura pequena com rolagem própria — agora usa o espaço da tela inteiro.',
+  ],
+  '3.8.0': [
+    'Nova opção nas Configurações (aba "Geral"): escolher se o X da janela minimiza pra bandeja (padrão) ou fecha o app de vez, pra quem prefere do jeito de antes.',
   ],
 };
 

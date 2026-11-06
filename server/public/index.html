@@ -614,6 +614,12 @@
                 <span class="switch-track"><span class="switch-knob"></span></span>
               </label>
             </div>
+            <div class="divider-line"><span>suporte</span></div>
+            <button type="button" id="openBugReportBtn" class="ghost btn-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M8 11H3M21 11h-5M8 15H4M20 15h-4M9 6V4a3 3 0 0 1 6 0v2"/></svg>
+              <span>Reportar um bug</span>
+            </button>
+            <p class="settings-hint">Descreve o que aconteceu e, se quiser, anexa um print — vai direto pra quem desenvolve o app.</p>
           </div>
         </div>
 
@@ -648,6 +654,32 @@
       </div>
       <div id="soundboardList" class="soundboard-list"></div>
       <p class="settings-hint">Clica num som pra tocar na call — todo mundo ouve. O volume acima controla só o quanto VOCÊ escuta de volta, não afeta o volume pros outros. Os sons ficam salvos neste PC.</p>
+    </div>
+  </div>
+
+  <!-- reportar um bug: descrição + print opcional, manda pro Supabase e dispara e-mail -->
+  <div id="bugReportModal" class="modal-overlay hidden">
+    <div class="modal-card bug-report-modal">
+      <button type="button" id="bugReportModalClose" class="icon-btn ghost modal-close" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h2 class="settings-modal-title">Reportar um bug</h2>
+      <p class="settings-hint">O que aconteceu? O que você esperava que acontecesse em vez disso? Quanto mais detalhe, mais fácil de achar o problema.</p>
+      <textarea id="bugReportText" rows="5" placeholder="Descreve o bug aqui..."></textarea>
+      <div id="bugReportPreviewWrap" class="bug-report-preview hidden">
+        <img id="bugReportPreviewImg" alt="Print anexado" />
+        <button type="button" id="bugReportRemoveAttachBtn" class="icon-btn ghost" title="Remover print">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <button type="button" id="bugReportAttachBtn" class="ghost btn-with-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        <span>Anexar print</span>
+      </button>
+      <input type="file" id="bugReportFileInput" accept="image/*" class="hidden" />
+      <p class="settings-hint">Dica: dá pra colar um print direto com Ctrl+V na caixa de texto acima, sem precisar anexar arquivo.</p>
+      <p id="bugReportError" class="auth-error hidden"></p>
+      <button type="button" id="bugReportSendBtn" class="primary auth-submit-btn">Enviar</button>
     </div>
   </div>
 

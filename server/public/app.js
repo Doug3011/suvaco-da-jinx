@@ -159,6 +159,17 @@ const els = {
   voiceConnectedPanel: document.getElementById('voiceConnectedPanel'),
   voiceConnectedDetail: document.getElementById('voiceConnectedDetail'),
   closeBehaviorSelect: document.getElementById('closeBehaviorSelect'),
+  openBugReportBtn: document.getElementById('openBugReportBtn'),
+  bugReportModal: document.getElementById('bugReportModal'),
+  bugReportModalClose: document.getElementById('bugReportModalClose'),
+  bugReportText: document.getElementById('bugReportText'),
+  bugReportAttachBtn: document.getElementById('bugReportAttachBtn'),
+  bugReportFileInput: document.getElementById('bugReportFileInput'),
+  bugReportPreviewWrap: document.getElementById('bugReportPreviewWrap'),
+  bugReportPreviewImg: document.getElementById('bugReportPreviewImg'),
+  bugReportRemoveAttachBtn: document.getElementById('bugReportRemoveAttachBtn'),
+  bugReportError: document.getElementById('bugReportError'),
+  bugReportSendBtn: document.getElementById('bugReportSendBtn'),
   remoteAdminRow: document.getElementById('remoteAdminRow'),
   remoteAdminCheck: document.getElementById('remoteAdminCheck'),
   settingsModalTitle: document.querySelector('.settings-modal-title'),
@@ -448,6 +459,129 @@ async function uploadProfileImage(blob, folder) {
   const { data } = window.supabaseClient.storage.from('avatars').getPublicUrl(path);
   return data.publicUrl;
 }
+
+/* ---------------- reportar um bug (descrição + print opcional por e-mail) ----------------
+   Diferente de resizeImageToBlob (que recorta em quadrado pra avatar), aqui só limita o
+   lado maior pra não mandar um print de 4K inteiro — mantém a proporção original, sem
+   cortar nada, porque o print é pra servir de evidência, não de preview bonitinho. */
+function resizeScreenshotToBlob(file, maxDim) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(img.src);
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Falha ao processar imagem'))), 'image/jpeg', 0.85);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+let bugReportAttachment = null;
+
+function openBugReportModal() {
+  els.bugReportText.value = '';
+  bugReportAttachment = null;
+  els.bugReportPreviewWrap.classList.add('hidden');
+  els.bugReportError.classList.add('hidden');
+  els.bugReportModal.classList.remove('hidden');
+  els.bugReportText.focus();
+}
+function closeBugReportModal() {
+  els.bugReportModal.classList.add('hidden');
+}
+els.openBugReportBtn.addEventListener('click', openBugReportModal);
+els.bugReportModalClose.addEventListener('click', closeBugReportModal);
+
+function setBugReportAttachment(file) {
+  bugReportAttachment = file;
+  els.bugReportPreviewImg.src = URL.createObjectURL(file);
+  els.bugReportPreviewWrap.classList.remove('hidden');
+}
+els.bugReportAttachBtn.addEventListener('click', () => els.bugReportFileInput.click());
+els.bugReportFileInput.addEventListener('change', () => {
+  const file = els.bugReportFileInput.files[0];
+  if (file) setBugReportAttachment(file);
+  els.bugReportFileInput.value = '';
+});
+els.bugReportRemoveAttachBtn.addEventListener('click', () => {
+  bugReportAttachment = null;
+  els.bugReportPreviewWrap.classList.add('hidden');
+});
+els.bugReportText.addEventListener('paste', (ev) => {
+  const items = ev.clipboardData && ev.clipboardData.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type && item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) {
+        setBugReportAttachment(file);
+        ev.preventDefault();
+      }
+      break;
+    }
+  }
+});
+
+els.bugReportSendBtn.addEventListener('click', async () => {
+  const description = els.bugReportText.value.trim();
+  if (!description) {
+    els.bugReportError.textContent = 'Descreve o que aconteceu antes de enviar.';
+    els.bugReportError.classList.remove('hidden');
+    return;
+  }
+  els.bugReportError.classList.add('hidden');
+  els.bugReportSendBtn.disabled = true;
+  els.bugReportSendBtn.textContent = 'Enviando...';
+  try {
+    let screenshotPath = null;
+    if (bugReportAttachment) {
+      const resized = await resizeScreenshotToBlob(bugReportAttachment, 1600).catch(() => bugReportAttachment);
+      screenshotPath = `${currentUser.id}/${Date.now()}.jpg`;
+      const { error: upErr } = await window.supabaseClient.storage
+        .from('bug-reports')
+        .upload(screenshotPath, resized, { contentType: 'image/jpeg' });
+      if (upErr) throw upErr;
+    }
+    const appVersion = await fetchCurrentVersion();
+    const { data: row, error: insertErr } = await window.supabaseClient
+      .from('bug_reports')
+      .insert({
+        reporter_id: currentUser.id,
+        reporter_name: state.myName,
+        description,
+        app_version: appVersion,
+        platform: isElectron ? 'electron' : 'web',
+        screenshot_path: screenshotPath,
+      })
+      .select('id')
+      .single();
+    if (insertErr) throw insertErr;
+
+    // o insert já valeu (fica salvo no banco mesmo se o e-mail falhar) - a
+    // function só dispara o aviso por e-mail, não é o que garante o registro.
+    const { error: fnErr } = await window.supabaseClient.functions.invoke('send-bug-report', {
+      body: { reportId: row.id },
+    });
+    if (fnErr) console.error('send-bug-report falhou (o report já foi salvo mesmo assim):', fnErr);
+
+    showToast('Bug reportado, obrigado por avisar!');
+    closeBugReportModal();
+  } catch (err) {
+    console.error('bug report falhou', err);
+    els.bugReportError.textContent = 'Não consegui enviar agora. Tenta de novo em alguns segundos.';
+    els.bugReportError.classList.remove('hidden');
+  } finally {
+    els.bugReportSendBtn.disabled = false;
+    els.bugReportSendBtn.textContent = 'Enviar';
+  }
+});
 
 /* ---------------- modal de perfil (editar o seu / ver o de alguém) ---------------- */
 
@@ -4998,6 +5132,9 @@ const CHANGELOG = {
     'Convite por link OU por código: agora dá pra escolher qual mandar (link abre o app sozinho; código continua como alternativa se o link der algum problema).',
     'Barra de controles da call com visual mais claro: câmera/compartilhar tela acendem com o gradiente quando estão ligados, e o microfone fica vermelho suave só quando está mutado.',
     'Página de convite por link já está no ar.',
+  ],
+  '3.11.0': [
+    'Novo: "Reportar um bug" nas Configurações (aba Geral) — descreve o problema, cola ou anexa um print, e manda direto pra quem desenvolve o app.',
   ],
 };
 

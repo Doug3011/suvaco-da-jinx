@@ -103,6 +103,9 @@ const els = {
   dmMessages: document.getElementById('dmMessages'),
   dmForm: document.getElementById('dmForm'),
   dmTextInput: document.getElementById('dmTextInput'),
+  dmAttachBtn: document.getElementById('dmAttachBtn'),
+  dmFileInput: document.getElementById('dmFileInput'),
+  dmPendingAttachments: document.getElementById('dmPendingAttachments'),
   serverRail: document.getElementById('serverRail'),
   addServerBtn: document.getElementById('addServerBtn'),
   activeServerName: document.getElementById('activeServerName'),
@@ -143,6 +146,9 @@ const els = {
   textChannelMessages: document.getElementById('textChannelMessages'),
   textChannelForm: document.getElementById('textChannelForm'),
   textChannelTextInput: document.getElementById('textChannelTextInput'),
+  textChannelAttachBtn: document.getElementById('textChannelAttachBtn'),
+  textChannelFileInput: document.getElementById('textChannelFileInput'),
+  textChannelPendingAttachments: document.getElementById('textChannelPendingAttachments'),
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
   chatNotificationsCheck: document.getElementById('chatNotificationsCheck'),
@@ -240,6 +246,12 @@ function showAuthScreen() {
     window.supabaseClient.removeChannel(globalPresenceChannel);
     globalPresenceChannel = null;
   }
+  if (attachmentSignalChannel) {
+    window.supabaseClient.removeChannel(attachmentSignalChannel);
+    attachmentSignalChannel = null;
+  }
+  for (const entry of outboundAttachChannels.values()) window.supabaseClient.removeChannel(entry.channel);
+  outboundAttachChannels.clear();
   closeDm();
   friendsCache = [];
   pendingIncoming = [];
@@ -269,6 +281,7 @@ function showLobbyScreen() {
   }
   fetchMyServers();
   joinGlobalPresence();
+  joinAttachmentSignaling();
   fetchFriends();
 }
 
@@ -1597,6 +1610,273 @@ if (window.supabaseClient.realtime && typeof window.supabaseClient.realtime.onHe
   });
 }
 
+/* ---------------- anexos de chat via P2P (sem Storage) ----------------
+   O arquivo nunca sobe pro Supabase - só metadados leves na mensagem
+   (attachment_id/name/mime/size/kind). Quem manda guarda o Blob em
+   memória (localAttachments); quem recebe, ao clicar, abre um
+   RTCPeerConnection ad-hoc com DataChannel direto com quem mandou,
+   usando um canal de sinalização pessoal por usuário (attach-signal:<id>)
+   independente de estarem na mesma call - channel/DM só precisa dos
+   dois estarem logados, não na mesma sala de voz. Por isso o arquivo só
+   fica disponível enquanto quem mandou está com o app aberto. */
+
+const localAttachments = new Map(); // attachment_id -> Blob
+const attachmentTransfers = new Map(); // attachment_id -> { pc, role, onError }
+const ATTACH_CHUNK_SIZE = 16 * 1024;
+const ATTACH_MAX_BYTES = 100 * 1024 * 1024;
+
+let attachmentSignalChannel = null;
+function joinAttachmentSignaling() {
+  if (attachmentSignalChannel || !currentUser) return;
+  const rt = window.supabaseClient.channel(`attach-signal:${currentUser.id}`);
+  rt.on('broadcast', { event: 'signal' }, ({ payload }) => onAttachmentSignal(payload.from, payload.data));
+  rt.subscribe();
+  attachmentSignalChannel = rt;
+}
+
+// Um canal de saída por destinatário, reaproveitado entre chamadas (em vez
+// de inscrever um canal novo a cada sinal) - resolve dois problemas: (1)
+// overhead/latência de reinscrever pra cada candidato ICE, e (2) uma corrida
+// real onde sinais mandados em sequência (oferta, depois vários ICE) podiam
+// chegar FORA de ordem no destino (cada um inscrevendo seu próprio canal
+// novo, sem garantia de qual termina de inscrever primeiro) - um ICE
+// candidate chegando antes da oferta ser processada era descartado em
+// silêncio (o `pc` daquela transferência ainda nem existia).
+const outboundAttachChannels = new Map(); // userId -> { channel, ready, queue }
+function sendAttachmentSignal(toUserId, data) {
+  let entry = outboundAttachChannels.get(toUserId);
+  if (!entry) {
+    const channel = window.supabaseClient.channel(`attach-signal:${toUserId}`);
+    entry = { channel, ready: false, queue: [] };
+    outboundAttachChannels.set(toUserId, entry);
+    channel.subscribe((status) => {
+      if (status !== 'SUBSCRIBED') return;
+      entry.ready = true;
+      for (const payload of entry.queue) channel.send(payload);
+      entry.queue = [];
+    });
+  }
+  const payload = { type: 'broadcast', event: 'signal', payload: { from: currentUser.id, data } };
+  if (entry.ready) entry.channel.send(payload);
+  else entry.queue.push(payload);
+}
+
+function onAttachmentSignal(fromUserId, data) {
+  if (data.kind === 'attach-offer') {
+    const blob = localAttachments.get(data.attachmentId);
+    if (!blob) {
+      sendAttachmentSignal(fromUserId, { kind: 'attach-unavailable', attachmentId: data.attachmentId });
+      return;
+    }
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    attachmentTransfers.set(data.attachmentId, { pc, role: 'sender' });
+    pc.addEventListener('icecandidate', (ev) => {
+      if (ev.candidate) {
+        sendAttachmentSignal(fromUserId, { kind: 'attach-ice', attachmentId: data.attachmentId, candidate: ev.candidate.toJSON(), role: 'sender' });
+      }
+    });
+    pc.addEventListener('datachannel', (ev) => {
+      const dc = ev.channel;
+      dc.binaryType = 'arraybuffer';
+      dc.addEventListener('open', () => sendBlobOverChannel(dc, blob, () => setTimeout(() => pc.close(), 500)));
+    });
+    pc.setRemoteDescription(data.sdp)
+      .then(() => pc.createAnswer())
+      .then((answer) => pc.setLocalDescription(answer).then(() => {
+        sendAttachmentSignal(fromUserId, { kind: 'attach-answer', attachmentId: data.attachmentId, sdp: answer });
+      }))
+      .catch(() => attachmentTransfers.delete(data.attachmentId));
+  } else if (data.kind === 'attach-answer') {
+    const t = attachmentTransfers.get(data.attachmentId);
+    if (t) t.pc.setRemoteDescription(data.sdp).catch(() => {});
+  } else if (data.kind === 'attach-ice') {
+    const t = attachmentTransfers.get(data.attachmentId);
+    if (t && data.role !== t.role) t.pc.addIceCandidate(data.candidate).catch(() => {});
+  } else if (data.kind === 'attach-unavailable') {
+    const t = attachmentTransfers.get(data.attachmentId);
+    if (t && t.onError) t.onError('indisponível');
+    attachmentTransfers.delete(data.attachmentId);
+  }
+}
+
+function sendBlobOverChannel(dc, blob, onDone) {
+  blob.arrayBuffer().then((ab) => {
+    let offset = 0;
+    dc.bufferedAmountLowThreshold = 262144;
+    function sendMore() {
+      while (offset < ab.byteLength) {
+        if (dc.bufferedAmount > 1_000_000) {
+          dc.onbufferedamountlow = () => { dc.onbufferedamountlow = null; sendMore(); };
+          return;
+        }
+        const end = Math.min(offset + ATTACH_CHUNK_SIZE, ab.byteLength);
+        dc.send(ab.slice(offset, end));
+        offset = end;
+      }
+      dc.send(JSON.stringify({ type: 'end' }));
+      onDone();
+    }
+    sendMore();
+  });
+}
+
+// requestAttachment: baixa um anexo de quem mandou (fromUserId), com
+// progresso. onComplete recebe o Blob remontado; onError recebe um motivo
+// (ex: 'indisponível' se quem mandou não está online/offline no meio).
+function requestAttachment(attachmentId, fromUserId, mime, onProgress, onComplete, onError) {
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  const dc = pc.createDataChannel(`attach:${attachmentId}`);
+  dc.binaryType = 'arraybuffer';
+  const chunks = [];
+  let received = 0;
+  const timeout = setTimeout(() => {
+    attachmentTransfers.delete(attachmentId);
+    pc.close();
+    onError('tempo esgotado');
+  }, 20000);
+  dc.addEventListener('message', (ev) => {
+    if (typeof ev.data === 'string') {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type === 'end') {
+          clearTimeout(timeout);
+          attachmentTransfers.delete(attachmentId);
+          onComplete(new Blob(chunks, { type: mime }));
+          pc.close();
+        }
+      } catch { /* ignora mensagem de controle mal formada */ }
+      return;
+    }
+    chunks.push(ev.data);
+    received += ev.data.byteLength;
+    onProgress(received);
+  });
+  pc.addEventListener('icecandidate', (ev) => {
+    if (ev.candidate) {
+      sendAttachmentSignal(fromUserId, { kind: 'attach-ice', attachmentId, candidate: ev.candidate.toJSON(), role: 'requester' });
+    }
+  });
+  attachmentTransfers.set(attachmentId, {
+    pc,
+    role: 'requester',
+    onError: (reason) => { clearTimeout(timeout); onError(reason); },
+  });
+  pc.createOffer()
+    .then((offer) => pc.setLocalDescription(offer).then(() => {
+      sendAttachmentSignal(fromUserId, { kind: 'attach-offer', attachmentId, sdp: offer });
+    }))
+    .catch(() => { clearTimeout(timeout); onError('falha ao iniciar'); });
+}
+
+function classifyAttachmentKind(mime) {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('video/')) return 'video';
+  return 'file';
+}
+
+function formatAttachmentSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// imagem de anexo: comprime preservando proporção (diferente do
+// resizeImageToBlob dos avatares, que força um recorte quadrado) - só
+// reduz se já for maior que o teto, pra não re-comprimir imagem pequena à toa.
+function compressAttachmentImage(file, maxDim = 1600) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      if (scale === 1) { URL.revokeObjectURL(img.src); resolve(file); return; }
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(img.src);
+      canvas.toBlob((blob) => resolve(blob || file), 'image/jpeg', 0.85);
+    };
+    img.onerror = () => resolve(file);
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function isUserOnline(userId) {
+  return !!(globalPresenceChannel && globalPresenceChannel.presenceState()[userId]);
+}
+
+// Monta o bloco de anexo dentro de uma mensagem - placeholder clicável que
+// baixa sob demanda (P2P), com prévia inline pra imagem/vídeo depois de
+// baixado e link de "salvar" pra qualquer tipo.
+function renderAttachmentBlock(row, senderId) {
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-msg-attachments';
+  const sizeText = row.attachment_size ? formatAttachmentSize(row.attachment_size) : '';
+
+  function showIdle(labelOverride) {
+    wrap.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'chat-attachment-file';
+    btn.innerHTML = `${ICONS.file}<span>${escapeHtml(row.attachment_name || 'arquivo')}</span><span class="chat-attachment-size">${labelOverride || sizeText}</span>`;
+    btn.addEventListener('click', startDownload);
+    wrap.appendChild(btn);
+  }
+
+  function showResult(blob) {
+    wrap.innerHTML = '';
+    const url = URL.createObjectURL(blob);
+    if (row.attachment_kind === 'image') {
+      const img = document.createElement('img');
+      img.className = 'chat-attachment-img';
+      img.src = url;
+      img.alt = row.attachment_name || '';
+      img.addEventListener('click', () => window.open(url, '_blank'));
+      wrap.appendChild(img);
+    } else if (row.attachment_kind === 'video') {
+      const video = document.createElement('video');
+      video.src = url;
+      video.controls = true;
+      video.style.maxWidth = '100%';
+      video.style.borderRadius = 'var(--radius-sm)';
+      wrap.appendChild(video);
+    } else {
+      const a = document.createElement('a');
+      a.className = 'chat-attachment-file';
+      a.href = url;
+      a.download = row.attachment_name || 'arquivo';
+      a.innerHTML = `${ICONS.file}<span>${escapeHtml(row.attachment_name || 'arquivo')}</span><span class="chat-attachment-size">Salvar</span>`;
+      wrap.appendChild(a);
+    }
+  }
+
+  function startDownload() {
+    if (!isUserOnline(senderId)) {
+      showIdle('indisponível — offline');
+      return;
+    }
+    wrap.innerHTML = '';
+    const status = document.createElement('div');
+    status.className = 'chat-sending-status';
+    status.textContent = 'Baixando... 0%';
+    wrap.appendChild(status);
+    requestAttachment(
+      row.attachment_id,
+      senderId,
+      row.attachment_mime,
+      (received) => {
+        const pct = row.attachment_size ? Math.min(100, Math.round((received / row.attachment_size) * 100)) : 0;
+        status.textContent = `Baixando... ${pct}%`;
+      },
+      (blob) => showResult(blob),
+      () => showIdle('falha — tenta de novo'),
+    );
+  }
+
+  showIdle();
+  return wrap;
+}
+
 /* ---------------- mensagens diretas ----------------
    Decalque quase 1:1 do canal de texto (fetch inicial + postgres_changes),
    so' que filtrando por par de usuários em vez de channel_id. */
@@ -1659,9 +1939,10 @@ function renderDmMessage(row) {
         <span class="chat-msg-name">${escapeHtml(name)}</span>
         <span class="chat-msg-time">${time}</span>
       </div>
-      <div class="chat-msg-text">${escapeHtml(row.content)}</div>
+      ${row.content ? `<div class="chat-msg-text">${escapeHtml(row.content)}</div>` : ''}
     </div>
   `;
+  if (row.attachment_id) wrap.querySelector('.chat-msg-body').appendChild(renderAttachmentBlock(row, authorId));
   els.dmMessages.appendChild(wrap);
   els.dmMessages.scrollTop = els.dmMessages.scrollHeight;
 
@@ -1714,14 +1995,57 @@ function closeDm() {
   activeDmPeerId = null;
 }
 
+let dmPendingFile = null;
+function renderDmPendingAttachment() {
+  els.dmPendingAttachments.classList.toggle('hidden', !dmPendingFile);
+  if (!dmPendingFile) { els.dmPendingAttachments.innerHTML = ''; return; }
+  els.dmPendingAttachments.innerHTML = `
+    <span class="chat-pending-chip">
+      <span>${escapeHtml(dmPendingFile.name)}</span>
+      <span class="chat-pending-size">${formatAttachmentSize(dmPendingFile.size)}</span>
+      <button type="button" class="chat-pending-remove">${ICONS.close}</button>
+    </span>
+  `;
+  els.dmPendingAttachments.querySelector('.chat-pending-remove').addEventListener('click', () => {
+    dmPendingFile = null;
+    renderDmPendingAttachment();
+  });
+}
+els.dmAttachBtn.addEventListener('click', () => els.dmFileInput.click());
+els.dmFileInput.addEventListener('change', async () => {
+  const file = els.dmFileInput.files[0];
+  els.dmFileInput.value = '';
+  if (!file) return;
+  if (file.size > ATTACH_MAX_BYTES) {
+    showToast('Esse arquivo é maior que 100MB — escolhe um menor.', 3000);
+    return;
+  }
+  const kind = classifyAttachmentKind(file.type);
+  const blob = kind === 'image' ? await compressAttachmentImage(file) : file;
+  dmPendingFile = { id: crypto.randomUUID(), name: file.name, mime: file.type || 'application/octet-stream', size: blob.size, kind, blob };
+  renderDmPendingAttachment();
+});
+
 els.dmForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const content = els.dmTextInput.value.trim();
-  if (!content || !activeDmPeerId) return;
+  if ((!content && !dmPendingFile) || !activeDmPeerId) return;
   els.dmTextInput.value = '';
-  const { error } = await window.supabaseClient
-    .from('direct_messages')
-    .insert({ sender_id: currentUser.id, recipient_id: activeDmPeerId, content });
+  const pending = dmPendingFile;
+  dmPendingFile = null;
+  renderDmPendingAttachment();
+  const insertRow = { sender_id: currentUser.id, recipient_id: activeDmPeerId, content };
+  if (pending) {
+    localAttachments.set(pending.id, pending.blob);
+    Object.assign(insertRow, {
+      attachment_id: pending.id,
+      attachment_name: pending.name,
+      attachment_mime: pending.mime,
+      attachment_size: pending.size,
+      attachment_kind: pending.kind,
+    });
+  }
+  const { error } = await window.supabaseClient.from('direct_messages').insert(insertRow);
   if (error) {
     console.error('Erro ao enviar mensagem direta:', error);
     showToast('Não deu pra enviar a mensagem.', 2500);
@@ -2198,6 +2522,7 @@ function renderTextChannelMessage(row, authorProfile) {
       ${row.content ? `<div class="chat-msg-text">${escapeHtml(row.content)}</div>` : ''}
     </div>
   `;
+  if (row.attachment_id) wrap.querySelector('.chat-msg-body').appendChild(renderAttachmentBlock(row, row.author_id));
   els.textChannelMessages.appendChild(wrap);
   els.textChannelMessages.scrollTop = els.textChannelMessages.scrollHeight;
 
@@ -2280,14 +2605,57 @@ function closeTextChannel() {
   activeTextChannel = null;
 }
 
+let textChannelPendingFile = null;
+function renderTextChannelPendingAttachment() {
+  els.textChannelPendingAttachments.classList.toggle('hidden', !textChannelPendingFile);
+  if (!textChannelPendingFile) { els.textChannelPendingAttachments.innerHTML = ''; return; }
+  els.textChannelPendingAttachments.innerHTML = `
+    <span class="chat-pending-chip">
+      <span>${escapeHtml(textChannelPendingFile.name)}</span>
+      <span class="chat-pending-size">${formatAttachmentSize(textChannelPendingFile.size)}</span>
+      <button type="button" class="chat-pending-remove">${ICONS.close}</button>
+    </span>
+  `;
+  els.textChannelPendingAttachments.querySelector('.chat-pending-remove').addEventListener('click', () => {
+    textChannelPendingFile = null;
+    renderTextChannelPendingAttachment();
+  });
+}
+els.textChannelAttachBtn.addEventListener('click', () => els.textChannelFileInput.click());
+els.textChannelFileInput.addEventListener('change', async () => {
+  const file = els.textChannelFileInput.files[0];
+  els.textChannelFileInput.value = '';
+  if (!file) return;
+  if (file.size > ATTACH_MAX_BYTES) {
+    showToast('Esse arquivo é maior que 100MB — escolhe um menor.', 3000);
+    return;
+  }
+  const kind = classifyAttachmentKind(file.type);
+  const blob = kind === 'image' ? await compressAttachmentImage(file) : file;
+  textChannelPendingFile = { id: crypto.randomUUID(), name: file.name, mime: file.type || 'application/octet-stream', size: blob.size, kind, blob };
+  renderTextChannelPendingAttachment();
+});
+
 els.textChannelForm.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const content = els.textChannelTextInput.value.trim();
-  if (!content || !activeTextChannel) return;
+  if ((!content && !textChannelPendingFile) || !activeTextChannel) return;
   els.textChannelTextInput.value = '';
-  const { error } = await window.supabaseClient
-    .from('messages')
-    .insert({ channel_id: activeTextChannel.id, author_id: currentUser.id, content });
+  const pending = textChannelPendingFile;
+  textChannelPendingFile = null;
+  renderTextChannelPendingAttachment();
+  const insertRow = { channel_id: activeTextChannel.id, author_id: currentUser.id, content };
+  if (pending) {
+    localAttachments.set(pending.id, pending.blob);
+    Object.assign(insertRow, {
+      attachment_id: pending.id,
+      attachment_name: pending.name,
+      attachment_mime: pending.mime,
+      attachment_size: pending.size,
+      attachment_kind: pending.kind,
+    });
+  }
+  const { error } = await window.supabaseClient.from('messages').insert(insertRow);
   if (error) {
     console.error('Erro ao enviar mensagem:', error);
     showToast('Não deu pra enviar a mensagem.', 2500);
@@ -3779,7 +4147,6 @@ const CHANGELOG = {
     'Corrigido bug real nas chamadas/transmissões: qualquer oscilação normal de rede (bem comum, principalmente sem um servidor TURN ainda) derrubava a transmissão na hora e não tentava voltar sozinha — agora o app espera alguns segundos pra ver se reconecta antes de desistir de verdade, e quem transmite agora também tenta reconectar ativamente em vez de ficar transmitindo pro vazio.',
   ],
   '3.3.0': [
-    // REMOVER este item e o suporte a prefixo "!!BIG!!" em checkWhatsNew() depois da v3.5.0 — piada interna, 3 versões só.
     '!!BIG!!Atualização para proibir sophias',
     'Corrigido bug de presença: às vezes alguém não aparecia online pros outros mesmo estando com o app aberto — agora a presença se reanuncia sozinha periodicamente, não depende só do evento inicial.',
     'Cores mais vivas em todo o app — o visual tava muito apagado, agora o roxo/violeta do tema e os brilhos ficaram bem mais vivos.',
@@ -3800,6 +4167,9 @@ const CHANGELOG = {
   '3.5.0': [
     '!!BIG!!Atualização para proibir sophias',
     'Sala de chamada com visão de palco: quando alguém transmite a tela, ela vira o destaque grande (com selo "AO VIVO", resolução/fps e quantas pessoas estão assistindo) e todo mundo mais vira uma tira pequena embaixo — câmera sozinha não vira palco. Quando ninguém transmite, aparece um convite grande pra compartilhar a tela.',
+  ],
+  '3.6.0': [
+    'Agora dá pra mandar arquivo, foto e vídeo no chat (botão "+" do lado da mensagem) — sem pesar no banco: o arquivo fica só no seu PC e é entregue direto pra quem baixa, então só funciona enquanto você estiver com o app aberto.',
   ],
 };
 

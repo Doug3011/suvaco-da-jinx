@@ -135,7 +135,12 @@
           <div class="room-body">
             <div class="room-content text-channel-content">
               <div id="dmMessages" class="chat-messages text-channel-messages"></div>
+              <div id="dmPendingAttachments" class="chat-pending-attachments hidden"></div>
               <form id="dmForm" class="chat-input-row">
+                <button type="button" id="dmAttachBtn" class="icon-btn ghost" title="Anexar arquivo">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <input type="file" id="dmFileInput" class="hidden" />
                 <input type="text" id="dmTextInput" placeholder="Mandar mensagem..." maxlength="2000" autocomplete="off" />
                 <button type="submit" class="icon-btn primary" title="Enviar">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -157,7 +162,12 @@
           <div class="room-body">
             <div class="room-content text-channel-content">
               <div id="textChannelMessages" class="chat-messages text-channel-messages"></div>
+              <div id="textChannelPendingAttachments" class="chat-pending-attachments hidden"></div>
               <form id="textChannelForm" class="chat-input-row">
+                <button type="button" id="textChannelAttachBtn" class="icon-btn ghost" title="Anexar arquivo">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                </button>
+                <input type="file" id="textChannelFileInput" class="hidden" />
                 <input type="text" id="textChannelTextInput" placeholder="Mandar mensagem..." maxlength="2000" autocomplete="off" />
                 <button type="submit" class="icon-btn primary" title="Enviar">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>

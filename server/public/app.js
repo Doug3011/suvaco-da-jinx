@@ -1647,6 +1647,10 @@ function goHome() {
     window.supabaseClient.removeChannel(serverPresenceChannel);
     serverPresenceChannel = null;
   }
+  if (serverMembersRealtime) {
+    window.supabaseClient.removeChannel(serverMembersRealtime);
+    serverMembersRealtime = null;
+  }
   serverMembersCache = [];
   renderMemberSidebar();
   renderDmSidebar();
@@ -2522,12 +2526,17 @@ els.dmForm.addEventListener('submit', async (ev) => {
    arquivo P2P mais pra frente. */
 
 let serverPresenceChannel = null;
+let serverMembersRealtime = null;
 let serverMembersCache = [];
 
 function joinServerPresence(serverId) {
   if (serverPresenceChannel) {
     window.supabaseClient.removeChannel(serverPresenceChannel);
     serverPresenceChannel = null;
+  }
+  if (serverMembersRealtime) {
+    window.supabaseClient.removeChannel(serverMembersRealtime);
+    serverMembersRealtime = null;
   }
   const myId = currentUser.id;
   const rt = window.supabaseClient.channel(`server:${serverId}`, {
@@ -2547,6 +2556,24 @@ function joinServerPresence(serverId) {
   });
   serverPresenceChannel = rt;
   fetchServerMembers(serverId);
+
+  // escuta quem entra/sai de verdade no servidor (tabela server_members) -
+  // sem isso, quem JÁ estava com o servidor aberto nunca descobria que
+  // alguém novo entrou: a lista de membros (serverMembersCache) só era
+  // buscada uma vez, no momento de abrir o servidor, e nunca mais depois
+  // disso - a pessoa nova podia estar com a presença sincronizada
+  // corretamente por trás e mesmo assim nunca aparecer na lista, porque o
+  // cross-reference usa esse cache pra saber QUEM existe, não só quem tá
+  // online. Canal separado do de presença, mesmo motivo de sempre: uma
+  // falha aqui não pode derrubar a subscrição de presença junto.
+  serverMembersRealtime = window.supabaseClient
+    .channel(`server-members-changes:${serverId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'server_members', filter: `server_id=eq.${serverId}` },
+      () => fetchServerMembers(serverId),
+    )
+    .subscribe();
 }
 
 async function fetchServerMembers(serverId) {
@@ -5289,6 +5316,9 @@ const CHANGELOG = {
   '3.12.0': [
     'Novo: dá pra vincular um e-mail à sua conta (Configurações → Geral → "Vincular e-mail") — sem isso, trocar de computador ou reinstalar o app sempre cria uma conta do zero, perdendo amigos e servidores. Com o e-mail vinculado, dá pra entrar de novo na mesma conta de qualquer lugar.',
     'Login por e-mail não usa senha nem link — chega um código por e-mail, você digita no app e pronto.',
+  ],
+  '3.12.1': [
+    'Corrigido: a lista de quem está online no servidor (e quem está na call) não atualizava sozinha quando alguém novo entrava — só mostrava gente nova depois de sair e abrir o servidor de novo. Agora atualiza na hora.',
   ],
 };
 

@@ -3611,6 +3611,9 @@ const CHANGELOG = {
     'Fechar o app no X agora só minimiza pra bandeja (igual Discord) — ele continua rodando em segundo plano, sem derrubar chamada/transmissão. Sair de vez é pelo menu da bandeja.',
     'Chat de texto com cara nova: mensagens em bolha, agrupamento de mensagens seguidas da mesma pessoa, e um cabeçalho de boas-vindas em cada canal com atalhos (Convidar amigos / Entrar na call / Transmitir tela).',
   ],
+  '3.3.1': [
+    'Paleta de cores e fontes refeitas com valores exatos (visual mais "gaming", fontes Sora/Manrope) — ajuste fino de cima da leva de cores vivas da versão anterior.',
+  ],
 };
 
 const LAST_SEEN_VERSION_KEY = 'tela-radmin:last-seen-version';

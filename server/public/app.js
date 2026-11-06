@@ -138,6 +138,7 @@ const els = {
   serverSettingsSaveBtn: document.getElementById('serverSettingsSaveBtn'),
   serverSettingsInviteCode: document.getElementById('serverSettingsInviteCode'),
   serverSettingsCopyInviteBtn: document.getElementById('serverSettingsCopyInviteBtn'),
+  serverSettingsCopyInviteLinkBtn: document.getElementById('serverSettingsCopyInviteLinkBtn'),
   serverSettingsError: document.getElementById('serverSettingsError'),
   leaveServerBtn: document.getElementById('leaveServerBtn'),
   deleteServerBtn: document.getElementById('deleteServerBtn'),
@@ -2767,6 +2768,14 @@ function buildInviteLink(code) {
 
 els.serverSettingsCopyInviteBtn.addEventListener('click', async () => {
   try {
+    await navigator.clipboard.writeText(els.serverSettingsInviteCode.value);
+    showToast('Código de convite copiado!', 2000);
+  } catch {
+    /* clipboard sem permissão - o campo já mostra o código pra copiar na mão */
+  }
+});
+els.serverSettingsCopyInviteLinkBtn.addEventListener('click', async () => {
+  try {
     await navigator.clipboard.writeText(buildInviteLink(els.serverSettingsInviteCode.value));
     showToast('Link de convite copiado!', 2000);
   } catch {
@@ -3196,16 +3205,7 @@ if (isElectron && window.telaNative.onJoinByCode) {
   });
 }
 
-els.copyInviteBtn.addEventListener('click', async () => {
-  const server = myServers.find((s) => s.id === activeServerId);
-  if (!server) return;
-  try {
-    await navigator.clipboard.writeText(buildInviteLink(server.invite_code));
-    showToast('Link de convite copiado!', 2000);
-  } catch {
-    showToast(`Código: ${server.invite_code}`, 4000);
-  }
-});
+els.copyInviteBtn.addEventListener('click', copyServerInviteCode);
 
 /* ---------------- transporte: canal de voz via Supabase Realtime ----------------
    Cada canal de voz vira um Realtime Channel proprio (`voice:<channelId>`):
@@ -3328,15 +3328,58 @@ function showToast(message, duration = 2500) {
   toastTimer = setTimeout(() => els.toast.classList.add('hidden'), duration);
 }
 
-async function copyServerInviteCode() {
-  const server = myServers.find((s) => s.id === activeServerId);
-  if (!server) return;
+async function copyInviteLink(server) {
   try {
     await navigator.clipboard.writeText(buildInviteLink(server.invite_code));
     showToast('Link de convite copiado!');
   } catch {
     showToast(`Código de convite: ${server.invite_code}`);
   }
+}
+async function copyInviteCode(server) {
+  try {
+    await navigator.clipboard.writeText(server.invite_code);
+    showToast('Código de convite copiado!');
+  } catch {
+    showToast(`Código de convite: ${server.invite_code}`);
+  }
+}
+
+// Duas opções porque o link (via GitHub Pages) depende de internet estar
+// de pé do lado de quem recebe - se algo der errado com ele, o código cru
+// sempre funciona como alternativa (mesmo fluxo de sempre, "Entrar com código").
+function openInviteMenu(x, y) {
+  const server = myServers.find((s) => s.id === activeServerId);
+  if (!server) return;
+  openContextMenu(x, y, (menu) => {
+    const title = document.createElement('div');
+    title.className = 'context-menu-title';
+    title.textContent = 'Convidar pro servidor';
+    menu.appendChild(title);
+
+    const linkBtn = document.createElement('button');
+    linkBtn.type = 'button';
+    linkBtn.className = 'context-menu-action';
+    linkBtn.textContent = 'Copiar link de convite';
+    linkBtn.addEventListener('click', () => { closeContextMenu(); copyInviteLink(server); });
+    menu.appendChild(linkBtn);
+
+    const codeBtn = document.createElement('button');
+    codeBtn.type = 'button';
+    codeBtn.className = 'context-menu-action';
+    codeBtn.textContent = 'Copiar código de convite';
+    codeBtn.addEventListener('click', () => { closeContextMenu(); copyInviteCode(server); });
+    menu.appendChild(codeBtn);
+  });
+}
+
+function copyServerInviteCode(ev) {
+  const anchor = ev && ev.currentTarget && ev.currentTarget.getBoundingClientRect
+    ? ev.currentTarget.getBoundingClientRect()
+    : null;
+  const x = anchor ? anchor.left : (ev ? ev.clientX : window.innerWidth / 2);
+  const y = anchor ? anchor.bottom + 6 : (ev ? ev.clientY : window.innerHeight / 2);
+  openInviteMenu(x, y);
 }
 els.inviteBtn.addEventListener('click', copyServerInviteCode);
 
@@ -3658,8 +3701,7 @@ async function startScreenShare() {
   }
 
   setBtnLabel(els.shareBtn, 'Parar de compartilhar');
-  els.shareBtn.classList.remove('primary');
-  els.shareBtn.classList.add('danger');
+  els.shareBtn.classList.add('active');
 
   display.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
   state.screen.blackFrameStop = watchForBlackFrames(display.getVideoTracks()[0]);
@@ -3747,7 +3789,8 @@ function setMicMuteBtn(muted) {
   const text = muted ? 'Microfone mutado' : 'Mutar microfone';
   els.micMuteBtn.innerHTML = `${muted ? ICONS.micOff : ICONS.mic}<span>${text}</span>`;
   els.micMuteBtn.title = text;
-  els.micMuteBtn.classList.toggle('danger', muted);
+  els.micMuteBtn.classList.toggle('muted', muted);
+  els.micMuteBtn.classList.toggle('active', !muted);
 }
 
 els.micMuteBtn.addEventListener('click', () => {
@@ -4012,8 +4055,7 @@ function stopScreenShare() {
   if (!state.screen.sharing) return;
   state.screen.sharing = false;
   setBtnLabel(els.shareBtn, 'Compartilhar tela');
-  els.shareBtn.classList.remove('danger');
-  els.shareBtn.classList.add('primary');
+  els.shareBtn.classList.remove('active');
 
   if (state.screen.blackFrameStop) {
     state.screen.blackFrameStop();
@@ -4230,7 +4272,7 @@ async function startCameraShare() {
   state.camera.sharing = true;
 
   setBtnLabel(els.cameraBtn, 'Desligar câmera');
-  els.cameraBtn.classList.add('danger');
+  els.cameraBtn.classList.add('active');
 
   cam.getVideoTracks()[0].addEventListener('ended', stopCameraShare);
 
@@ -4243,7 +4285,7 @@ function stopCameraShare() {
   if (!state.camera.sharing) return;
   state.camera.sharing = false;
   setBtnLabel(els.cameraBtn, 'Câmera');
-  els.cameraBtn.classList.remove('danger');
+  els.cameraBtn.classList.remove('active');
 
   if (state.camera.camStream) {
     for (const t of state.camera.camStream.getTracks()) t.stop();
@@ -4951,6 +4993,11 @@ const CHANGELOG = {
     '"Visto há Xh" nos amigos offline.',
     'Painel "Voz conectada" mostra o canal e a latência (ms) mesmo navegando pra outro lugar do app.',
     'Lista de membros da sala de chamada agora mostra só quem está na call (com "AO VIVO" pra quem transmite) em vez da lista geral do servidor, com avisos de "tá vazio aqui" / "transmitindo sozinho?" quando fizer sentido.',
+  ],
+  '3.10.1': [
+    'Convite por link OU por código: agora dá pra escolher qual mandar (link abre o app sozinho; código continua como alternativa se o link der algum problema).',
+    'Barra de controles da call com visual mais claro: câmera/compartilhar tela acendem com o gradiente quando estão ligados, e o microfone fica vermelho suave só quando está mutado.',
+    'Página de convite por link já está no ar.',
   ],
 };
 

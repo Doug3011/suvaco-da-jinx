@@ -1650,8 +1650,15 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 }
 .dock-btn span { display: none; }
 .dock-btn svg { width: 18px; height: 18px; }
-.dock-btn.primary { background: var(--accent-gradient); border-color: transparent; }
-.dock-btn.primary:hover { filter: brightness(1.1); }
+/* estado "ligado"/ativo (câmera ligada, compartilhando tela, mic ativo) */
+.dock-btn.primary,
+.dock-btn.active { background: var(--accent-gradient); border-color: transparent; }
+.dock-btn.primary:hover,
+.dock-btn.active:hover { filter: brightness(1.1); }
+/* estado "mudo"/alerta suave (mic mutado) — diferente do vermelho sólido
+   do botão de sair, mais discreto, igual a referência visual */
+.dock-btn.muted { background: var(--danger-soft-bg); border-color: transparent; color: var(--danger-soft-text); }
+.dock-btn.muted:hover { filter: brightness(1.15); }
 .dock-btn.dock-hangup { background: var(--danger); border-color: var(--danger); color: white; }
 .dock-btn.dock-hangup:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
 

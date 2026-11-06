@@ -163,8 +163,15 @@ const els = {
   settingsBtn: document.getElementById('settingsBtn'),
   settingsModal: document.getElementById('settingsModal'),
   settingsModalClose: document.getElementById('settingsModalClose'),
+  settingsDoneBtn: document.getElementById('settingsDoneBtn'),
+  settingsTabTitle: document.getElementById('settingsTabTitle'),
+  settingsTabSub: document.getElementById('settingsTabSub'),
   settingsTabs: document.querySelectorAll('.settings-tab'),
   settingsTabPanels: document.querySelectorAll('.settings-tab-panel'),
+  micTestBtn: document.getElementById('micTestBtn'),
+  micMeterFill: document.getElementById('micMeterFill'),
+  cameraPreviewVideo: document.getElementById('cameraPreviewVideo'),
+  cameraPreviewEmptyHint: document.getElementById('cameraPreviewEmptyHint'),
   autoMicCheck: document.getElementById('autoMicCheck'),
   refreshPermMuteBtn: document.getElementById('refreshPermMuteBtn'),
   permMuteList: document.getElementById('permMuteList'),
@@ -760,6 +767,100 @@ els.camDeviceSelect.addEventListener('change', async () => {
     stopCameraShare();
     await startCameraShare();
   }
+  // se a prévia nas Configurações está aberta com um stream próprio (não
+  // reaproveitando a câmera de uma call em andamento), reabre com o novo device
+  if (cameraPreviewOwned) {
+    stopCameraPreview();
+    startCameraPreview();
+  }
+});
+
+/* ---------------- prévia de câmera e medidor de microfone (Configurações) ----------------
+   Se a câmera já está ligada numa call, reaproveita o MESMO stream (sem
+   pedir o dispositivo de novo - evita "câmera ocupada" em hardware que só
+   aceita um consumidor por vez). Senão, abre um stream dedicado só pra
+   prévia, liberado ao trocar de aba ou fechar o modal. */
+
+let cameraPreviewStream = null;
+let cameraPreviewOwned = false;
+
+async function startCameraPreview() {
+  if (cameraPreviewStream) return;
+  if (state.camera.sharing && state.camera.camStream) {
+    cameraPreviewStream = state.camera.camStream;
+    cameraPreviewOwned = false;
+  } else {
+    try {
+      cameraPreviewStream = await navigator.mediaDevices.getUserMedia({
+        video: state.settings.camDeviceId ? { deviceId: { exact: state.settings.camDeviceId } } : true,
+      });
+      cameraPreviewOwned = true;
+    } catch {
+      return; // sem câmera/permissão - fica só com a dica de texto
+    }
+  }
+  els.cameraPreviewVideo.srcObject = cameraPreviewStream;
+  els.cameraPreviewVideo.classList.remove('hidden');
+  els.cameraPreviewEmptyHint.classList.add('hidden');
+}
+
+function stopCameraPreview() {
+  if (cameraPreviewStream && cameraPreviewOwned) {
+    for (const t of cameraPreviewStream.getTracks()) t.stop();
+  }
+  cameraPreviewStream = null;
+  cameraPreviewOwned = false;
+  els.cameraPreviewVideo.srcObject = null;
+  els.cameraPreviewVideo.classList.add('hidden');
+  els.cameraPreviewEmptyHint.classList.remove('hidden');
+}
+
+let micTestStream = null;
+let micTestCtx = null;
+let micTestRaf = null;
+
+function stopMicTest() {
+  if (micTestRaf) cancelAnimationFrame(micTestRaf);
+  micTestRaf = null;
+  if (micTestCtx) { micTestCtx.close().catch(() => {}); micTestCtx = null; }
+  if (micTestStream) { for (const t of micTestStream.getTracks()) t.stop(); micTestStream = null; }
+  els.micMeterFill.style.width = '0%';
+  els.micTestBtn.textContent = 'Testar';
+  els.micTestBtn.classList.remove('active-test');
+}
+
+async function startMicTest() {
+  stopMicTest();
+  try {
+    micTestStream = await navigator.mediaDevices.getUserMedia({
+      audio: state.settings.micDeviceId ? { deviceId: { exact: state.settings.micDeviceId } } : true,
+    });
+  } catch {
+    return;
+  }
+  micTestCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const source = micTestCtx.createMediaStreamSource(micTestStream);
+  const analyser = micTestCtx.createAnalyser();
+  analyser.fftSize = 256;
+  source.connect(analyser); // NAO conecta no destination - evita microfonia/eco
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  const tick = () => {
+    analyser.getByteTimeDomainData(data);
+    let sumSquares = 0;
+    for (const v of data) { const centered = (v - 128) / 128; sumSquares += centered * centered; }
+    const rms = Math.sqrt(sumSquares / data.length);
+    const level = Math.min(100, Math.round(rms * 220));
+    els.micMeterFill.style.width = `${level}%`;
+    micTestRaf = requestAnimationFrame(tick);
+  };
+  tick();
+  els.micTestBtn.textContent = 'Parar';
+  els.micTestBtn.classList.add('active-test');
+}
+
+els.micTestBtn.addEventListener('click', () => {
+  if (micTestStream) stopMicTest();
+  else startMicTest();
 });
 
 function applySpeakerDevice(video) {
@@ -790,12 +891,17 @@ function openSettingsModal() {
   populateDeviceSelects();
   renderPermMuteList();
   refreshAppList();
+  const activeTab = document.querySelector('.settings-tab.active');
+  if (activeTab && activeTab.dataset.tab === 'devices') startCameraPreview();
 }
 function closeSettingsModal() {
   els.settingsModal.classList.add('hidden');
+  stopCameraPreview();
+  stopMicTest();
 }
 els.settingsBtn.addEventListener('click', openSettingsModal);
 els.settingsModalClose.addEventListener('click', closeSettingsModal);
+els.settingsDoneBtn.addEventListener('click', closeSettingsModal);
 els.settingsModal.addEventListener('click', (ev) => {
   if (ev.target === els.settingsModal) closeSettingsModal();
 });
@@ -804,6 +910,10 @@ els.settingsTabs.forEach((tab) => {
     const name = tab.dataset.tab;
     els.settingsTabs.forEach((t) => t.classList.toggle('active', t === tab));
     els.settingsTabPanels.forEach((p) => p.classList.toggle('active', p.dataset.panel === name));
+    els.settingsTabTitle.textContent = tab.dataset.title;
+    els.settingsTabSub.textContent = tab.dataset.sub;
+    if (name === 'devices') startCameraPreview();
+    else { stopCameraPreview(); stopMicTest(); }
   });
 });
 
@@ -3613,6 +3723,10 @@ const CHANGELOG = {
   ],
   '3.3.1': [
     'Paleta de cores e fontes refeitas com valores exatos (visual mais "gaming", fontes Sora/Manrope) — ajuste fino de cima da leva de cores vivas da versão anterior.',
+  ],
+  '3.4.0': [
+    '!!BIG!!Atualização para proibir sophias',
+    'Configurações com cara nova: menu lateral com ícones, prévia da câmera ao vivo, medidor de nível do microfone em tempo real, e interruptores no lugar das caixinhas de marcar.',
   ],
 };
 

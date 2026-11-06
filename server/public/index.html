@@ -395,124 +395,185 @@
   <!-- modal de configurações: aba própria, com espaço pra crescer -->
   <div id="settingsModal" class="modal-overlay hidden">
     <div class="modal-card settings-modal">
-      <button type="button" id="settingsModalClose" class="icon-btn ghost modal-close" title="Fechar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-      <h2 class="settings-modal-title">Configurações</h2>
-      <div class="settings-tabs">
-        <button type="button" class="settings-tab active" data-tab="devices">Dispositivos</button>
-        <button type="button" class="settings-tab" data-tab="voice">Voz</button>
-        <button type="button" class="settings-tab" data-tab="stream">Transmissão</button>
-        <button type="button" class="settings-tab" data-tab="apps">Apps mutados</button>
-        <button type="button" class="settings-tab" data-tab="chat">Chat</button>
-      </div>
-      <div class="settings-tab-body">
-        <div class="settings-tab-panel active" data-panel="devices">
-          <label class="settings-row">
-            <span>Microfone</span>
-            <select id="micDeviceSelect"><option value="">Padrão do sistema</option></select>
-          </label>
-          <label class="settings-row">
-            <span>Câmera</span>
-            <select id="camDeviceSelect"><option value="">Padrão do sistema</option></select>
-          </label>
-          <label class="settings-row">
-            <span>Saída de áudio (fone/caixa)</span>
-            <select id="speakerDeviceSelect"><option value="">Padrão do sistema</option></select>
-          </label>
-          <p class="settings-hint">Câmera com cor estranha (ex: tudo amarelo)? Geralmente é o dispositivo errado selecionado — alguns PCs têm mais de uma "câmera" na lista (sensor infravermelho do Windows Hello, câmera virtual de outro programa, etc.). Troca aqui e testa cada uma.</p>
+      <nav class="settings-sidenav" aria-label="Seções">
+        <h2 class="settings-modal-title">Configurações</h2>
+        <div class="settings-tabs">
+          <button type="button" class="settings-tab active" data-tab="devices" data-title="Dispositivos" data-sub="Microfone, câmera e saída de áudio"><span class="settings-tab-icon">DV</span>Dispositivos</button>
+          <button type="button" class="settings-tab" data-tab="voice" data-title="Voz" data-sub="Sensibilidade, ruído e atalhos"><span class="settings-tab-icon">VZ</span>Voz</button>
+          <button type="button" class="settings-tab" data-tab="stream" data-title="Transmissão" data-sub="Qualidade e fps da tela compartilhada"><span class="settings-tab-icon">TR</span>Transmissão</button>
+          <button type="button" class="settings-tab" data-tab="apps" data-title="Apps mutados" data-sub="Apps que não entram no áudio da transmissão"><span class="settings-tab-icon">AM</span>Apps mutados</button>
+          <button type="button" class="settings-tab" data-tab="chat" data-title="Chat" data-sub="Notificações e aparência das mensagens"><span class="settings-tab-icon">CH</span>Chat</button>
+        </div>
+      </nav>
 
-          <div class="settings-row">
-            <span>Overlay da câmera</span>
-            <div class="overlay-preview-row">
-              <img id="overlayPreview" class="overlay-preview-img hidden" alt="Overlay da câmera" />
-              <p id="overlayEmptyHint" class="hint overlay-empty-hint">Nenhum overlay escolhido.</p>
-              <div class="overlay-preview-actions">
-                <button type="button" id="overlayAddBtn" class="ghost">Escolher imagem</button>
-                <button type="button" id="overlayRemoveBtn" class="icon-btn ghost danger-hover hidden" title="Remover overlay">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                </button>
+      <section class="settings-content">
+        <header class="settings-content-header">
+          <div class="settings-content-heading">
+            <span id="settingsTabTitle" class="settings-content-title">Dispositivos</span>
+            <span id="settingsTabSub" class="settings-content-sub">Microfone, câmera e saída de áudio</span>
+          </div>
+          <button type="button" id="settingsModalClose" class="icon-btn ghost modal-close" title="Fechar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </header>
+
+        <div class="settings-tab-body">
+          <div class="settings-tab-panel active" data-panel="devices">
+            <div class="settings-card-grid">
+              <div class="settings-card">
+                <label class="settings-card-label" for="micDeviceSelect">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+                  Microfone
+                </label>
+                <select id="micDeviceSelect"><option value="">Padrão do sistema</option></select>
+                <div class="mic-meter-row">
+                  <div class="mic-meter"><span id="micMeterFill"></span></div>
+                  <button type="button" id="micTestBtn" class="ghost btn-sm">Testar</button>
+                </div>
+              </div>
+              <div class="settings-card">
+                <label class="settings-card-label" for="speakerDeviceSelect">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14v-2a9 9 0 0 1 18 0v2"/><rect x="3" y="14" width="4" height="6" rx="1.5"/><rect x="17" y="14" width="4" height="6" rx="1.5"/></svg>
+                  Saída de áudio
+                </label>
+                <select id="speakerDeviceSelect"><option value="">Padrão do sistema</option></select>
               </div>
             </div>
-            <input type="file" id="overlayFileInput" accept="image/png,image/webp" class="hidden" />
-          </div>
-          <label class="settings-row settings-row-check">
-            <input type="checkbox" id="overlayEnabledCheck" disabled />
-            <span>Ativar overlay na câmera</span>
-          </label>
-          <p class="settings-hint">Imagem PNG com fundo transparente (ex: moldura/arte do personagem exportada do Outro Lado da Mesa) desenhada por cima do vídeo da câmera. Liga/desliga na hora, sem precisar desligar a câmera.</p>
-        </div>
-        <div class="settings-tab-panel" data-panel="voice">
-          <label class="settings-row settings-row-check">
-            <input type="checkbox" id="autoMicCheck" checked />
-            <span>Ativar o microfone assim que entrar na sala</span>
-          </label>
-          <label class="settings-row settings-row-check">
-            <input type="checkbox" id="noiseSuppressionCheck" checked />
-            <span>Redução de ruído no microfone</span>
-          </label>
-          <p class="settings-hint">Com isso ligado dá pra conversar com quem está na sala sem precisar compartilhar tela ou câmera — igual uma chamada de voz. Use o botão de microfone na barra inferior pra mutar/desmutar a qualquer momento.</p>
-        </div>
-        <div class="settings-tab-panel" data-panel="stream">
-          <label class="settings-row">
-            <span>Resolução da tela</span>
-            <select id="resolutionSelect">
-              <option value="1280x720">1280×720 (leve)</option>
-              <option value="1920x1080" selected>1920×1080 (recomendado)</option>
-              <option value="2560x1440">2560×1440</option>
-              <option value="native">Nativa (sem limite)</option>
-            </select>
-          </label>
-          <label class="settings-row">
-            <span>Taxa de quadros</span>
-            <select id="fpsSelect">
-              <option value="15">15 fps (mais leve)</option>
-              <option value="24">24 fps</option>
-              <option value="30" selected>30 fps (recomendado)</option>
-              <option value="60">60 fps (mais pesado)</option>
-            </select>
-          </label>
-          <label class="settings-row">
-            <span>Limite de banda da transmissão</span>
-            <select id="bandwidthSelect">
-              <option value="auto" selected>Automático (recomendado)</option>
-              <option value="800">Rede fraca (~800 kbps)</option>
-              <option value="2500">Média (~2,5 Mbps)</option>
-              <option value="6000">Alta (~6 Mbps)</option>
-            </select>
-          </label>
-          <label class="settings-row settings-row-check">
-            <input type="checkbox" id="hideCursorCheck" checked />
-            <span>Esconder o cursor do mouse na transmissão</span>
-          </label>
-          <p class="settings-hint">Resolução/fps mais baixos deixam a transmissão mais leve pro seu PC — importante se for jogar enquanto transmite. Se a transmissão andar travando pros seus amigos, tenta um limite de banda mais baixo — geralmente resolve melhor que baixar a resolução. "Esconder o cursor" evita o mouse aparecer fixo/fantasma em jogos que escondem a mira de verdade (ex: Valorant) — só vale pra próxima vez que começar a compartilhar.</p>
-        </div>
-        <div class="settings-tab-panel" data-panel="apps">
-          <div class="sidebar-section-title">Nesta sessão</div>
-          <div class="app-audio-header">
-            <button id="refreshAppsBtn" class="ghost" type="button">Atualizar lista</button>
-          </div>
-          <div id="appAudioList" class="app-audio-list">
-            <p class="hint">Só aparece enquanto você está compartilhando a tela.</p>
-          </div>
-          <p class="settings-hint">Muta/desmuta o áudio de um app só pra esta sessão de transmissão.</p>
 
-          <div class="divider-line"><span>sempre mutar</span></div>
-          <div class="app-audio-header">
-            <button id="refreshPermMuteBtn" class="ghost" type="button">Atualizar lista</button>
+            <div class="settings-card settings-card-camera">
+              <div class="camera-preview-box">
+                <video id="cameraPreviewVideo" class="hidden" autoplay muted playsinline></video>
+                <span id="cameraPreviewEmptyHint" class="hint">[PRÉVIA DA CÂMERA]</span>
+              </div>
+              <div class="settings-card-camera-controls">
+                <label class="settings-card-label" for="camDeviceSelect">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3"/></svg>
+                  Câmera
+                </label>
+                <select id="camDeviceSelect"><option value="">Padrão do sistema</option></select>
+                <details class="settings-detail-hint">
+                  <summary>Imagem com cor estranha (tudo amarelo)?</summary>
+                  <p>Quase sempre é o dispositivo errado selecionado — alguns PCs têm mais de uma "câmera" na lista (sensor infravermelho do Windows Hello, câmera virtual de outro programa). Troca aqui e testa cada uma.</p>
+                </details>
+              </div>
+            </div>
+
+            <div class="settings-card">
+              <div class="settings-row-switch-inline">
+                <div class="settings-row-switch-text">
+                  <span class="settings-card-label-plain">Overlay da câmera</span>
+                  <span class="settings-hint">PNG com fundo transparente desenhado por cima do vídeo, como uma moldura ou a arte do seu personagem.</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="overlayEnabledCheck" disabled />
+                  <span class="switch-track"><span class="switch-knob"></span></span>
+                </label>
+              </div>
+              <div class="overlay-preview-row">
+                <img id="overlayPreview" class="overlay-preview-img hidden" alt="Overlay da câmera" />
+                <p id="overlayEmptyHint" class="hint overlay-empty-hint">Nenhum overlay escolhido.</p>
+                <div class="overlay-preview-actions">
+                  <button type="button" id="overlayAddBtn" class="ghost">Escolher imagem</button>
+                  <button type="button" id="overlayRemoveBtn" class="icon-btn ghost danger-hover hidden" title="Remover overlay">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                </div>
+              </div>
+              <input type="file" id="overlayFileInput" accept="image/png,image/webp" class="hidden" />
+            </div>
           </div>
-          <div id="permMuteList" class="app-audio-list"></div>
-          <p class="settings-hint">Marca um app aqui pra ele já começar mutado automaticamente toda vez que você compartilhar a tela — sem precisar mutar na mão de novo.</p>
+          <div class="settings-tab-panel" data-panel="voice">
+            <div class="settings-row-switch-inline">
+              <span class="settings-card-label-plain">Ativar o microfone assim que entrar na sala</span>
+              <label class="switch">
+                <input type="checkbox" id="autoMicCheck" checked />
+                <span class="switch-track"><span class="switch-knob"></span></span>
+              </label>
+            </div>
+            <div class="settings-row-switch-inline">
+              <span class="settings-card-label-plain">Redução de ruído no microfone</span>
+              <label class="switch">
+                <input type="checkbox" id="noiseSuppressionCheck" checked />
+                <span class="switch-track"><span class="switch-knob"></span></span>
+              </label>
+            </div>
+            <p class="settings-hint">Com isso ligado dá pra conversar com quem está na sala sem precisar compartilhar tela ou câmera — igual uma chamada de voz. Use o botão de microfone na barra inferior pra mutar/desmutar a qualquer momento.</p>
+          </div>
+          <div class="settings-tab-panel" data-panel="stream">
+            <label class="settings-row">
+              <span>Resolução da tela</span>
+              <select id="resolutionSelect">
+                <option value="1280x720">1280×720 (leve)</option>
+                <option value="1920x1080" selected>1920×1080 (recomendado)</option>
+                <option value="2560x1440">2560×1440</option>
+                <option value="native">Nativa (sem limite)</option>
+              </select>
+            </label>
+            <label class="settings-row">
+              <span>Taxa de quadros</span>
+              <select id="fpsSelect">
+                <option value="15">15 fps (mais leve)</option>
+                <option value="24">24 fps</option>
+                <option value="30" selected>30 fps (recomendado)</option>
+                <option value="60">60 fps (mais pesado)</option>
+              </select>
+            </label>
+            <label class="settings-row">
+              <span>Limite de banda da transmissão</span>
+              <select id="bandwidthSelect">
+                <option value="auto" selected>Automático (recomendado)</option>
+                <option value="800">Rede fraca (~800 kbps)</option>
+                <option value="2500">Média (~2,5 Mbps)</option>
+                <option value="6000">Alta (~6 Mbps)</option>
+              </select>
+            </label>
+            <div class="settings-row-switch-inline">
+              <span class="settings-card-label-plain">Esconder o cursor do mouse na transmissão</span>
+              <label class="switch">
+                <input type="checkbox" id="hideCursorCheck" checked />
+                <span class="switch-track"><span class="switch-knob"></span></span>
+              </label>
+            </div>
+            <p class="settings-hint">Resolução/fps mais baixos deixam a transmissão mais leve pro seu PC — importante se for jogar enquanto transmite. Se a transmissão andar travando pros seus amigos, tenta um limite de banda mais baixo — geralmente resolve melhor que baixar a resolução. "Esconder o cursor" evita o mouse aparecer fixo/fantasma em jogos que escondem a mira de verdade (ex: Valorant) — só vale pra próxima vez que começar a compartilhar.</p>
+          </div>
+          <div class="settings-tab-panel" data-panel="apps">
+            <div class="sidebar-section-title">Nesta sessão</div>
+            <div class="app-audio-header">
+              <button id="refreshAppsBtn" class="ghost" type="button">Atualizar lista</button>
+            </div>
+            <div id="appAudioList" class="app-audio-list">
+              <p class="hint">Só aparece enquanto você está compartilhando a tela.</p>
+            </div>
+            <p class="settings-hint">Muta/desmuta o áudio de um app só pra esta sessão de transmissão.</p>
+
+            <div class="divider-line"><span>sempre mutar</span></div>
+            <div class="app-audio-header">
+              <button id="refreshPermMuteBtn" class="ghost" type="button">Atualizar lista</button>
+            </div>
+            <div id="permMuteList" class="app-audio-list"></div>
+            <p class="settings-hint">Marca um app aqui pra ele já começar mutado automaticamente toda vez que você compartilhar a tela — sem precisar mutar na mão de novo.</p>
+          </div>
+          <div class="settings-tab-panel" data-panel="chat">
+            <div class="settings-row-switch-inline">
+              <span class="settings-card-label-plain">Notificar novas mensagens do chat</span>
+              <label class="switch">
+                <input type="checkbox" id="chatNotificationsCheck" checked />
+                <span class="switch-track"><span class="switch-knob"></span></span>
+              </label>
+            </div>
+            <p class="settings-hint">Avisa com uma notificação do Windows quando chegar mensagem nova no chat e o app não estiver em foco. Desliga aqui se não quiser ser incomodado.</p>
+            <p class="settings-hint">As mensagens dos canais de texto ficam salvas de verdade (sobrevivem a fechar e abrir o app, e a todo mundo sair e voltar). Anexo de arquivo no chat ainda não existe nessa versão nova — só texto por enquanto.</p>
+          </div>
         </div>
-        <div class="settings-tab-panel" data-panel="chat">
-          <label class="settings-row settings-row-check">
-            <input type="checkbox" id="chatNotificationsCheck" checked />
-            <span>Notificar novas mensagens do chat</span>
-          </label>
-          <p class="settings-hint">Avisa com uma notificação do Windows quando chegar mensagem nova no chat e o app não estiver em foco. Desliga aqui se não quiser ser incomodado.</p>
-          <p class="settings-hint">As mensagens dos canais de texto ficam salvas de verdade (sobrevivem a fechar e abrir o app, e a todo mundo sair e voltar). Anexo de arquivo no chat ainda não existe nessa versão nova — só texto por enquanto.</p>
-        </div>
-      </div>
+
+        <footer class="settings-footer">
+          <span class="settings-saved-indicator">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+            Salvo automaticamente
+          </span>
+          <button type="button" id="settingsDoneBtn" class="primary">Pronto</button>
+        </footer>
+      </section>
     </div>
   </div>
 

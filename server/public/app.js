@@ -1586,6 +1586,12 @@ function retrackServerPresence() {
     serverPresenceChannel.track({
       name: currentProfile ? currentProfile.display_name : 'Convidado',
       avatar: currentProfile ? currentProfile.avatar_url : null,
+      // deixa a lista de canais da sidebar saber quem está em qual canal de
+      // voz e quem está transmitindo tela, sem precisar entrar na call pra
+      // enxergar isso (diferente da presença DENTRO da call, que só quem já
+      // entrou vê) - usado pelo mini-roster com badge "AO VIVO" nos canais.
+      voiceChannelId: activeVoiceChannel ? activeVoiceChannel.id : null,
+      sharingScreen: state.screen.sharing,
     });
   }
 }
@@ -2756,6 +2762,7 @@ let activeVoiceChannel = null;
 function joinVoiceChannel(channel) {
   activeVoiceChannel = channel;
   renderChannelList();
+  retrackServerPresence();
   const myId = currentUser.id;
   state.myName = currentProfile ? currentProfile.display_name : 'Convidado';
   const presenceMeta = {
@@ -2849,6 +2856,7 @@ function leaveRoom() {
   state.myId = null;
   activeVoiceChannel = null;
   renderChannelList();
+  retrackServerPresence();
   // volta pro canal de texto ou DM que estava aberto antes (se tinha
   // algum), senao cai na tela de amigos.
   showMainPanel(activeTextChannel ? 'text' : activeDmPeerId ? 'dm' : 'friends');
@@ -3138,6 +3146,8 @@ async function startScreenShare() {
   addOrUpdateTile(tileKey(state.myId, 'screen'), `${state.myName} (você)`, currentProfile ? currentProfile.avatar_url : null, display, true, 'screen');
   updateEmptyHint();
   state.transport.send({ type: 'share:start', source: 'screen' });
+  retrackServerPresence();
+  renderChannelList();
 }
 
 function setBtnLabel(btn, text) {
@@ -3503,6 +3513,8 @@ function stopScreenShare() {
   if (state.transport) {
     state.transport.send({ type: 'share:stop', source: 'screen' });
   }
+  retrackServerPresence();
+  renderChannelList();
 }
 
 /* ---------------- overlay da câmera ----------------
@@ -4170,6 +4182,9 @@ const CHANGELOG = {
   ],
   '3.6.0': [
     'Agora dá pra mandar arquivo, foto e vídeo no chat (botão "+" do lado da mensagem) — sem pesar no banco: o arquivo fica só no seu PC e é entregue direto pra quem baixa, então só funciona enquanto você estiver com o app aberto.',
+  ],
+  '3.6.1': [
+    'Corrigido bug sério: abrir o app enquanto ele já estava rodando escondido na bandeja (depois de fechar com o X) fazia o app travar na hora com um erro de porta ocupada. Agora, se você tentar abrir de novo, ele só mostra a janela que já estava aberta.',
   ],
 };
 

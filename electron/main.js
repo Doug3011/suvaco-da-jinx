@@ -8,6 +8,25 @@ const path = require('node:path');
 const { app, BrowserWindow, ipcMain, desktopCapturer, session, dialog, shell, Tray, Menu, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
+// Trava de instância única — crítico agora que fechar com o X só minimiza
+// pra bandeja (em vez de encerrar de vez): sem isso, abrir o app nas
+// Olimpíadas/atalho de novo enquanto a instância anterior ainda está viva
+// escondida na bandeja faz uma SEGUNDA cópia tentar subir o servidor na
+// MESMA porta, travando com "EADDRINUSE" antes mesmo de abrir janela
+// nenhuma. Em vez disso, a segunda tentativa só foca a janela já aberta.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
 // Tira a borda que o Windows desenha em volta de uma JANELA sendo
 // capturada — vem da API moderna de captura (Windows Graphics Capture),
 // que o Chromium usa por padrão pra captura por janela. É o próprio

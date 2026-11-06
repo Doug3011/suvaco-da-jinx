@@ -193,6 +193,7 @@ const els = {
   micMuteBtn: document.getElementById('micMuteBtn'),
   cameraBtn: document.getElementById('cameraBtn'),
   shareBtn: document.getElementById('shareBtn'),
+  interactiveShareBtn: document.getElementById('interactiveShareBtn'),
   leaveBtn: document.getElementById('leaveBtn'),
   inviteBtn: document.getElementById('inviteBtn'),
   toast: document.getElementById('toast'),
@@ -3846,7 +3847,19 @@ function onSignal(from, data) {
     const pc = state.broadcastPcs.get(key) || state.watchPcs.get(key);
     if (pc && data.candidate) pc.addIceCandidate(data.candidate).catch(() => {});
   } else if (data.kind === 'control-request') {
-    startBeingControlledBy(from, source);
+    // se EU que convidei essa pessoa pra "Transmissão interativa" (ela está
+    // respondendo ao meu convite aceitando), não pede confirmação de novo -
+    // já é a segunda etapa de um fluxo que eu mesmo comecei escolhendo ela.
+    if (pendingControlOffers.has(from)) {
+      pendingControlOffers.delete(from);
+      startBeingControlledBy(from, source);
+    } else {
+      showIncomingControlRequest(from, source);
+    }
+  } else if (data.kind === 'control-declined') {
+    showToast('Pedido de controle recusado.');
+  } else if (data.kind === 'control-offer') {
+    showIncomingControlOffer(from, source);
   }
 }
 
@@ -4013,6 +4026,7 @@ async function startScreenShare() {
 
   setBtnLabel(els.shareBtn, 'Parar de compartilhar');
   els.shareBtn.classList.add('active');
+  updateInteractiveShareBtnVisibility();
 
   display.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
   state.screen.blackFrameStop = watchForBlackFrames(display.getVideoTracks()[0]);
@@ -4367,6 +4381,7 @@ function stopScreenShare() {
   state.screen.sharing = false;
   setBtnLabel(els.shareBtn, 'Compartilhar tela');
   els.shareBtn.classList.remove('active');
+  updateInteractiveShareBtnVisibility();
 
   if (state.screen.blackFrameStop) {
     state.screen.blackFrameStop();
@@ -4678,12 +4693,19 @@ function teardownBroadcast(key) {
 }
 
 /* ---------------- modo admin: controle remoto (mouse/teclado) ----------------
-   Recurso restrito — precisa das DUAS travas pra funcionar: a flag
-   `profiles.is_remote_admin` (só setável via SQL manual, nunca pela UI) E o
-   toggle local nas Configurações (revelado só com um gesto escondido, ver
-   mais abaixo). Sem pedido de confirmação em tempo real pro lado
-   controlado — em troca, enquanto o controle estiver ativo, quem está
-   sendo controlado vê uma borda vermelha fixa na tela inteira que só ele
+   Liberado pra qualquer um que ligar o toggle nas Configurações (sem trava
+   de banco de dados) — em troca, SEMPRE precisa de consentimento explícito
+   de quem vai ser controlado antes do controle começar de verdade, por dois
+   caminhos possíveis:
+   1. Quem assiste pede ("Controlar tela" no menu de botão direito) -> quem
+      transmite recebe um pedido e precisa Aceitar.
+   2. Quem transmite oferece ("Transmissão interativa" no dock, escolhendo
+      alguém presente na call) -> a pessoa escolhida recebe o convite e
+      precisa Aceitar. Como foi quem transmite que já escolheu a pessoa de
+      propósito, não tem um segundo pedido de confirmação depois do aceite
+      (pendingControlOffers controla isso, ver startBeingControlledBy).
+   Nos dois casos, enquanto o controle estiver ativo, quem está sendo
+   controlado vê uma borda vermelha fixa na tela inteira que só ele
    consegue encerrar (showRemoteControlOverlay), não o controlador.
 
    Transporte: RTCDataChannel dentro da MESMA RTCPeerConnection de
@@ -4693,7 +4715,7 @@ function teardownBroadcast(key) {
    nessa conexão. */
 
 function canUseRemoteAdmin() {
-  return isElectron && !!(currentProfile && currentProfile.is_remote_admin) && state.settings.remoteAdminEnabled;
+  return isElectron && state.settings.remoteAdminEnabled;
 }
 
 function openTileContextMenu(x, y, key, name) {
@@ -4723,7 +4745,105 @@ function startRemoteControl(key) {
   const peerId = key.slice(0, sep);
   const source = key.slice(sep + 1);
   sendSignal(peerId, { kind: 'control-request', source });
-  showToast('Pedido de controle enviado.');
+  showToast('Pedido de controle enviado — esperando a pessoa aceitar.');
+}
+
+// diálogo genérico de aceitar/recusar, reaproveitado pelos dois sentidos do
+// consentimento (pedido de quem assiste / convite de quem transmite).
+function showConsentDialog({ title, message, onAccept, onDecline }) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal-card consent-dialog">
+      <h2 class="settings-modal-title">${escapeHtml(title)}</h2>
+      <p class="settings-hint">${escapeHtml(message)}</p>
+      <div class="consent-dialog-actions">
+        <button type="button" class="ghost" id="consentDeclineBtn">Recusar</button>
+        <button type="button" class="primary" id="consentAcceptBtn">Aceitar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#consentAcceptBtn').addEventListener('click', () => {
+    close();
+    onAccept();
+  });
+  overlay.querySelector('#consentDeclineBtn').addEventListener('click', () => {
+    close();
+    if (onDecline) onDecline();
+  });
+}
+
+function nameOfPeer(peerId) {
+  const m = serverMembersCache.find((x) => x.user_id === peerId);
+  return (m && m.profiles && m.profiles.display_name) || 'Alguém';
+}
+
+// pedido de quem assiste ("Controlar tela") chegando aqui - preciso aceitar
+// antes do controle começar de verdade.
+function showIncomingControlRequest(fromId, source) {
+  showConsentDialog({
+    title: 'Pedido de controle',
+    message: `${nameOfPeer(fromId)} quer controlar sua tela. Aceitar?`,
+    onAccept: () => startBeingControlledBy(fromId, source),
+    onDecline: () => sendSignal(fromId, { kind: 'control-declined', source }),
+  });
+}
+
+// convite de quem transmite ("Transmissão interativa") chegando aqui - a
+// pessoa ESCOLHIDA precisa aceitar antes de começar a controlar.
+function showIncomingControlOffer(fromId, source) {
+  showConsentDialog({
+    title: 'Convite pra controlar uma tela',
+    message: `${nameOfPeer(fromId)} quer que você controle a tela dele(a). Aceitar?`,
+    onAccept: () => {
+      const key = tileKey(fromId, source);
+      if (!state.watchPcs.has(key)) {
+        requestWatch(fromId, source, nameOfPeer(fromId), null);
+      }
+      sendSignal(fromId, { kind: 'control-request', source });
+      showToast('Controle aceito — conectando...');
+    },
+    onDecline: () => sendSignal(fromId, { kind: 'control-declined', source }),
+  });
+}
+
+// lado de quem transmite: escolhe alguém presente na call pra convidar a
+// controlar a tela ("Transmissão interativa") - diferente do fluxo normal
+// (quem assiste pede), aqui é quem transmite que convida primeiro.
+const pendingControlOffers = new Set();
+function openInteractiveShareMenu(anchorRect) {
+  if (!activeVoiceChannel) return;
+  const occupants = voiceChannelOccupants(activeVoiceChannel.id).filter((o) => o.id !== currentUser.id);
+  const x = anchorRect ? anchorRect.left : window.innerWidth / 2;
+  const y = anchorRect ? anchorRect.top - 10 : window.innerHeight / 2;
+  openContextMenu(x, y, (menu) => {
+    const title = document.createElement('div');
+    title.className = 'context-menu-title';
+    title.textContent = 'Transmissão interativa';
+    menu.appendChild(title);
+    if (!occupants.length) {
+      const empty = document.createElement('div');
+      empty.className = 'context-menu-title';
+      empty.textContent = 'Ninguém mais na call agora.';
+      menu.appendChild(empty);
+      return;
+    }
+    for (const person of occupants) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'context-menu-action';
+      btn.textContent = person.name || 'Alguém';
+      btn.addEventListener('click', () => {
+        closeContextMenu();
+        pendingControlOffers.add(person.id);
+        sendSignal(person.id, { kind: 'control-offer', source: 'screen' });
+        showToast(`Convite de controle enviado pra ${person.name || 'essa pessoa'}.`);
+      });
+      menu.appendChild(btn);
+    }
+  });
 }
 
 // lado de quem está transmitindo (sendo controlado): cria o canal e
@@ -4868,29 +4988,17 @@ function detachControlInputListeners() {
   }
 }
 
-// Gatilho escondido do toggle (5 cliques no título "Configurações" em
-// menos de 2s) — só revela de verdade se a flag do banco já vier true,
-// senão não acontece nada nem pra quem souber o gesto.
-let settingsTitleClickCount = 0;
-let settingsTitleClickTimer = null;
-if (els.settingsModalTitle) {
-  els.settingsModalTitle.addEventListener('click', () => {
-    settingsTitleClickCount++;
-    clearTimeout(settingsTitleClickTimer);
-    settingsTitleClickTimer = setTimeout(() => {
-      settingsTitleClickCount = 0;
-    }, 2000);
-    if (settingsTitleClickCount >= 5) {
-      settingsTitleClickCount = 0;
-      if (currentProfile && currentProfile.is_remote_admin) {
-        els.remoteAdminRow.classList.remove('hidden');
-      }
-    }
-  });
-}
 els.remoteAdminCheck.addEventListener('change', () => {
   state.settings.remoteAdminEnabled = els.remoteAdminCheck.checked;
   saveSettings();
+  updateInteractiveShareBtnVisibility();
+});
+
+function updateInteractiveShareBtnVisibility() {
+  els.interactiveShareBtn.classList.toggle('hidden', !(state.screen.sharing && canUseRemoteAdmin()));
+}
+els.interactiveShareBtn.addEventListener('click', () => {
+  openInteractiveShareMenu(els.interactiveShareBtn.getBoundingClientRect());
 });
 
 /* ---------------- grade de vídeos ---------------- */
@@ -5319,6 +5427,10 @@ const CHANGELOG = {
   ],
   '3.12.1': [
     'Corrigido: a lista de quem está online no servidor (e quem está na call) não atualizava sozinha quando alguém novo entrava — só mostrava gente nova depois de sair e abrir o servidor de novo. Agora atualiza na hora.',
+  ],
+  '3.13.0': [
+    'Modo admin (controle remoto) agora é liberado pra qualquer um — basta ligar nas Configurações. Em troca, sempre precisa do consentimento da outra pessoa: um pedido/convite aparece na tela e só começa se for aceito.',
+    'Novo: "Transmissão interativa" — enquanto você compartilha a tela, dá pra escolher alguém presente na call e convidar pra controlar (a pessoa escolhida decide se aceita).',
   ],
 };
 

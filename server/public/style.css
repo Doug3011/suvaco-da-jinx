@@ -1673,6 +1673,10 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 }
 .link-btn:hover { color: var(--accent-hover); transform: none; }
 
+.consent-dialog { width: 380px; max-width: 92vw; text-align: center; }
+.consent-dialog-actions { display: flex; gap: 10px; margin-top: 16px; }
+.consent-dialog-actions button { flex: 1; }
+
 .email-auth-modal { width: 400px; max-width: 92vw; }
 .email-auth-modal .field { margin: 10px 0; }
 .email-auth-modal input { width: 100%; box-sizing: border-box; }

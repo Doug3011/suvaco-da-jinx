@@ -198,15 +198,18 @@
             <button id="focusBtn" class="primary">Tela cheia com selecionadas</button>
           </div>
 
-          <div id="grid" class="grid">
-            <div id="emptyHint" class="empty-state">
-              <div class="empty-state-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <div id="stageArea" class="call-stage">
+            <div id="stageEmpty" class="call-stage-empty">
+              <div class="call-stage-empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
               </div>
-              <p>Ninguém está transmitindo ainda</p>
-              <span>Use os controles abaixo pra compartilhar sua tela ou câmera</span>
+              <div class="call-stage-empty-title">Ninguém está transmitindo</div>
+              <p class="call-stage-empty-sub">Compartilhe sua tela ou um jogo para a galera assistir.</p>
+              <button type="button" id="stageShareBtn" class="primary">Compartilhar tela</button>
             </div>
           </div>
+
+          <div id="grid" class="grid"></div>
         </div>
 
       </div>

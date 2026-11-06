@@ -156,7 +156,9 @@ const els = {
   focusCount: document.getElementById('focusCount'),
   focusBtn: document.getElementById('focusBtn'),
   grid: document.getElementById('grid'),
-  emptyHint: document.getElementById('emptyHint'),
+  stageArea: document.getElementById('stageArea'),
+  stageEmpty: document.getElementById('stageEmpty'),
+  stageShareBtn: document.getElementById('stageShareBtn'),
   appAudioList: document.getElementById('appAudioList'),
   leaveCallBtn: document.getElementById('leaveCallBtn'),
   refreshAppsBtn: document.getElementById('refreshAppsBtn'),
@@ -2522,10 +2524,39 @@ function onPresence(list) {
 
 
 function updateEmptyHint() {
-  let visibleTiles = 0;
-  for (const tile of state.tiles.values()) if (!tile.audioOnly) visibleTiles++;
-  els.emptyHint.classList.toggle('hidden', visibleTiles > 0);
+  updateStageMode();
 }
+
+// Visão em destaque: quando alguém (eu ou outra pessoa) está transmitindo
+// tela, aquele tile vira o "palco" grande (movido pro #stageArea, sem
+// recriar o <video> - reparent preserva srcObject/reprodução), e todo
+// mundo mais vira uma tira pequena de bolhas abaixo. Sem transmissão
+// nenhuma, o palco mostra um convite pra compartilhar e todo mundo fica
+// na tira. Câmera sozinha (sem tela) nunca vira "palco" - só compartilhamento
+// de tela conta, igual a referência visual que o usuário mandou.
+function updateStageMode() {
+  const screenEntries = [...state.tiles.entries()].filter(([, t]) => t.source === 'screen');
+  let stageEntry = null;
+  if (screenEntries.length) {
+    stageEntry = screenEntries.find(([k]) => state.pinned && state.pinned.has(k)) || screenEntries[0];
+  }
+  els.grid.classList.add('strip-mode');
+  for (const [key, tile] of state.tiles) {
+    if (tile.audioOnly) continue;
+    const isStage = stageEntry && stageEntry[0] === key;
+    tile.root.classList.toggle('tile-stage', isStage);
+    if (isStage) {
+      els.stageArea.appendChild(tile.root);
+    } else if (tile.root.parentElement !== els.grid) {
+      els.grid.appendChild(tile.root);
+    }
+  }
+  els.stageEmpty.classList.toggle('hidden', !!stageEntry);
+}
+
+els.stageShareBtn.addEventListener('click', () => {
+  if (!state.screen.sharing) startScreenShare();
+});
 
 function notifyChatMessage(msg) {
   if (!('Notification' in window)) return;
@@ -3423,6 +3454,11 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
     root.innerHTML = `
       <div class="tile-video-wrap">
         <video autoplay playsinline ${isSelf ? 'muted' : ''}></video>
+        <div class="tile-live-badges hidden">
+          <span class="tile-live-badge tile-live-badge-live"><span class="live-dot"></span>AO VIVO</span>
+          <span class="tile-live-badge tile-live-res"></span>
+        </div>
+        <span class="tile-watchers-badge hidden"></span>
         <div class="tile-top-overlay">
           <label class="pin-check" title="Selecionar pra tela cheia">
             <input type="checkbox" class="pin-input" />
@@ -3486,19 +3522,52 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
       if (pinInput.checked) state.pinned.add(key);
       else state.pinned.delete(key);
       updateFocusBar();
+      updateStageMode();
     });
 
     if (!isSelf) applySpeakerDevice(video);
 
+    if (source === 'screen') {
+      root.querySelector('.tile-live-badges').classList.remove('hidden');
+      if (isSelf) root.querySelector('.tile-watchers-badge').classList.remove('hidden');
+      video.addEventListener('loadedmetadata', () => updateTileLiveRes(root, video, isSelf));
+    }
+
     els.grid.appendChild(root);
-    tile = { root, video, isSelf };
+    tile = { root, video, isSelf, source };
     state.tiles.set(key, tile);
     updateGridTileSize();
   }
   tile.root.querySelector('.tile-identity strong').textContent = name;
   tile.root.querySelector('.tile-identity img').src = avatar || DEFAULT_AVATAR;
   if (tile.video.srcObject !== stream) tile.video.srcObject = stream;
+  updateStageMode();
 }
+
+// Resolução real do vídeo decodificado (bate pra qualquer um, local ou
+// remoto); fps só mostra pro seu próprio tile, porque é o único valor que
+// a gente sabe de verdade (o configurado nas configurações) — fps real de
+// um stream remoto exigiria ler estatísticas do RTCPeerConnection, não vale
+// a complexidade só pra um número no badge.
+function updateTileLiveRes(root, video, isSelf) {
+  const el = root.querySelector('.tile-live-res');
+  if (!video.videoWidth) return;
+  const res = `${video.videoWidth}×${video.videoHeight}`;
+  el.textContent = isSelf ? `${res} · ${state.settings.fps} fps` : res;
+}
+
+function updateSelfScreenWatchersBadge() {
+  const key = tileKey(state.myId, 'screen');
+  const tile = state.tiles.get(key);
+  if (!tile) return;
+  let watching = 0;
+  for (const k of state.broadcastPcs.keys()) {
+    if (k.endsWith(':screen')) watching++;
+  }
+  const badge = tile.root.querySelector('.tile-watchers-badge');
+  badge.innerHTML = `${ICONS.monitor} ${watching} assistindo`;
+}
+setInterval(updateSelfScreenWatchersBadge, 2000);
 
 function removeTile(key) {
   const tile = state.tiles.get(key);
@@ -3727,6 +3796,10 @@ const CHANGELOG = {
   '3.4.0': [
     '!!BIG!!Atualização para proibir sophias',
     'Configurações com cara nova: menu lateral com ícones, prévia da câmera ao vivo, medidor de nível do microfone em tempo real, e interruptores no lugar das caixinhas de marcar.',
+  ],
+  '3.5.0': [
+    '!!BIG!!Atualização para proibir sophias',
+    'Sala de chamada com visão de palco: quando alguém transmite a tela, ela vira o destaque grande (com selo "AO VIVO", resolução/fps e quantas pessoas estão assistindo) e todo mundo mais vira uma tira pequena embaixo — câmera sozinha não vira palco. Quando ninguém transmite, aparece um convite grande pra compartilhar a tela.',
   ],
 };
 

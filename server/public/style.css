@@ -1196,6 +1196,92 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   align-content: start;
   overflow-y: auto;
 }
+/* tira de participantes (sempre pequena) quando tem palco ativo — ver
+   updateStageMode() em app.js. Só compartilhamento de tela vira palco;
+   todo o resto (câmera, você mesmo) fica nessa tira horizontal. */
+.grid.strip-mode {
+  display: flex;
+  flex-direction: row;
+  flex: 0 0 auto;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 4px;
+}
+.grid.strip-mode .tile { flex: 0 0 180px; height: 110px; }
+.grid.strip-mode .tile .tile-video-wrap { height: 100%; aspect-ratio: auto; }
+
+.call-stage {
+  flex: 1;
+  min-height: 340px;
+  border-radius: var(--radius-lg);
+  position: relative;
+  display: flex;
+}
+.call-stage:not(:has(.tile-stage)) {
+  border: 1px dashed var(--border-strong);
+  background: var(--bg-main);
+}
+.call-stage .tile.tile-stage { flex: 1; width: 100%; }
+.call-stage .tile.tile-stage .tile-video-wrap { height: 100%; aspect-ratio: auto; }
+.call-stage-empty {
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+  max-width: 360px;
+}
+.call-stage-empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  background: var(--panel-2);
+  color: var(--accent-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.call-stage-empty-icon svg { width: 30px; height: 30px; }
+.call-stage-empty-title { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+.call-stage-empty-sub { margin: 0; font-size: 14px; color: var(--muted-2); }
+
+.tile-live-badges { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 2; }
+.tile-live-badge {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tile-live-badge-live { background: var(--live); color: #fff; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+.tile-live-res { background: rgba(5, 7, 15, 0.75); color: var(--text-2); font-weight: 600; letter-spacing: normal; }
+.tile-watchers-badge {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: rgba(5, 7, 15, 0.8);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+}
+.tile-watchers-badge svg { width: 13px; height: 13px; }
+.grid.strip-mode .tile-live-badges, .grid.strip-mode .tile-watchers-badge { display: none; }
 
 .empty-state {
   grid-column: 1 / -1;

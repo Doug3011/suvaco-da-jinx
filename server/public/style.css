@@ -1662,6 +1662,21 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .dock-btn.dock-hangup { background: var(--danger); border-color: var(--danger); color: white; }
 .dock-btn.dock-hangup:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
 
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent-light);
+  font-size: 13px;
+  text-decoration: underline;
+  padding: 4px 0;
+  width: auto;
+}
+.link-btn:hover { color: var(--accent-hover); transform: none; }
+
+.email-auth-modal { width: 400px; max-width: 92vw; }
+.email-auth-modal .field { margin: 10px 0; }
+.email-auth-modal input { width: 100%; box-sizing: border-box; }
+
 .bug-report-modal { width: 460px; max-width: 92vw; }
 .bug-report-modal textarea {
   width: 100%;

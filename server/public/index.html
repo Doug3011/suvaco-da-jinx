@@ -37,6 +37,7 @@
 
           <button type="submit" id="authSubmitBtn" class="primary auth-submit-btn">Entrar</button>
         </form>
+        <button type="button" id="authEmailLoginLink" class="link-btn">Já tenho conta — entrar com e-mail</button>
       </div>
       <p class="credits auth-credits">Desenvolvido por <strong>Doug Muller Burro</strong></p>
     </section>
@@ -614,6 +615,16 @@
                 <span class="switch-track"><span class="switch-knob"></span></span>
               </label>
             </div>
+            <div class="divider-line"><span>conta</span></div>
+            <div class="settings-row">
+              <span>E-mail vinculado</span>
+              <span id="accountEmailStatus" class="muted">Nenhum</span>
+            </div>
+            <button type="button" id="openLinkEmailBtn" class="ghost btn-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M22 6l-10 7L2 6"/></svg>
+              <span>Vincular e-mail</span>
+            </button>
+            <p class="settings-hint">Vincular um e-mail evita perder amigos, servidores e mensagens se você trocar de computador ou reinstalar o app — sem isso, cada instalação nova vira uma conta do zero.</p>
             <div class="divider-line"><span>suporte</span></div>
             <button type="button" id="openBugReportBtn" class="ghost btn-with-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="6" width="8" height="14" rx="4"/><path d="M8 11H3M21 11h-5M8 15H4M20 15h-4M9 6V4a3 3 0 0 1 6 0v2"/></svg>
@@ -654,6 +665,36 @@
       </div>
       <div id="soundboardList" class="soundboard-list"></div>
       <p class="settings-hint">Clica num som pra tocar na call — todo mundo ouve. O volume acima controla só o quanto VOCÊ escuta de volta, não afeta o volume pros outros. Os sons ficam salvos neste PC.</p>
+    </div>
+  </div>
+
+  <!-- entrar/vincular por e-mail: 2 passos (e-mail -> código), sem senha nem link,
+       reaproveitado tanto na tela de login quanto nas Configurações -->
+  <div id="emailAuthModal" class="modal-overlay hidden">
+    <div class="modal-card email-auth-modal">
+      <button type="button" id="emailAuthClose" class="icon-btn ghost modal-close" title="Fechar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h2 id="emailAuthTitle" class="settings-modal-title">Entrar com e-mail</h2>
+      <div id="emailAuthStepEmail">
+        <p id="emailAuthEmailHint" class="settings-hint"></p>
+        <label class="field">
+          <span>E-mail</span>
+          <input id="emailAuthEmailInput" type="email" placeholder="seu@email.com" required />
+        </label>
+        <p id="emailAuthError" class="auth-error hidden"></p>
+        <button type="button" id="emailAuthSendBtn" class="primary auth-submit-btn">Enviar código</button>
+      </div>
+      <div id="emailAuthStepCode" class="hidden">
+        <p class="settings-hint">Digite o código que chegou em <strong id="emailAuthEmailShown"></strong>.</p>
+        <label class="field">
+          <span>Código</span>
+          <input id="emailAuthCodeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456" required />
+        </label>
+        <p id="emailAuthCodeError" class="auth-error hidden"></p>
+        <button type="button" id="emailAuthConfirmBtn" class="primary auth-submit-btn">Confirmar</button>
+        <button type="button" id="emailAuthResendBtn" class="link-btn">Reenviar código</button>
+      </div>
     </div>
   </div>
 

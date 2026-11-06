@@ -159,6 +159,23 @@ const els = {
   voiceConnectedPanel: document.getElementById('voiceConnectedPanel'),
   voiceConnectedDetail: document.getElementById('voiceConnectedDetail'),
   closeBehaviorSelect: document.getElementById('closeBehaviorSelect'),
+  authEmailLoginLink: document.getElementById('authEmailLoginLink'),
+  accountEmailStatus: document.getElementById('accountEmailStatus'),
+  openLinkEmailBtn: document.getElementById('openLinkEmailBtn'),
+  emailAuthModal: document.getElementById('emailAuthModal'),
+  emailAuthClose: document.getElementById('emailAuthClose'),
+  emailAuthTitle: document.getElementById('emailAuthTitle'),
+  emailAuthStepEmail: document.getElementById('emailAuthStepEmail'),
+  emailAuthEmailHint: document.getElementById('emailAuthEmailHint'),
+  emailAuthEmailInput: document.getElementById('emailAuthEmailInput'),
+  emailAuthError: document.getElementById('emailAuthError'),
+  emailAuthSendBtn: document.getElementById('emailAuthSendBtn'),
+  emailAuthStepCode: document.getElementById('emailAuthStepCode'),
+  emailAuthEmailShown: document.getElementById('emailAuthEmailShown'),
+  emailAuthCodeInput: document.getElementById('emailAuthCodeInput'),
+  emailAuthCodeError: document.getElementById('emailAuthCodeError'),
+  emailAuthConfirmBtn: document.getElementById('emailAuthConfirmBtn'),
+  emailAuthResendBtn: document.getElementById('emailAuthResendBtn'),
   openBugReportBtn: document.getElementById('openBugReportBtn'),
   bugReportModal: document.getElementById('bugReportModal'),
   bugReportModalClose: document.getElementById('bugReportModalClose'),
@@ -377,6 +394,7 @@ window.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     const isNewLogin = !currentUser || currentUser.id !== session.user.id;
     currentUser = session.user;
     currentProfile = await fetchMyProfile(currentUser.id);
+    updateAccountEmailStatus();
     if (isNewLogin) {
       showLobbyScreen();
     } else if (currentProfile) {
@@ -387,6 +405,137 @@ window.supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     currentUser = null;
     currentProfile = null;
     showAuthScreen();
+  }
+});
+
+/* ---------------- entrar/vincular por e-mail (código, sem senha) ----------------
+   Dois modos reaproveitando o mesmo modal:
+   - 'link': vincula um e-mail à conta JÁ LOGADA (anônima vira permanente, mesmo
+     id, mesmos dados) - usa updateUser({email}) + verifyOtp(type:'email_change').
+   - 'login': entra numa conta que já tem e-mail vinculado, sem estar logado
+     ainda - usa signInWithOtp({email, shouldCreateUser:false}) +
+     verifyOtp(type:'email'). onAuthStateChange cuida de trocar de usuário.
+   Os dois fluxos mandam só um CÓDIGO por e-mail (sem link) - os templates
+   correspondentes no Supabase foram configurados pra isso de propósito,
+   porque um link exigiria um site/redirect funcionando, que esse app não tem. */
+
+function friendlyAuthError(message) {
+  const map = {
+    'Signups not allowed for otp': 'Esse e-mail ainda não tem conta vinculada aqui. Se for a primeira vez, vincula o e-mail pelas Configurações antes de tentar entrar com ele.',
+    'Token has expired or is invalid': 'Código inválido ou expirado. Confere se digitou certo ou pede um novo código.',
+    'User already registered': 'Esse e-mail já está vinculado a outra conta.',
+  };
+  return map[message] || message;
+}
+
+function updateAccountEmailStatus() {
+  if (!els.accountEmailStatus) return;
+  els.accountEmailStatus.textContent = currentUser && currentUser.email ? currentUser.email : 'Nenhum';
+}
+
+let emailAuthMode = 'login';
+let emailAuthPendingEmail = '';
+
+function openEmailAuthModal(mode) {
+  emailAuthMode = mode;
+  emailAuthPendingEmail = '';
+  els.emailAuthTitle.textContent = mode === 'link' ? 'Vincular e-mail' : 'Entrar com e-mail';
+  els.emailAuthEmailHint.textContent =
+    mode === 'link'
+      ? 'Vincula um e-mail a essa conta pra nunca mais perder seus dados.'
+      : 'Entra numa conta que já tem e-mail vinculado.';
+  els.emailAuthEmailInput.value = '';
+  els.emailAuthCodeInput.value = '';
+  els.emailAuthError.classList.add('hidden');
+  els.emailAuthCodeError.classList.add('hidden');
+  els.emailAuthStepEmail.classList.remove('hidden');
+  els.emailAuthStepCode.classList.add('hidden');
+  els.emailAuthModal.classList.remove('hidden');
+  els.emailAuthEmailInput.focus();
+}
+function closeEmailAuthModal() {
+  els.emailAuthModal.classList.add('hidden');
+}
+els.emailAuthClose.addEventListener('click', closeEmailAuthModal);
+els.openLinkEmailBtn.addEventListener('click', () => openEmailAuthModal('link'));
+els.authEmailLoginLink.addEventListener('click', () => openEmailAuthModal('login'));
+
+async function sendEmailAuthCode(email) {
+  if (emailAuthMode === 'link') {
+    const { error } = await window.supabaseClient.auth.updateUser({ email });
+    if (error) throw error;
+  } else {
+    const { error } = await window.supabaseClient.auth.signInWithOtp({
+      email,
+      options: { shouldCreateUser: false },
+    });
+    if (error) throw error;
+  }
+}
+
+els.emailAuthSendBtn.addEventListener('click', async () => {
+  const email = els.emailAuthEmailInput.value.trim();
+  if (!email) return;
+  els.emailAuthError.classList.add('hidden');
+  els.emailAuthSendBtn.disabled = true;
+  try {
+    await sendEmailAuthCode(email);
+    emailAuthPendingEmail = email;
+    els.emailAuthEmailShown.textContent = email;
+    els.emailAuthStepEmail.classList.add('hidden');
+    els.emailAuthStepCode.classList.remove('hidden');
+    els.emailAuthCodeInput.focus();
+  } catch (err) {
+    els.emailAuthError.textContent = friendlyAuthError(err.message) || 'Não consegui enviar o código.';
+    els.emailAuthError.classList.remove('hidden');
+  } finally {
+    els.emailAuthSendBtn.disabled = false;
+  }
+});
+
+els.emailAuthResendBtn.addEventListener('click', async () => {
+  els.emailAuthResendBtn.disabled = true;
+  try {
+    await sendEmailAuthCode(emailAuthPendingEmail);
+    showToast('Código reenviado!', 2000);
+  } catch (err) {
+    els.emailAuthCodeError.textContent = friendlyAuthError(err.message) || 'Não consegui reenviar.';
+    els.emailAuthCodeError.classList.remove('hidden');
+  } finally {
+    els.emailAuthResendBtn.disabled = false;
+  }
+});
+
+els.emailAuthConfirmBtn.addEventListener('click', async () => {
+  const code = els.emailAuthCodeInput.value.trim();
+  if (!code) return;
+  els.emailAuthCodeError.classList.add('hidden');
+  els.emailAuthConfirmBtn.disabled = true;
+  try {
+    if (emailAuthMode === 'link') {
+      const { error } = await window.supabaseClient.auth.verifyOtp({
+        email: emailAuthPendingEmail,
+        token: code,
+        type: 'email_change',
+      });
+      if (error) throw error;
+      showToast('E-mail vinculado com sucesso!');
+      updateAccountEmailStatus();
+    } else {
+      const { error } = await window.supabaseClient.auth.verifyOtp({
+        email: emailAuthPendingEmail,
+        token: code,
+        type: 'email',
+      });
+      if (error) throw error;
+      showToast('Login feito com sucesso!');
+    }
+    closeEmailAuthModal();
+  } catch (err) {
+    els.emailAuthCodeError.textContent = friendlyAuthError(err.message) || 'Código inválido ou expirado.';
+    els.emailAuthCodeError.classList.remove('hidden');
+  } finally {
+    els.emailAuthConfirmBtn.disabled = false;
   }
 });
 
@@ -1099,6 +1248,7 @@ function openSettingsModal() {
   renderPermMuteList();
   refreshAppList();
   initCloseBehaviorSelect();
+  updateAccountEmailStatus();
   const activeTab = document.querySelector('.settings-tab.active');
   if (activeTab && activeTab.dataset.tab === 'devices') startCameraPreview();
 }
@@ -5135,6 +5285,10 @@ const CHANGELOG = {
   ],
   '3.11.0': [
     'Novo: "Reportar um bug" nas Configurações (aba Geral) — descreve o problema, cola ou anexa um print, e manda direto pra quem desenvolve o app.',
+  ],
+  '3.12.0': [
+    'Novo: dá pra vincular um e-mail à sua conta (Configurações → Geral → "Vincular e-mail") — sem isso, trocar de computador ou reinstalar o app sempre cria uma conta do zero, perdendo amigos e servidores. Com o e-mail vinculado, dá pra entrar de novo na mesma conta de qualquer lugar.',
+    'Login por e-mail não usa senha nem link — chega um código por e-mail, você digita no app e pronto.',
   ],
 };
 

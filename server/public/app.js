@@ -1941,18 +1941,28 @@ function retrackGlobalPresence() {
   if (globalPresenceChannel) globalPresenceChannel.track({});
 }
 function retrackServerPresence() {
-  if (serverPresenceChannel) {
-    serverPresenceChannel.track({
-      name: currentProfile ? currentProfile.display_name : 'Convidado',
-      avatar: currentProfile ? currentProfile.avatar_url : null,
-      // deixa a lista de canais da sidebar saber quem está em qual canal de
-      // voz e quem está transmitindo tela, sem precisar entrar na call pra
-      // enxergar isso (diferente da presença DENTRO da call, que só quem já
-      // entrou vê) - usado pelo mini-roster com badge "AO VIVO" nos canais.
-      voiceChannelId: activeVoiceChannel ? activeVoiceChannel.id : null,
-      sharingScreen: state.screen.sharing,
-    });
+  if (!serverPresenceChannel) return;
+  // bug real reportado em uso: depois de uma reconexão de rede (ex: sair e
+  // voltar pra call), esse canal às vezes fica "preso" num estado diferente
+  // de 'joined' (closed/errored) - chamar track() nele nesse estado não dá
+  // erro nenhum, mas também não manda nada pro servidor, então a pessoa
+  // sumia da lista "NA CALL"/"OFFLINE" pra sempre até trocar de servidor e
+  // voltar. Detecta isso e reconecta de verdade (joinServerPresence recria
+  // o canal do zero) em vez de insistir num canal morto.
+  if (serverPresenceChannel.state !== 'joined') {
+    if (activeServerId) joinServerPresence(activeServerId);
+    return;
   }
+  serverPresenceChannel.track({
+    name: currentProfile ? currentProfile.display_name : 'Convidado',
+    avatar: currentProfile ? currentProfile.avatar_url : null,
+    // deixa a lista de canais da sidebar saber quem está em qual canal de
+    // voz e quem está transmitindo tela, sem precisar entrar na call pra
+    // enxergar isso (diferente da presença DENTRO da call, que só quem já
+    // entrou vê) - usado pelo mini-roster com badge "AO VIVO" nos canais.
+    voiceChannelId: activeVoiceChannel ? activeVoiceChannel.id : null,
+    sharingScreen: state.screen.sharing,
+  });
 }
 let presenceRefreshTimer = null;
 function startPresenceRefreshLoop() {
@@ -2547,15 +2557,14 @@ function joinServerPresence(serverId) {
     renderMemberSidebar();
     renderChannelList();
   });
-  rt.subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      rt.track({
-        name: currentProfile ? currentProfile.display_name : 'Convidado',
-        avatar: currentProfile ? currentProfile.avatar_url : null,
-      });
-    }
-  });
   serverPresenceChannel = rt;
+  rt.subscribe((status) => {
+    // reaproveita retrackServerPresence (já manda voiceChannelId/sharingScreen
+    // junto) em vez de duplicar um track() parcial aqui - evita a pessoa
+    // aparecer "fora da call" por um instante logo numa reconexão que
+    // acontece enquanto ela já está dentro de uma call.
+    if (status === 'SUBSCRIBED') retrackServerPresence();
+  });
   fetchServerMembers(serverId);
 
   // escuta quem entra/sai de verdade no servidor (tabela server_members) -
@@ -3594,6 +3603,17 @@ function joinVoiceChannel(channel) {
     const presenceState = rt.presenceState();
     const clients = Object.entries(presenceState).map(([id, metas]) => ({ id, ...metas[0] }));
     onPresence(clients);
+    // reforça o retrack da presença DO SERVIDOR aqui também (não só uma vez
+    // no topo de joinVoiceChannel) - bug reportado em uso real: depois de
+    // sair e voltar pra call, a pessoa reconectava direitinho pro WebRTC
+    // (o tile dela aparecia funcionando no grid) mas sumia da lista
+    // "NA CALL"/"OFFLINE" da sidebar, porque aquele retrack() inicial pode
+    // ter sido perdido num momento em que o canal server:<id> ainda não
+    // tinha voltado a ficar "joined" de verdade (ex: reconexão de rede).
+    // Esse evento de sync do canal de VOZ é prova concreta de que a
+    // conexão está ativa agora - um bom gatilho extra pra garantir que o
+    // retrack realmente chegue no servidor.
+    retrackServerPresence();
   });
 
   rt.on('broadcast', { event: 'signal' }, ({ payload }) => {
@@ -5431,6 +5451,9 @@ const CHANGELOG = {
   '3.13.0': [
     'Modo admin (controle remoto) agora é liberado pra qualquer um — basta ligar nas Configurações. Em troca, sempre precisa do consentimento da outra pessoa: um pedido/convite aparece na tela e só começa se for aceito.',
     'Novo: "Transmissão interativa" — enquanto você compartilha a tela, dá pra escolher alguém presente na call e convidar pra controlar (a pessoa escolhida decide se aceita).',
+  ],
+  '3.13.1': [
+    'Corrigido: depois de sair e voltar pra uma call (às vezes por causa de uma reconexão de rede), a pessoa podia ficar presa sumida da lista "Na call"/online do servidor pra sempre, mesmo com a chamada funcionando normal. Agora detecta isso e se reconecta sozinho.',
   ],
 };
 

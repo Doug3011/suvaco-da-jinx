@@ -20,12 +20,39 @@ if (!gotSingleInstanceLock) {
   app.quit();
   process.exit(0);
 }
-app.on('second-instance', () => {
+// Convite por link: suvacodajinx://join/<codigo> - registrado como
+// protocolo customizado (build.protocols no package.json, o NSIS escreve
+// a chave de registro certa no instalador). Extrai o código de qualquer
+// argv que pareça com esse link, de onde quer que ele apareça na lista
+// (o SO pode colocar em posições diferentes dependendo de como foi
+// lançado).
+function extractInviteCodeFromArgv(argv) {
+  for (const arg of argv) {
+    const match = /^suvacodajinx:\/\/join\/([a-zA-Z0-9]+)/.exec(arg);
+    if (match) return match[1];
+  }
+  return null;
+}
+function sendInviteCodeToRenderer(code) {
+  if (!code || !mainWindow) return;
+  mainWindow.webContents.send('app:joinByCode', code);
+}
+
+app.on('second-instance', (_event, commandLine) => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
   }
+  sendInviteCodeToRenderer(extractInviteCodeFromArgv(commandLine));
+});
+
+// macOS entrega o link assim em vez de via argv/second-instance - sem
+// efeito no Windows, mas não custa nada deixar coberto.
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  const match = /^suvacodajinx:\/\/join\/([a-zA-Z0-9]+)/.exec(url);
+  if (match) sendInviteCodeToRenderer(match[1]);
 });
 
 // Tira a borda que o Windows desenha em volta de uma JANELA sendo
@@ -294,8 +321,21 @@ app.whenReady().then(() => {
     }
   });
 
+  // Só registra em build empacotado - em dev o "exe" é o electron.exe
+  // genérico, registrar o protocolo nele faria QUALQUER coisa que abra um
+  // link suvacodajinx:// disparar o Electron cru sem carregar nosso app.
+  if (app.isPackaged) app.setAsDefaultProtocolClient('suvacodajinx');
+
   createMainWindow();
   createTray();
+
+  // link de convite clicado com o app ainda FECHADO - a janela acabou de
+  // ser criada, precisa esperar a página carregar antes de mandar o IPC
+  // (senão o preload ainda não registrou o listener do lado do renderer).
+  const initialInviteCode = extractInviteCodeFromArgv(process.argv);
+  if (initialInviteCode) {
+    mainWindow.webContents.once('did-finish-load', () => sendInviteCodeToRenderer(initialInviteCode));
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

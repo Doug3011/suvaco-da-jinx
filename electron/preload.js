@@ -19,6 +19,11 @@ contextBridge.exposeInMainWorld('telaNative', {
   getCloseBehavior: () => ipcRenderer.invoke('app:getCloseBehavior'),
   setCloseBehavior: (value) => ipcRenderer.invoke('app:setCloseBehavior', value),
   sendRemoteInput: (msg) => ipcRenderer.invoke('native:remoteInput', msg),
+  onJoinByCode: (cb) => {
+    const listener = (_event, code) => cb(code);
+    ipcRenderer.on('app:joinByCode', listener);
+    return () => ipcRenderer.removeListener('app:joinByCode', listener);
+  },
   onUpdateReady: (cb) => {
     const listener = (_event, payload) => cb(payload);
     ipcRenderer.on('update:ready', listener);

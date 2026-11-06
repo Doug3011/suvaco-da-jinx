@@ -146,12 +146,17 @@ const els = {
   textChannelMessages: document.getElementById('textChannelMessages'),
   textChannelForm: document.getElementById('textChannelForm'),
   textChannelTextInput: document.getElementById('textChannelTextInput'),
+  textChannelTypingIndicator: document.getElementById('textChannelTypingIndicator'),
+  textChannelEmojiBtn: document.getElementById('textChannelEmojiBtn'),
+  dmEmojiBtn: document.getElementById('dmEmojiBtn'),
   textChannelAttachBtn: document.getElementById('textChannelAttachBtn'),
   textChannelFileInput: document.getElementById('textChannelFileInput'),
   textChannelPendingAttachments: document.getElementById('textChannelPendingAttachments'),
   roomInfo: document.getElementById('roomInfo'),
   peopleCount: document.getElementById('peopleCount'),
   chatNotificationsCheck: document.getElementById('chatNotificationsCheck'),
+  voiceConnectedPanel: document.getElementById('voiceConnectedPanel'),
+  voiceConnectedDetail: document.getElementById('voiceConnectedDetail'),
   closeBehaviorSelect: document.getElementById('closeBehaviorSelect'),
   remoteAdminRow: document.getElementById('remoteAdminRow'),
   remoteAdminCheck: document.getElementById('remoteAdminCheck'),
@@ -287,6 +292,41 @@ function showLobbyScreen() {
   joinGlobalPresence();
   joinAttachmentSignaling();
   fetchFriends();
+  startLastSeenLoop();
+  if (pendingInviteCode) {
+    const code = pendingInviteCode;
+    pendingInviteCode = null;
+    joinServerByCode(code).then(() => showToast('Você entrou no servidor pelo link de convite!')).catch((err) => {
+      showToast(err.message || 'Link de convite inválido.', 3500);
+    });
+  }
+}
+
+// "Visto há Xh" pros amigos offline: atualiza last_seen_at periodicamente
+// enquanto o app estiver aberto (não só ao sair "limpo") - assim mesmo um
+// fechamento abrupto (crash, Gerenciador de Tarefas) deixa um último
+// horário razoavelmente fresco, só com uma margem de até 1 minuto de atraso.
+let lastSeenTimer = null;
+function touchLastSeen() {
+  if (!currentUser) return;
+  window.supabaseClient.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', currentUser.id).then(() => {});
+}
+function startLastSeenLoop() {
+  if (lastSeenTimer) return;
+  touchLastSeen();
+  lastSeenTimer = setInterval(touchLastSeen, 60000);
+}
+
+function formatLastSeen(iso) {
+  if (!iso) return 'nunca visto';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'visto agora';
+  if (mins < 60) return `visto há ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `visto há ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `visto há ${days}d`;
 }
 
 els.authForm.addEventListener('submit', async (ev) => {
@@ -1345,7 +1385,7 @@ async function fetchFriends() {
   const { data, error } = await window.supabaseClient
     .from('friend_requests')
     .select(
-      'id, requester_id, addressee_id, status, requester:requester_id(id,display_name,avatar_url), addressee:addressee_id(id,display_name,avatar_url)',
+      'id, requester_id, addressee_id, status, requester:requester_id(id,display_name,avatar_url,last_seen_at), addressee:addressee_id(id,display_name,avatar_url,last_seen_at)',
     )
     .or(`requester_id.eq.${currentUser.id},addressee_id.eq.${currentUser.id}`);
   if (error) {
@@ -1359,7 +1399,13 @@ async function fetchFriends() {
     const isRequester = row.requester_id === currentUser.id;
     const other = isRequester ? row.addressee : row.requester;
     if (!other) continue;
-    const entry = { requestId: row.id, id: other.id, name: other.display_name || 'Convidado', avatar: other.avatar_url };
+    const entry = {
+      requestId: row.id,
+      id: other.id,
+      name: other.display_name || 'Convidado',
+      avatar: other.avatar_url,
+      lastSeenAt: other.last_seen_at,
+    };
     if (row.status === 'accepted') friendsCache.push(entry);
     else if (isRequester) pendingOutgoing.push(entry);
     else pendingIncoming.push(entry);
@@ -1425,6 +1471,11 @@ function buildPersonRow(person, { online, showHandle, actions } = {}) {
   const row = document.createElement('div');
   row.className = 'people-list-row' + (online ? ' sharing' : '');
   const statusDot = online ? '<span class="status-dot"></span>' : '';
+  const subText = showHandle
+    ? (person.id || '').slice(0, 8)
+    : !online && person.lastSeenAt
+      ? formatLastSeen(person.lastSeenAt)
+      : '';
   row.innerHTML = `
     <div class="avatar-status-wrap">
       <img src="${person.avatar || DEFAULT_AVATAR}" alt="" />
@@ -1432,7 +1483,7 @@ function buildPersonRow(person, { online, showHandle, actions } = {}) {
     </div>
     <div class="person-info">
       <span class="name">${escapeHtml(person.name || 'Convidado')}</span>
-      ${showHandle ? `<span class="person-sub">${escapeHtml((person.id || '').slice(0, 8))}</span>` : ''}
+      ${subText ? `<span class="person-sub">${escapeHtml(subText)}</span>` : ''}
     </div>
     <div class="person-actions"></div>
   `;
@@ -1911,6 +1962,107 @@ function renderAttachmentBlock(row, senderId) {
 // de canal de texto e nas mensagens diretas.
 const MESSAGE_GROUP_WINDOW_MS = 5 * 60 * 1000;
 
+/* ---------------- reações com emoji (só canal de texto, por enquanto) ----------------
+   Barra rápida de reação (hover na mensagem) com um conjunto fixo de
+   emojis comuns - sem picker completo por ora. Cache em memória
+   (messageId -> emoji -> Set de userId que reagiu), reconstruída ao abrir
+   o canal e mantida em dia via postgres_changes na mesma subscription já
+   usada pras mensagens. */
+const QUICK_REACT_EMOJI = ['👍', '❤️', '😂', '🎉', '😮', '😢'];
+const reactionsCache = new Map(); // messageId -> Map(emoji -> Set(userId))
+
+function getReactionBucket(messageId, emoji) {
+  let byEmoji = reactionsCache.get(messageId);
+  if (!byEmoji) {
+    byEmoji = new Map();
+    reactionsCache.set(messageId, byEmoji);
+  }
+  let users = byEmoji.get(emoji);
+  if (!users) {
+    users = new Set();
+    byEmoji.set(emoji, users);
+  }
+  return users;
+}
+
+async function fetchReactionsFor(messageIds) {
+  if (!messageIds.length) return;
+  const { data, error } = await window.supabaseClient
+    .from('message_reactions')
+    .select('message_id, user_id, emoji')
+    .in('message_id', messageIds);
+  if (error) {
+    console.error('Erro ao buscar reações:', error);
+    return;
+  }
+  for (const row of data || []) {
+    getReactionBucket(row.message_id, row.emoji).add(row.user_id);
+  }
+}
+
+function onReactionChange(payload) {
+  const row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+  if (!row || !row.message_id) return;
+  if (payload.eventType === 'DELETE') {
+    const users = getReactionBucket(row.message_id, row.emoji);
+    users.delete(row.user_id);
+  } else {
+    getReactionBucket(row.message_id, row.emoji).add(row.user_id);
+  }
+  const wrap = document.querySelector(`.chat-msg[data-message-id="${row.message_id}"] .chat-msg-reactions`);
+  if (wrap) renderReactionPills(wrap, row.message_id);
+}
+
+async function toggleReaction(messageId, emoji) {
+  const mine = getReactionBucket(messageId, emoji).has(currentUser.id);
+  if (mine) {
+    await window.supabaseClient
+      .from('message_reactions')
+      .delete()
+      .eq('message_id', messageId)
+      .eq('user_id', currentUser.id)
+      .eq('emoji', emoji);
+  } else {
+    await window.supabaseClient
+      .from('message_reactions')
+      .insert({ message_id: messageId, user_id: currentUser.id, emoji });
+  }
+  // não espera o realtime pra se auto-atualizar - reação da própria pessoa
+  // reflete na hora, o resto da galera continua chegando via postgres_changes
+  const byEmoji = reactionsCache.get(messageId);
+  const wrap = document.querySelector(`.chat-msg[data-message-id="${messageId}"] .chat-msg-reactions`);
+  if (wrap) renderReactionPills(wrap, messageId);
+}
+
+function renderReactionPills(wrap, messageId) {
+  wrap.innerHTML = '';
+  const byEmoji = reactionsCache.get(messageId);
+  if (!byEmoji) return;
+  for (const [emoji, users] of byEmoji) {
+    if (!users.size) continue;
+    const mine = users.has(currentUser.id);
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'chat-msg-reaction-pill' + (mine ? ' mine' : '');
+    pill.innerHTML = `<span>${emoji}</span><span class="chat-msg-reaction-count">${users.size}</span>`;
+    pill.addEventListener('click', () => toggleReaction(messageId, emoji));
+    wrap.appendChild(pill);
+  }
+}
+
+function buildQuickReactBar(messageId) {
+  const bar = document.createElement('div');
+  bar.className = 'chat-msg-quick-react';
+  for (const emoji of QUICK_REACT_EMOJI) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = emoji;
+    btn.addEventListener('click', () => toggleReaction(messageId, emoji));
+    bar.appendChild(btn);
+  }
+  return bar;
+}
+
 let activeDmPeerId = null;
 let dmRealtime = null;
 let dmLastAuthorId = null;
@@ -2115,7 +2267,7 @@ function joinServerPresence(serverId) {
 async function fetchServerMembers(serverId) {
   const { data, error } = await window.supabaseClient
     .from('server_members')
-    .select('user_id, profiles(display_name, avatar_url)')
+    .select('user_id, profiles(display_name, avatar_url, last_seen_at)')
     .eq('server_id', serverId);
   serverMembersCache = error ? [] : (data || []);
   renderMemberSidebar();
@@ -2128,8 +2280,13 @@ async function fetchServerMembers(serverId) {
 
 let activeContextMenu = null;
 
-function closeContextMenu() {
+function closeContextMenu(ev) {
   if (!activeContextMenu) return;
+  // clique DENTRO do próprio menu não fecha sozinho (ex: picker de emoji,
+  // que precisa ficar aberto pra mandar vários emojis seguidos) - quem
+  // quer fechar ao clicar numa ação chama closeContextMenu() direto no
+  // próprio handler da ação (como já faz "Ver perfil" etc.)
+  if (ev && ev.target && activeContextMenu.contains(ev.target)) return;
   activeContextMenu.remove();
   activeContextMenu = null;
   document.removeEventListener('click', closeContextMenu, true);
@@ -2155,6 +2312,36 @@ function openContextMenu(x, y, buildContent) {
     document.addEventListener('keydown', onContextMenuKeydown, true);
   }, 0);
 }
+
+/* ---------------- picker de emoji (chat/DM) ----------------
+   Conjunto curado fixo (não é o banco unicode inteiro) - cobre o uso
+   comum sem precisar de busca nem categorias. Insere no input de onde foi
+   aberto, não fecha sozinho entre cliques (dá pra mandar vários seguidos).
+   Reaproveita o mesmo componente de menu de contexto genérico. */
+const EMOJI_PICKER_SET = [
+  '😀', '😁', '😂', '🤣', '😊', '🙂', '😉', '😍', '🥰', '😘', '😜', '🤪', '🤔', '🫡', '😎', '🥳',
+  '😭', '😢', '😡', '🤬', '😱', '😨', '🥵', '🥶', '🤢', '🤯', '🙄', '😏', '😒', '😴', '🤫', '🤭',
+  '👍', '👎', '👏', '🙌', '🙏', '💪', '🤝', '✌️', '👌', '🤙', '👀', '🖕', '💯', '🔥', '✨', '🎉',
+  '❤️', '💔', '💀', '👻', '🤖', '🎮', '🎧', '🍕', '🍺', '☕', '🐶', '🐱', '🚀', '⭐', '🌙', '☀️',
+];
+function openEmojiPicker(anchorBtn, input) {
+  const rect = anchorBtn.getBoundingClientRect();
+  openContextMenu(rect.left, rect.top - 290, (menu) => {
+    menu.classList.add('emoji-picker-menu');
+    for (const emoji of EMOJI_PICKER_SET) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = emoji;
+      btn.addEventListener('click', () => {
+        input.value += emoji;
+        input.focus();
+      });
+      menu.appendChild(btn);
+    }
+  });
+}
+els.textChannelEmojiBtn.addEventListener('click', () => openEmojiPicker(els.textChannelEmojiBtn, els.textChannelTextInput));
+els.dmEmojiBtn.addEventListener('click', () => openEmojiPicker(els.dmEmojiBtn, els.dmTextInput));
 
 /* ---------------- volume individual por pessoa ----------------
    So' faz sentido pra quem eu realmente estou ouvindo agora (quem tem
@@ -2235,6 +2422,16 @@ function renderMemberSidebar() {
     return;
   }
   els.memberSidebar.classList.remove('hidden');
+
+  // Na sala de voz, a sidebar mostra quem está NA CALL (não só "olhando o
+  // servidor") — dado diferente, vem do roster de presença por canal de
+  // voz (voiceChannelOccupants, já usado no mini-roster da lista de
+  // canais) em vez do online/offline genérico do servidor.
+  if (currentMainPanel === 'voice' && activeVoiceChannel) {
+    renderCallMemberSidebar();
+    return;
+  }
+
   const onlineIds = serverPresenceChannel
     ? new Set(Object.keys(serverPresenceChannel.presenceState()))
     : new Set();
@@ -2243,7 +2440,7 @@ function renderMemberSidebar() {
   const offline = [];
   for (const m of serverMembersCache) {
     const profile = m.profiles || {};
-    const entry = { id: m.user_id, name: profile.display_name || 'Convidado', avatar: profile.avatar_url };
+    const entry = { id: m.user_id, name: profile.display_name || 'Convidado', avatar: profile.avatar_url, lastSeenAt: profile.last_seen_at };
     (onlineIds.has(m.user_id) ? online : offline).push(entry);
   }
 
@@ -2268,6 +2465,66 @@ function renderMemberSidebar() {
   };
   addGroup('Online', online);
   addGroup('Offline', offline);
+  if (online.length <= 1) {
+    els.memberList.appendChild(
+      buildNudgeCard('Tá meio vazio aqui', 'Manda o convite pra galera. Quem entrar já cai no servidor.'),
+    );
+  }
+}
+
+function buildNudgeCard(title, sub) {
+  const card = document.createElement('div');
+  card.className = 'sidebar-nudge-card';
+  card.innerHTML = `
+    <strong>${escapeHtml(title)}</strong>
+    <span>${escapeHtml(sub)}</span>
+    <button type="button" class="primary">Copiar convite</button>
+  `;
+  card.querySelector('button').addEventListener('click', copyServerInviteCode);
+  return card;
+}
+
+function renderCallMemberSidebar() {
+  const occupants = voiceChannelOccupants(activeVoiceChannel.id);
+  const onlineIds = serverPresenceChannel
+    ? new Set(Object.keys(serverPresenceChannel.presenceState()))
+    : new Set();
+  const offline = [];
+  for (const m of serverMembersCache) {
+    if (onlineIds.has(m.user_id)) continue;
+    const profile = m.profiles || {};
+    offline.push({ id: m.user_id, name: profile.display_name || 'Convidado', avatar: profile.avatar_url, lastSeenAt: profile.last_seen_at });
+  }
+
+  els.memberList.innerHTML = '';
+  const addGroup = (title, members, isCallGroup) => {
+    if (!members.length) return;
+    const groupTitle = document.createElement('div');
+    groupTitle.className = 'channel-group-title';
+    groupTitle.textContent = `${title} — ${members.length}`;
+    els.memberList.appendChild(groupTitle);
+    for (const member of members) {
+      const row = buildPersonRow(member, { online: isCallGroup });
+      if (!isCallGroup) row.style.opacity = '0.5';
+      else if (member.sharingScreen) {
+        const badge = document.createElement('span');
+        badge.className = 'voice-channel-live-badge';
+        badge.textContent = 'AO VIVO';
+        row.querySelector('.person-actions').appendChild(badge);
+      }
+      els.memberList.appendChild(row);
+    }
+  };
+  addGroup('Na call', occupants, true);
+  addGroup('Offline', offline, false);
+
+  if (state.screen.sharing) {
+    let watching = 0;
+    for (const k of state.broadcastPcs.keys()) if (k.endsWith(':screen')) watching++;
+    if (watching === 0) {
+      els.memberList.appendChild(buildNudgeCard('Transmitindo sozinho?', 'Manda o convite e a galera já entra assistindo.'));
+    }
+  }
 }
 
 async function fetchChannels(serverId) {
@@ -2356,6 +2613,7 @@ function voiceChannelOccupants(channelId) {
   // certa na hora; só o resto da galera depende do presence sincronizado.
   if (currentUser && activeVoiceChannel && activeVoiceChannel.id === channelId) {
     out.push({
+      id: currentUser.id,
       name: currentProfile ? currentProfile.display_name : 'Convidado',
       avatar: currentProfile ? currentProfile.avatar_url : null,
       sharingScreen: state.screen.sharing,
@@ -2366,7 +2624,7 @@ function voiceChannelOccupants(channelId) {
   for (const [userId, metas] of Object.entries(state_)) {
     if (userId === currentUser.id) continue; // já tratado acima com o estado local
     const meta = metas[0];
-    if (meta && meta.voiceChannelId === channelId) out.push(meta);
+    if (meta && meta.voiceChannelId === channelId) out.push({ id: userId, ...meta });
   }
   return out;
 }
@@ -2498,10 +2756,19 @@ els.serverIconInput.addEventListener('change', async () => {
   }
 });
 
+// Link em vez de código cru: clicando, a pessoa cai numa página que tenta
+// abrir o app direto (se já tiver instalado) ou mostra onde baixar - sem
+// precisar copiar/colar um código na mão. O código cru pasted continua
+// funcionando em "Entrar com código" (extractInviteCodeFromText aceita os dois).
+const INVITE_WEB_BASE = 'https://doug3011.github.io/suvaco-da-jinx/invite.html';
+function buildInviteLink(code) {
+  return `${INVITE_WEB_BASE}?c=${code}`;
+}
+
 els.serverSettingsCopyInviteBtn.addEventListener('click', async () => {
   try {
-    await navigator.clipboard.writeText(els.serverSettingsInviteCode.value);
-    showToast('Código de convite copiado!', 2000);
+    await navigator.clipboard.writeText(buildInviteLink(els.serverSettingsInviteCode.value));
+    showToast('Link de convite copiado!', 2000);
   } catch {
     /* clipboard sem permissão - o campo já mostra o código pra copiar na mão */
   }
@@ -2535,11 +2802,14 @@ els.deleteServerBtn.addEventListener('click', async () => {
 // conteúdo principal troca entre o painel de boas-vindas, o canal de texto
 // e a sala de voz. Entrar num canal de texto NÃO sai de uma chamada de voz
 // em andamento (ela continua rodando em segundo plano, só escondida).
+let currentMainPanel = null;
 function showMainPanel(panel) {
+  currentMainPanel = panel;
   els.welcomePanel.classList.toggle('hidden', panel !== 'friends');
   els.dmChannel.classList.toggle('hidden', panel !== 'dm');
   els.textChannel.classList.toggle('hidden', panel !== 'text');
   els.room.classList.toggle('hidden', panel !== 'voice');
+  renderMemberSidebar();
 }
 
 function openChannel(channel) {
@@ -2566,6 +2836,7 @@ function openChannel(channel) {
 
 let activeTextChannel = null;
 let textChannelRealtime = null;
+let reactionsRealtime = null;
 let textChannelLastAuthorId = null;
 let textChannelLastAt = null;
 const profileCache = new Map(); // userId -> {display_name, avatar_url}
@@ -2597,6 +2868,7 @@ function renderTextChannelMessage(row, authorProfile) {
 
   const wrap = document.createElement('div');
   wrap.className = 'chat-msg' + (isSelf ? ' self' : '') + (grouped ? ' chat-msg-grouped' : '');
+  wrap.dataset.messageId = row.id;
   wrap.innerHTML = `
     <img class="chat-msg-avatar" src="${avatar}" alt="" />
     <div class="chat-msg-body">
@@ -2605,9 +2877,12 @@ function renderTextChannelMessage(row, authorProfile) {
         <span class="chat-msg-time">${time}</span>
       </div>
       ${row.content ? `<div class="chat-msg-text">${escapeHtml(row.content)}</div>` : ''}
+      <div class="chat-msg-reactions"></div>
     </div>
   `;
   if (row.attachment_id) wrap.querySelector('.chat-msg-body').appendChild(renderAttachmentBlock(row, row.author_id));
+  wrap.appendChild(buildQuickReactBar(row.id));
+  renderReactionPills(wrap.querySelector('.chat-msg-reactions'), row.id);
   els.textChannelMessages.appendChild(wrap);
   els.textChannelMessages.scrollTop = els.textChannelMessages.scrollHeight;
 
@@ -2651,6 +2926,10 @@ async function openTextChannel(channel) {
   els.textChannelMessages.appendChild(renderTextChannelWelcome(channel));
   textChannelLastAuthorId = null;
   textChannelLastAt = null;
+  reactionsCache.clear();
+  for (const p of typingPeers.values()) clearTimeout(p.timeout);
+  typingPeers.clear();
+  renderTypingIndicator();
   showMainPanel('text');
 
   const { data, error } = await window.supabaseClient
@@ -2662,6 +2941,7 @@ async function openTextChannel(channel) {
   if (error) {
     console.error('Erro ao buscar mensagens:', error);
   } else {
+    await fetchReactionsFor(data.map((r) => r.id));
     for (const row of data) {
       const profile = await getProfileCached(row.author_id);
       renderTextChannelMessage(row, profile);
@@ -2679,13 +2959,78 @@ async function openTextChannel(channel) {
         renderTextChannelMessage(payload.new, profile);
       },
     )
+    .on('broadcast', { event: 'typing' }, ({ payload }) => {
+      if (payload.userId !== currentUser.id) onPeerTyping(payload.userId, payload.name);
+    })
+    .subscribe();
+
+  // Canal SEPARADO do de mensagens de propósito: se a tabela message_reactions
+  // não existir ainda (usuário não rodou a migração), isso falha sozinho sem
+  // arriscar derrubar a subscrição de mensagens/digitando junto (confirmado
+  // em teste - um .on() de postgres_changes pra tabela inexistente quebrava
+  // a subscrição INTEIRA do canal que a continha, inclusive o resto).
+  if (reactionsRealtime) window.supabaseClient.removeChannel(reactionsRealtime);
+  reactionsRealtime = window.supabaseClient
+    .channel(`reactions:${channel.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reactions' }, (payload) => {
+      // sem filtro no banco (reactions não tem channel_id direto) - só
+      // aplica se a mensagem estiver realmente aberta neste canal agora.
+      const row = payload.eventType === 'DELETE' ? payload.old : payload.new;
+      if (row && document.querySelector(`.chat-msg[data-message-id="${row.message_id}"]`)) onReactionChange(payload);
+    })
     .subscribe();
 }
+
+/* ---------------- "fulano está digitando..." (canal de texto) ----------------
+   Broadcast efêmero no MESMO canal realtime das mensagens - nada
+   persistido, cada evento só avisa "ainda digitando" por alguns segundos;
+   sem novo evento nesse intervalo, considera que parou. */
+const typingPeers = new Map(); // userId -> { name, timeout }
+const TYPING_TIMEOUT_MS = 4000;
+const TYPING_SEND_THROTTLE_MS = 2000;
+
+function renderTypingIndicator() {
+  const names = [...typingPeers.values()].map((p) => p.name);
+  if (!names.length) {
+    els.textChannelTypingIndicator.classList.add('hidden');
+    return;
+  }
+  const text = names.length === 1 ? `${names[0]} está digitando…` : `${names.join(', ')} estão digitando…`;
+  els.textChannelTypingIndicator.innerHTML = `<span class="chat-typing-dots"><span></span><span></span><span></span></span>${escapeHtml(text)}`;
+  els.textChannelTypingIndicator.classList.remove('hidden');
+}
+function onPeerTyping(userId, name) {
+  const existing = typingPeers.get(userId);
+  if (existing) clearTimeout(existing.timeout);
+  const timeout = setTimeout(() => {
+    typingPeers.delete(userId);
+    renderTypingIndicator();
+  }, TYPING_TIMEOUT_MS);
+  typingPeers.set(userId, { name, timeout });
+  renderTypingIndicator();
+}
+
+let lastTypingSentAt = 0;
+els.textChannelTextInput.addEventListener('input', () => {
+  if (!activeTextChannel || !textChannelRealtime) return;
+  const now = Date.now();
+  if (now - lastTypingSentAt < TYPING_SEND_THROTTLE_MS) return;
+  lastTypingSentAt = now;
+  textChannelRealtime.send({
+    type: 'broadcast',
+    event: 'typing',
+    payload: { userId: currentUser.id, name: currentProfile ? currentProfile.display_name : 'Convidado' },
+  });
+});
 
 function closeTextChannel() {
   if (textChannelRealtime) {
     window.supabaseClient.removeChannel(textChannelRealtime);
     textChannelRealtime = null;
+  }
+  if (reactionsRealtime) {
+    window.supabaseClient.removeChannel(reactionsRealtime);
+    reactionsRealtime = null;
   }
   activeTextChannel = null;
 }
@@ -2799,16 +3144,25 @@ els.serverCreateBtn.addEventListener('click', async () => {
   }
 });
 
+async function joinServerByCode(code) {
+  const { data: serverId, error } = await window.supabaseClient.rpc('join_server_by_code', { code });
+  if (error) throw error;
+  await fetchMyServers();
+  selectServer(serverId);
+  return serverId;
+}
+
 els.serverJoinBtn.addEventListener('click', async () => {
-  const code = els.serverJoinCodeInput.value.trim().toLowerCase();
+  // aceita colar o link inteiro (suvacodajinx://join/codigo ou a página
+  // web de convite com ?c=codigo) em vez de só o código cru, pra não
+  // confundir quem recebeu o link e tentou colar ele aqui por engano.
+  const raw = els.serverJoinCodeInput.value.trim();
+  const code = extractInviteCodeFromText(raw);
   if (!code) { showServerModalError('Digita o código de convite.'); return; }
   els.serverJoinBtn.disabled = true;
   try {
-    const { data: serverId, error } = await window.supabaseClient.rpc('join_server_by_code', { code });
-    if (error) throw error;
+    await joinServerByCode(code);
     closeServerModal();
-    await fetchMyServers();
-    selectServer(serverId);
   } catch (err) {
     showServerModalError(err.message || 'Código inválido.');
   } finally {
@@ -2816,12 +3170,38 @@ els.serverJoinBtn.addEventListener('click', async () => {
   }
 });
 
+function extractInviteCodeFromText(raw) {
+  if (!raw) return '';
+  const protocolMatch = /suvacodajinx:\/\/join\/([a-zA-Z0-9]+)/.exec(raw);
+  if (protocolMatch) return protocolMatch[1].toLowerCase();
+  const webMatch = /[?&]c=([a-zA-Z0-9]+)/.exec(raw);
+  if (webMatch) return webMatch[1].toLowerCase();
+  return raw.trim().toLowerCase();
+}
+
+// link de convite (suvacodajinx://join/<codigo>), vindo do processo
+// principal (clique no link com o app já aberto, ou acabou de abrir por
+// causa do link). Se ainda não tiver logado quando o link chega, guarda e
+// processa assim que o login terminar.
+let pendingInviteCode = null;
+if (isElectron && window.telaNative.onJoinByCode) {
+  window.telaNative.onJoinByCode((code) => {
+    if (currentUser) {
+      joinServerByCode(code).then(() => showToast('Você entrou no servidor pelo link de convite!')).catch((err) => {
+        showToast(err.message || 'Link de convite inválido.', 3500);
+      });
+    } else {
+      pendingInviteCode = code;
+    }
+  });
+}
+
 els.copyInviteBtn.addEventListener('click', async () => {
   const server = myServers.find((s) => s.id === activeServerId);
   if (!server) return;
   try {
-    await navigator.clipboard.writeText(server.invite_code);
-    showToast('Código de convite copiado!', 2000);
+    await navigator.clipboard.writeText(buildInviteLink(server.invite_code));
+    showToast('Link de convite copiado!', 2000);
   } catch {
     showToast(`Código: ${server.invite_code}`, 4000);
   }
@@ -2838,10 +3218,52 @@ els.copyInviteBtn.addEventListener('click', async () => {
 
 let activeVoiceChannel = null;
 
+// Latência mostrada no painel "Voz conectada": não existe UMA conexão só
+// (é mesh, várias RTCPeerConnection por pessoa), então mede a média do RTT
+// de todas as conexões ativas no momento via getStats() — fica "—" só
+// quando não há nenhuma conexão ainda (ex: sozinho na call, mic desligado).
+async function measureVoiceLatencyMs() {
+  const pcs = [...state.broadcastPcs.values(), ...state.watchPcs.values()];
+  if (!pcs.length) return null;
+  let total = 0;
+  let count = 0;
+  for (const pc of pcs) {
+    try {
+      const stats = await pc.getStats();
+      stats.forEach((report) => {
+        if (report.type === 'candidate-pair' && report.state === 'succeeded' && typeof report.currentRoundTripTime === 'number') {
+          total += report.currentRoundTripTime;
+          count++;
+        }
+      });
+    } catch {
+      /* pc pode ter fechado entre o Promise.all e aqui — ignora essa amostra */
+    }
+  }
+  return count ? Math.round((total / count) * 1000) : null;
+}
+
+let voiceConnectedTimer = null;
+async function updateVoiceConnectedPanel() {
+  if (!activeVoiceChannel) {
+    els.voiceConnectedPanel.classList.add('hidden');
+    return;
+  }
+  els.voiceConnectedPanel.classList.remove('hidden');
+  const ms = await measureVoiceLatencyMs();
+  els.voiceConnectedDetail.textContent = `${activeVoiceChannel.name} · ${ms != null ? ms + ' ms' : '—'}`;
+}
+function startVoiceConnectedLoop() {
+  if (voiceConnectedTimer) return;
+  voiceConnectedTimer = setInterval(updateVoiceConnectedPanel, 3000);
+}
+startVoiceConnectedLoop();
+
 function joinVoiceChannel(channel) {
   activeVoiceChannel = channel;
   renderChannelList();
   retrackServerPresence();
+  updateVoiceConnectedPanel();
   const myId = currentUser.id;
   state.myName = currentProfile ? currentProfile.display_name : 'Convidado';
   const presenceMeta = {
@@ -2910,8 +3332,8 @@ async function copyServerInviteCode() {
   const server = myServers.find((s) => s.id === activeServerId);
   if (!server) return;
   try {
-    await navigator.clipboard.writeText(server.invite_code);
-    showToast(`Código de convite copiado: ${server.invite_code}`);
+    await navigator.clipboard.writeText(buildInviteLink(server.invite_code));
+    showToast('Link de convite copiado!');
   } catch {
     showToast(`Código de convite: ${server.invite_code}`);
   }
@@ -2936,6 +3358,7 @@ function leaveRoom() {
   activeVoiceChannel = null;
   retrackServerPresence();
   renderChannelList();
+  updateVoiceConnectedPanel();
   // reforça a atualização pouco depois — stopScreenShare/stopCameraShare/
   // stopMicShare acima já dispararam seus próprios re-tracks com o estado
   // intermediário (ainda "na call", só sem compartilhar nada); se algum
@@ -3246,6 +3669,7 @@ async function startScreenShare() {
   state.transport.send({ type: 'share:start', source: 'screen' });
   retrackServerPresence();
   renderChannelList();
+  renderMemberSidebar();
 }
 
 function setBtnLabel(btn, text) {
@@ -3613,6 +4037,7 @@ function stopScreenShare() {
   }
   retrackServerPresence();
   renderChannelList();
+  renderMemberSidebar();
 }
 
 /* ---------------- overlay da câmera ----------------
@@ -4267,6 +4692,7 @@ function updateSelfScreenWatchersBadge() {
   }
   const badge = tile.root.querySelector('.tile-watchers-badge');
   badge.innerHTML = `${ICONS.monitor} ${watching} assistindo`;
+  if (currentMainPanel === 'voice') renderMemberSidebar(); // mantém o nudge "Transmitindo sozinho?" em dia
 }
 setInterval(updateSelfScreenWatchersBadge, 2000);
 
@@ -4517,6 +4943,14 @@ const CHANGELOG = {
   '3.9.0': [
     'Corrigido: às vezes o app continuava mostrando você na call mesmo depois de sair dela.',
     'Novo recurso restrito para administradores da rede — não afeta o uso normal do app.',
+  ],
+  '3.10.0': [
+    'Convite por link: "Copiar convite" agora copia um link — clicar nele abre direto no app (se já tiver instalado) ou leva pra uma página com o botão de baixar. Colar o código antigo em "Entrar com código" continua funcionando normal.',
+    'Reações com emoji nas mensagens do chat, e indicador de "fulano está digitando...".',
+    'Botão de emoji no chat e nas mensagens diretas.',
+    '"Visto há Xh" nos amigos offline.',
+    'Painel "Voz conectada" mostra o canal e a latência (ms) mesmo navegando pra outro lugar do app.',
+    'Lista de membros da sala de chamada agora mostra só quem está na call (com "AO VIVO" pra quem transmite) em vez da lista geral do servidor, com avisos de "tá vazio aqui" / "transmitindo sozinho?" quando fizer sentido.',
   ],
 };
 

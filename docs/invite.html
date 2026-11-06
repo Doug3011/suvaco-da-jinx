@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Convite — Suvaco da Jinx</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0b0e18;
+    --panel: #121833;
+    --panel-2: #1b2347;
+    --border-strong: #253064;
+    --text: #e7ecfa;
+    --muted: #8a95b8;
+    --accent: #2459e6;
+    --accent-2: #6e3be0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Manrope', system-ui, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--panel);
+    border: 1px solid var(--border-strong);
+    border-radius: 20px;
+    padding: 32px 28px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  }
+  .logo {
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    margin: 0 auto 18px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .logo svg { width: 30px; height: 30px; color: #fff; }
+  h1 { font-family: 'Sora', sans-serif; font-size: 22px; margin: 0 0 8px; }
+  p { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0 0 24px; }
+  .code-chip {
+    display: inline-block;
+    background: var(--panel-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 6px 14px;
+    font-family: 'Sora', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 20px;
+  }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    font-family: 'Sora', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    text-decoration: none;
+    margin-bottom: 10px;
+    border: none;
+    cursor: pointer;
+  }
+  .btn-primary { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; }
+  .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border-strong); }
+  .hint { font-size: 12px; margin-top: 16px; }
+  .error { display: none; color: #ff9aa8; font-size: 13px; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><line x1="8" y1="22" x2="16" y2="22"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
+    </div>
+    <h1>Você foi convidado pro Suvaco da Jinx</h1>
+    <div id="codeChip" class="code-chip">...</div>
+    <p id="statusText">Tentando abrir o app automaticamente...</p>
+    <p id="noCodeError" class="error">Esse link não tem um código de convite válido.</p>
+    <a id="openBtn" class="btn btn-primary" href="#">Abrir no app</a>
+    <a id="downloadBtn" class="btn btn-secondary" href="https://github.com/Doug3011/suvaco-da-jinx/releases/latest" target="_blank" rel="noopener">Baixar o Suvaco da Jinx</a>
+    <div class="hint">Já tem o app instalado? Clicar em "Abrir no app" leva direto pro convite. Se não tiver, baixa ele primeiro e depois usa o mesmo link de novo.</div>
+  </div>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('c');
+    const appLink = code ? `suvacodajinx://join/${code}` : null;
+
+    if (code) {
+      document.getElementById('codeChip').textContent = code;
+      document.getElementById('openBtn').href = appLink;
+      // tenta abrir sozinho; se o app não estiver instalado, nada visível
+      // acontece (o navegador ignora um protocolo desconhecido) e a pessoa
+      // usa os botões manualmente.
+      window.location.href = appLink;
+    } else {
+      document.querySelector('.code-chip').style.display = 'none';
+      document.getElementById('statusText').style.display = 'none';
+      document.getElementById('noCodeError').style.display = 'block';
+      document.getElementById('openBtn').style.display = 'none';
+    }
+  </script>
+</body>
+</html>

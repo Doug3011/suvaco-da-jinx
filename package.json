@@ -1,7 +1,7 @@
 {
   "name": "tela-radmin",
   "private": true,
-  "version": "3.9.0",
+  "version": "3.10.0",
   "description": "Servidores, canais de texto/voz e compartilhamento de tela entre amigos, estilo Discord.",
   "author": "Doug Muller Burro",
   "main": "electron/main.js",
@@ -15,6 +15,12 @@
     "appId": "com.doug.suvacodajinx",
     "productName": "Suvaco da Jinx",
     "icon": "build/icon.ico",
+    "protocols": [
+      {
+        "name": "Suvaco da Jinx Invite",
+        "schemes": ["suvacodajinx"]
+      }
+    ],
     "publish": {
       "provider": "github",
       "owner": "Doug3011",

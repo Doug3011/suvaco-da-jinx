@@ -12,7 +12,7 @@
     "dist:publish": "electron-builder --publish always"
   },
   "build": {
-    "appId": "com.doug.ribbit",
+    "appId": "com.doug.suvacodajinx",
     "productName": "Ribbit",
     "icon": "build/icon.ico",
     "protocols": [

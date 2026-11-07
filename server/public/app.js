@@ -2069,6 +2069,20 @@ function joinGlobalPresence() {
   globalPresenceChannel = rt;
 }
 
+// mesmo bug do retrackServerPresence (ver comentário lá): esse canal
+// também pode ficar "preso" num estado diferente de 'joined' depois de uma
+// reconexão, e track() nesse estado não manda nada pro servidor em
+// silêncio - antes só o de servidor tinha essa recuperação, então quando
+// o GLOBAL travava a pessoa sumia da lista de amigos/online pra sempre
+// (e isUserOnline(), usado pelo download de anexo, também ficava errado).
+function rejoinGlobalPresence() {
+  if (globalPresenceChannel) {
+    window.supabaseClient.removeChannel(globalPresenceChannel);
+    globalPresenceChannel = null;
+  }
+  joinGlobalPresence();
+}
+
 // sem isso, um pedido de amizade só aparecia quando a pessoa relogava (ou
 // mexia em algo que já desse fetchFriends por conta própria) - friend_requests
 // envolve OU requester_id OU addressee_id ser você, e o filtro de
@@ -2097,7 +2111,12 @@ function joinFriendRequestsRealtime() {
 const PRESENCE_REFRESH_MS = 20000;
 
 function retrackGlobalPresence() {
-  if (globalPresenceChannel) globalPresenceChannel.track({});
+  if (!globalPresenceChannel) return;
+  if (globalPresenceChannel.state !== 'joined') {
+    rejoinGlobalPresence();
+    return;
+  }
+  globalPresenceChannel.track({});
 }
 function retrackServerPresence() {
   if (!serverPresenceChannel) return;
@@ -4335,8 +4354,8 @@ function watchForBlackFrames(track) {
         if (blackStreak >= 3 && !warned) {
           warned = true;
           showToast(
-            'Sua tela compartilhada parece estar toda preta pros outros. Se for um jogo em tela cheia, troca pro modo "janela sem borda" nas configs gráficas dele — tela cheia exclusiva e vídeo com DRM (Netflix etc.) sempre saem pretos em qualquer captura de tela.',
-            9000,
+            'Sua tela compartilhada parece estar toda preta pros outros. Se for um jogo em tela cheia, troca pro modo "janela sem borda" nas configs gráficas dele (tela cheia exclusiva e vídeo com DRM tipo Netflix sempre saem pretos). Se não for nada disso, geralmente é a placa de vídeo enroscando com transmissão+recepção ao mesmo tempo — clica em "Parar de compartilhar" e compartilha de novo que costuma resolver.',
+            11000,
           );
         }
       } else {

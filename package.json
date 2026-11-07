@@ -56,7 +56,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Ribbit",
-      "artifactName": "Ribbit-Setup.exe"
+      "artifactName": "Ribbit-Setup.exe",
+      "include": "build/installer.nsh"
     }
   },
   "devDependencies": {

@@ -261,6 +261,9 @@
         <button id="interactiveShareBtn" class="dock-btn icon-only hidden" type="button" title="Transmissão interativa — deixar alguém da call te controlar">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><circle cx="12" cy="14" r="2.5"/></svg>
         </button>
+        <button id="clipBtn" class="dock-btn icon-only hidden" type="button" title="Clipar os últimos 60s">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        </button>
         <button id="leaveCallBtn" class="dock-btn dock-hangup" type="button" title="Sair da sala">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 17.92V20a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h2.08a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11l-1.27 1.27a16 16 0 0 0 2.61 3.41"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
         </button>
@@ -594,6 +597,15 @@
               </label>
             </div>
             <p class="settings-hint">Resolução/fps mais baixos deixam a transmissão mais leve pro seu PC — importante se for jogar enquanto transmite. Se a transmissão andar travando pros seus amigos, tenta um limite de banda mais baixo — geralmente resolve melhor que baixar a resolução. "Esconder o cursor" evita o mouse aparecer fixo/fantasma em jogos que escondem a mira de verdade (ex: Valorant) — só vale pra próxima vez que começar a compartilhar.</p>
+            <div class="divider-line"><span>clipes</span></div>
+            <div class="settings-row-switch-inline">
+              <span class="settings-card-label-plain">Permitir clipar minha transmissão</span>
+              <label class="switch">
+                <input type="checkbox" id="clipEnabledCheck" />
+                <span class="switch-track"><span class="switch-knob"></span></span>
+              </label>
+            </div>
+            <p class="settings-hint">Liga um botão "Clipar" na barra de controles enquanto você transmite — guarda os últimos 60 segundos (tempo suficiente pra dar alt-tab e clicar) e salva num arquivo .webm na pasta de downloads. Grava numa cópia menor (720p/30fps), separada da transmissão real, pra não pesar no seu PC nem na qualidade de quem assiste. Fica desligado até você ligar.</p>
           </div>
           <div class="settings-tab-panel" data-panel="apps">
             <div class="sidebar-section-title">Nesta sessão</div>

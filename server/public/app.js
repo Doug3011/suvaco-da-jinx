@@ -199,6 +199,8 @@ const els = {
   cameraBtn: document.getElementById('cameraBtn'),
   shareBtn: document.getElementById('shareBtn'),
   interactiveShareBtn: document.getElementById('interactiveShareBtn'),
+  clipBtn: document.getElementById('clipBtn'),
+  clipEnabledCheck: document.getElementById('clipEnabledCheck'),
   leaveBtn: document.getElementById('leaveBtn'),
   inviteBtn: document.getElementById('inviteBtn'),
   toast: document.getElementById('toast'),
@@ -997,6 +999,7 @@ function loadSettings() {
     chatNotifications: true,
     remoteAdminEnabled: false,
     theme: 'azul',
+    clipEnabled: false,
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -1021,7 +1024,7 @@ const state = {
   pinned: new Set(), // chaves marcadas pra entrar juntas na tela cheia
   focusOverlay: null,
   focusIds: null,
-  screen: { sharing: false, displayStream: null, localTracks: [], blackFrameStop: null },
+  screen: { sharing: false, displayStream: null, localTracks: [], blackFrameStop: null, clipper: null, clipperDownscale: null },
   camera: { sharing: false, camStream: null, localTracks: [] },
   mic: { sharing: false, micStream: null, localTracks: [] },
 };
@@ -1036,6 +1039,12 @@ els.hideCursorCheck.checked = state.settings.hideCursor;
 els.autoMicCheck.checked = state.settings.autoMic;
 els.chatNotificationsCheck.checked = state.settings.chatNotifications;
 els.remoteAdminCheck.checked = state.settings.remoteAdminEnabled;
+els.clipEnabledCheck.checked = state.settings.clipEnabled;
+els.clipEnabledCheck.addEventListener('change', () => {
+  state.settings.clipEnabled = els.clipEnabledCheck.checked;
+  saveSettings();
+  updateClipBtnVisibility();
+});
 
 // Tema: aplica já no carregamento (tela de login inclusive, não só depois
 // de logar) - "azul" é o padrão de sempre e não precisa de atributo
@@ -3926,6 +3935,107 @@ function onSignal(from, data) {
 
 /* ---------------- lado de quem assiste ---------------- */
 
+/* ---------------- clipes (buffer giratório dos últimos N segundos) ----------------
+   Mesma técnica nos dois sentidos (quem assiste e quem transmite): MediaRecorder
+   gravando em pedacinhos de 1s, só guarda os mais recentes (descarta o resto),
+   e ao clicar em "Clipar" junta tudo num arquivo só. Zero round-trip de rede -
+   grava em cima do stream que já está rodando localmente (decodificado, no
+   caso de quem assiste; capturado, no caso de quem transmite).
+   Nunca pesa pra quem está sendo assistido (o clipe de quem assiste roda só
+   na máquina de quem assiste). Pra quem transmite, é opt-in (Configurações >
+   Transmissão) e grava numa cópia reduzida (720p/30fps via <canvas>), não no
+   stream de broadcast em si - um encode a mais, mas bem mais leve que gravar
+   na resolução/fps cheios. */
+
+function pickClipMimeType() {
+  const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  return candidates.find((t) => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || 'video/webm';
+}
+
+function startRollingClip(stream, bufferSeconds) {
+  const mimeType = pickClipMimeType();
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream, { mimeType });
+  } catch {
+    return null; // stream sem track de vídeo ainda, ou codec indisponível - sem clipe, sem travar o resto
+  }
+  const chunks = [];
+  recorder.addEventListener('dataavailable', (ev) => {
+    if (!ev.data || !ev.data.size) return;
+    chunks.push({ blob: ev.data, t: Date.now() });
+    const cutoff = Date.now() - bufferSeconds * 1000 - 2000; // 2s de folga, pra sempre ter o período inteiro coberto
+    while (chunks.length && chunks[0].t < cutoff) chunks.shift();
+  });
+  try {
+    recorder.start(1000);
+  } catch {
+    return null;
+  }
+  return {
+    mimeType,
+    stop() {
+      try {
+        if (recorder.state !== 'inactive') recorder.stop();
+      } catch {
+        /* já pode ter parado sozinho (ex: track encerrada) */
+      }
+    },
+    save(filenameHint) {
+      if (!chunks.length) {
+        showToast('Ainda não gravou o suficiente pra clipar — espera uns segundos.');
+        return;
+      }
+      const blob = new Blob(chunks.map((c) => c.blob), { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${filenameHint}-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      showToast('Clipe salvo na pasta de downloads!');
+    },
+  };
+}
+
+// cria uma cópia reduzida (resolução/fps) de uma track de vídeo via <canvas> -
+// usado só pro clipe de quem transmite, pra não gravar na resolução/fps
+// cheios da transmissão real (mais barato de encodar).
+function createDownscaledStream(sourceTrack, targetWidth, targetHeight, fps) {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = new MediaStream([sourceTrack]);
+  video.play().catch(() => {});
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d');
+  const timer = setInterval(() => {
+    if (video.readyState >= 2) {
+      try {
+        ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+      } catch {
+        /* frame isolado pode falhar numa troca de resolução - ignora, tenta no próximo */
+      }
+    }
+  }, 1000 / fps);
+  const canvasStream = canvas.captureStream(fps);
+  return {
+    stream: canvasStream,
+    stop() {
+      clearInterval(timer);
+      video.pause();
+      video.srcObject = null;
+      for (const t of canvasStream.getTracks()) t.stop();
+    },
+  };
+}
+
+const viewerClippers = new Map(); // tileKey -> clipper (ver startRollingClip)
+
 function requestWatch(id, source, name, avatar) {
   const key = tileKey(id, source);
   const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -3939,6 +4049,10 @@ function requestWatch(id, source, name, avatar) {
   });
   pc.addEventListener('track', (ev) => {
     addOrUpdateTile(key, name, avatar, ev.streams[0], false, source);
+    if (source === 'screen' && !viewerClippers.has(key)) {
+      const clipper = startRollingClip(ev.streams[0], 30);
+      if (clipper) viewerClippers.set(key, clipper);
+    }
   });
   // canal de controle remoto (modo admin): só chega aqui se EU pedi
   // "Controlar tela" antes (startRemoteControl -> sendSignal 'control-request')
@@ -3987,6 +4101,11 @@ function teardownWatch(id, source) {
   const pc = state.watchPcs.get(key);
   if (pc) pc.close();
   state.watchPcs.delete(key);
+  const clipper = viewerClippers.get(key);
+  if (clipper) {
+    clipper.stop();
+    viewerClippers.delete(key);
+  }
   removeTile(key);
   updateEmptyHint();
 }
@@ -4088,6 +4207,13 @@ async function startScreenShare() {
   setBtnLabel(els.shareBtn, 'Parar de compartilhar');
   els.shareBtn.classList.add('active');
   updateInteractiveShareBtnVisibility();
+
+  if (state.settings.clipEnabled && screenVideoTrack) {
+    const downscale = createDownscaledStream(screenVideoTrack, 1280, 720, 30);
+    state.screen.clipperDownscale = downscale;
+    state.screen.clipper = startRollingClip(downscale.stream, 60);
+  }
+  updateClipBtnVisibility();
 
   display.getVideoTracks()[0].addEventListener('ended', stopScreenShare);
   state.screen.blackFrameStop = watchForBlackFrames(display.getVideoTracks()[0]);
@@ -4444,6 +4570,16 @@ function stopScreenShare() {
   els.shareBtn.classList.remove('active');
   updateInteractiveShareBtnVisibility();
 
+  if (state.screen.clipper) {
+    state.screen.clipper.stop();
+    state.screen.clipper = null;
+  }
+  if (state.screen.clipperDownscale) {
+    state.screen.clipperDownscale.stop();
+    state.screen.clipperDownscale = null;
+  }
+  updateClipBtnVisibility();
+
   if (state.screen.blackFrameStop) {
     state.screen.blackFrameStop();
     state.screen.blackFrameStop = null;
@@ -4785,15 +4921,30 @@ function openTileContextMenu(x, y, key, name) {
     title.className = 'context-menu-title';
     title.textContent = name;
     menu.appendChild(title);
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'context-menu-action';
-    btn.textContent = 'Controlar tela';
-    btn.addEventListener('click', () => {
+
+    const clipBtn = document.createElement('button');
+    clipBtn.type = 'button';
+    clipBtn.className = 'context-menu-action';
+    clipBtn.textContent = 'Clipar os últimos 30s';
+    clipBtn.addEventListener('click', () => {
       closeContextMenu();
-      startRemoteControl(key);
+      const clipper = viewerClippers.get(key);
+      if (clipper) clipper.save(`clipe-${name}`);
+      else showToast('Não consegui clipar essa transmissão.');
     });
-    menu.appendChild(btn);
+    menu.appendChild(clipBtn);
+
+    if (canUseRemoteAdmin()) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'context-menu-action';
+      btn.textContent = 'Controlar tela';
+      btn.addEventListener('click', () => {
+        closeContextMenu();
+        startRemoteControl(key);
+      });
+      menu.appendChild(btn);
+    }
   });
 }
 
@@ -5062,6 +5213,14 @@ els.interactiveShareBtn.addEventListener('click', () => {
   openInteractiveShareMenu(els.interactiveShareBtn.getBoundingClientRect());
 });
 
+function updateClipBtnVisibility() {
+  els.clipBtn.classList.toggle('hidden', !(state.screen.sharing && state.settings.clipEnabled));
+}
+els.clipBtn.addEventListener('click', () => {
+  if (state.screen.clipper) state.screen.clipper.save('clipe');
+  else showToast('Clipe ainda não está pronto.');
+});
+
 /* ---------------- grade de vídeos ---------------- */
 
 function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
@@ -5175,7 +5334,6 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
       if (!isSelf) {
         root.addEventListener('contextmenu', (ev) => {
           ev.preventDefault();
-          if (!canUseRemoteAdmin()) return;
           openTileContextMenu(ev.clientX, ev.clientY, key, name, video);
         });
       }

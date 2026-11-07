@@ -890,6 +890,97 @@
     </div>
   </div>
 
+  <!-- Decoração do tema Halloween - fica sempre no DOM, só vira visível
+       via CSS quando :root[data-theme="halloween"] (ver style.css). -->
+  <div id="halloweenDecor" class="theme-decor-halloween" aria-hidden="true">
+    <svg class="decor-cobweb" viewBox="0 0 140 140" fill="none" stroke="var(--dim)" stroke-width="0.9">
+      <path d="M140 140L0 0M140 140L40 0M140 140L0 100M140 140L90 0M140 140L0 50" />
+      <path d="M140 110Q112 112 110 140M140 80Q84 84 80 140M140 50Q56 56 50 140M140 20Q28 28 20 140" />
+    </svg>
+    <svg class="decor-spider" viewBox="0 0 24 120">
+      <path d="M12 0V92" stroke="var(--dim)" stroke-width="1" />
+      <ellipse cx="12" cy="100" rx="5" ry="6" fill="var(--text)" />
+      <circle cx="12" cy="92" r="3.5" fill="var(--text)" />
+      <path d="M7 97L1 93M7 100L0 101M7 103L1 108M17 97L23 93M17 100L24 101M17 103L23 108" stroke="var(--text)" stroke-width="1.3" stroke-linecap="round" />
+    </svg>
+    <svg class="decor-bat decor-bat-1" viewBox="0 0 34 18">
+      <path d="M17 6c-1.5-2-3.5-3-6-3 1 1.2 1 2.6 0 3.6-1.6-1.3-4-1.6-6.6-.6C7 7.4 8.2 10 8.4 13c1.5-1.2 3.7-1.4 5.2-.2.4-1.6 1.7-2.8 3.4-2.8s3 1.2 3.4 2.8c1.5-1.2 3.7-1 5.2.2.2-3 1.4-5.6 4-7-2.6-1-5-.7-6.6.6-1-1-1-2.4 0-3.6-2.5 0-4.5 1-6 3z" fill="var(--accent)" />
+    </svg>
+    <svg class="decor-bat decor-bat-2" viewBox="0 0 34 18">
+      <path d="M17 6c-1.5-2-3.5-3-6-3 1 1.2 1 2.6 0 3.6-1.6-1.3-4-1.6-6.6-.6C7 7.4 8.2 10 8.4 13c1.5-1.2 3.7-1.4 5.2-.2.4-1.6 1.7-2.8 3.4-2.8s3 1.2 3.4 2.8c1.5-1.2 3.7-1 5.2.2.2-3 1.4-5.6 4-7-2.6-1-5-.7-6.6.6-1-1-1-2.4 0-3.6-2.5 0-4.5 1-6 3z" fill="var(--muted)" />
+    </svg>
+    <svg class="decor-bat decor-bat-3" viewBox="0 0 34 18">
+      <path d="M17 6c-1.5-2-3.5-3-6-3 1 1.2 1 2.6 0 3.6-1.6-1.3-4-1.6-6.6-.6C7 7.4 8.2 10 8.4 13c1.5-1.2 3.7-1.4 5.2-.2.4-1.6 1.7-2.8 3.4-2.8s3 1.2 3.4 2.8c1.5-1.2 3.7-1 5.2.2.2-3 1.4-5.6 4-7-2.6-1-5-.7-6.6.6-1-1-1-2.4 0-3.6-2.5 0-4.5 1-6 3z" fill="var(--muted)" />
+    </svg>
+  </div>
+
+  <!-- Decoração do tema Natal: pisca-pisca + flocos de neve. -->
+  <div id="natalDecor" class="theme-decor-natal" aria-hidden="true">
+    <div class="xmas-lights">
+      <span class="xmas-bulb c1"></span><span class="xmas-bulb c2"></span><span class="xmas-bulb c3"></span><span class="xmas-bulb c4"></span>
+      <span class="xmas-bulb c1"></span><span class="xmas-bulb c2"></span><span class="xmas-bulb c3"></span><span class="xmas-bulb c4"></span>
+      <span class="xmas-bulb c1"></span><span class="xmas-bulb c2"></span><span class="xmas-bulb c3"></span><span class="xmas-bulb c4"></span>
+    </div>
+    <svg class="xmas-flake flake-1" viewBox="0 0 24 24" fill="none" stroke="#DDE9F2" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></svg>
+    <svg class="xmas-flake flake-2" viewBox="0 0 24 24" fill="none" stroke="#DDE9F2" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></svg>
+    <svg class="xmas-flake flake-3" viewBox="0 0 24 24" fill="none" stroke="#DDE9F2" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></svg>
+    <svg class="xmas-flake flake-4" viewBox="0 0 24 24" fill="none" stroke="#DDE9F2" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></svg>
+    <svg class="xmas-flake flake-5" viewBox="0 0 24 24" fill="none" stroke="#DDE9F2" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></svg>
+    <svg class="xmas-flake flake-6" viewBox="0 0 24 24" fill="none" stroke="#DDE9F2" stroke-width="1.6" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9.5 3.5 12 6l2.5-2.5M9.5 20.5 12 18l2.5 2.5"/></svg>
+  </div>
+
+  <!-- Decoração do tema Lagoa: chuva + folha + ondinhas + sapinho espiando. -->
+  <div id="lagoaDecor" class="theme-decor-lagoa" aria-hidden="true">
+    <span class="rain-drop d1"></span><span class="rain-drop d2"></span><span class="rain-drop d3"></span><span class="rain-drop d4"></span>
+    <span class="rain-drop d5"></span><span class="rain-drop d6"></span><span class="rain-drop d7"></span><span class="rain-drop d8"></span>
+    <span class="rain-drop d9"></span><span class="rain-drop d10"></span><span class="rain-drop d11"></span><span class="rain-drop d12"></span>
+    <span class="rain-drop d13"></span><span class="rain-drop d14"></span>
+    <svg class="lagoa-leaf" viewBox="0 0 210 170"><path d="M205 165C150 160 60 140 25 85 5 55 20 15 40 5c35 10 95 45 130 90 20 26 30 50 35 70z" fill="#2F7A3E"/><path d="M205 165C150 120 90 75 40 5" stroke="#7ED957" stroke-width="2" fill="none" opacity="0.6"/><path d="M120 95 60 70M150 120 80 115M100 60 70 30" stroke="#7ED957" stroke-width="1.2" fill="none" opacity="0.4"/></svg>
+    <svg class="lagoa-ripples" viewBox="0 0 260 40" fill="none" stroke="#6FD3F2"><ellipse cx="70" cy="20" rx="60" ry="10"/><ellipse cx="70" cy="20" rx="34" ry="5.5"/><ellipse cx="200" cy="26" rx="40" ry="7"/><ellipse cx="200" cy="26" rx="18" ry="3"/></svg>
+    <svg class="lagoa-frog-peek" viewBox="0 0 56 30">
+      <path d="M6 26q22-16 44 0z" fill="#4FBF6A"/><circle cx="18" cy="14" r="7" fill="#4FBF6A"/><circle cx="38" cy="14" r="7" fill="#4FBF6A"/>
+      <circle cx="18" cy="13" r="4.4" fill="#FFFFFF"/><circle cx="38" cy="13" r="4.4" fill="#FFFFFF"/>
+      <circle cx="19" cy="14" r="2.3" fill="#0A2010"/><circle cx="37" cy="14" r="2.3" fill="#0A2010"/>
+      <path d="M2 27q26-6 52 0" stroke="#6FD3F2" stroke-width="1.6" fill="none" opacity="0.8"/>
+    </svg>
+  </div>
+
+  <!-- Decoração do tema Névoa: faixas de fumaça + borboletas. -->
+  <div id="nevoaDecor" class="theme-decor-nevoa" aria-hidden="true">
+    <svg class="nevoa-smoke" viewBox="0 0 700 380" preserveAspectRatio="none" fill="none">
+      <defs>
+        <linearGradient id="nv-smoke-a" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6A3CFF" stop-opacity="0"/><stop offset="0.35" stop-color="#8B5CFF" stop-opacity="0.55"/><stop offset="0.7" stop-color="#A7B4FF" stop-opacity="0.45"/><stop offset="1" stop-color="#FF9AD5" stop-opacity="0"/></linearGradient>
+        <linearGradient id="nv-smoke-b" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#C9A6FF" stop-opacity="0"/><stop offset="0.5" stop-color="#9C7BFF" stop-opacity="0.35"/><stop offset="1" stop-color="#6FD0FF" stop-opacity="0"/></linearGradient>
+      </defs>
+      <path d="M-20 260C80 140 180 330 300 230S520 90 720 200" stroke="url(#nv-smoke-a)" stroke-width="22" stroke-linecap="round"/>
+      <path d="M-20 260C80 140 180 330 300 230S520 90 720 200" stroke="#E6DCFF" stroke-opacity="0.25" stroke-width="2" stroke-linecap="round"/>
+      <path d="M720 330C600 250 520 370 380 300S140 210 -20 330" stroke="url(#nv-smoke-b)" stroke-width="14" stroke-linecap="round"/>
+    </svg>
+    <svg class="nevoa-butterfly nevoa-bf-1" viewBox="0 0 40 40"><defs><linearGradient id="nv-wing-1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3EEFF"/><stop offset="0.45" stop-color="#A7C8FF"/><stop offset="1" stop-color="#FF9AD5"/></linearGradient></defs><path d="M19 19C14 6 3 4 4 12c1 6 8 8 15 8zM21 19C26 6 37 4 36 12c-1 6-8 8-15 8z" fill="url(#nv-wing-1)"/><path d="M19 21C13 23 8 30 12 33c3 2 7-4 7-11zM21 21c6 2 11 9 7 12-3 2-7-4-7-11z" fill="url(#nv-wing-1)" opacity="0.85"/><path d="M20 13v20" stroke="#2A1A55" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <svg class="nevoa-butterfly nevoa-bf-2" viewBox="0 0 40 40"><defs><linearGradient id="nv-wing-2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3EEFF"/><stop offset="0.45" stop-color="#A7C8FF"/><stop offset="1" stop-color="#FF9AD5"/></linearGradient></defs><path d="M19 19C14 6 3 4 4 12c1 6 8 8 15 8zM21 19C26 6 37 4 36 12c-1 6-8 8-15 8z" fill="url(#nv-wing-2)"/><path d="M19 21C13 23 8 30 12 33c3 2 7-4 7-11zM21 21c6 2 11 9 7 12-3 2-7-4-7-11z" fill="url(#nv-wing-2)" opacity="0.85"/><path d="M20 13v20" stroke="#2A1A55" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <svg class="nevoa-butterfly nevoa-bf-3" viewBox="0 0 40 40"><defs><linearGradient id="nv-wing-3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3EEFF"/><stop offset="0.45" stop-color="#A7C8FF"/><stop offset="1" stop-color="#FF9AD5"/></linearGradient></defs><path d="M19 19C14 6 3 4 4 12c1 6 8 8 15 8zM21 19C26 6 37 4 36 12c-1 6-8 8-15 8z" fill="url(#nv-wing-3)"/><path d="M19 21C13 23 8 30 12 33c3 2 7-4 7-11zM21 21c6 2 11 9 7 12-3 2-7-4-7-11z" fill="url(#nv-wing-3)" opacity="0.85"/><path d="M20 13v20" stroke="#2A1A55" stroke-width="1.8" stroke-linecap="round"/></svg>
+  </div>
+
+  <!-- Decoração do tema Sombra: fumaça escura subindo dos cantos + faíscas azul-elétrico. -->
+  <div id="sombraDecor" class="theme-decor-sombra" aria-hidden="true">
+    <svg class="sombra-smoke sombra-smoke-left" viewBox="0 0 230 260">
+      <path d="M0 260V120c18 10 22 40 34 42-6-30 4-70 30-92-8 34 6 56 20 70 2-26 18-46 40-52-14 26-4 54 14 70 10 12 20 30 22 52 12-10 26-12 40-6-10 14-14 30-10 56z" fill="#251C40"/>
+      <path d="M0 260V180c14 6 20 24 32 26-2-22 10-44 28-54-4 24 4 40 16 52 6-16 20-26 36-26-10 16-6 34 6 46 10 10 14 22 14 36z" fill="#1A1430"/>
+      <path d="M64 70c-8 34 6 56 20 70M124 88c-14 26-4 54 14 70" stroke="#2EC5FF" stroke-width="1.4" fill="none" opacity="0.55" stroke-linecap="round"/>
+    </svg>
+    <svg class="sombra-smoke sombra-smoke-right" viewBox="0 0 250 300">
+      <path d="M0 300V140c20 8 26 36 38 40-4-34 8-80 38-104-10 40 4 64 20 80 4-30 22-54 46-60-16 30-6 62 14 80 12 14 22 34 24 58 14-10 30-12 44-4-12 16-14 34-10 66z" fill="#251C40"/>
+      <path d="M0 300V210c16 6 22 26 34 30-2-26 12-50 30-62-4 28 4 46 18 58 8-18 22-30 40-30-12 18-6 38 8 52 10 12 14 26 14 42z" fill="#1A1430"/>
+      <path d="M76 76c-10 40 4 64 20 80M142 96c-16 30-6 62 14 80" stroke="#2EC5FF" stroke-width="1.4" fill="none" opacity="0.55" stroke-linecap="round"/>
+    </svg>
+    <svg class="sombra-spark spark-1" viewBox="0 0 20 20"><path d="M10 0 12.5 7.5 20 10 12.5 12.5 10 20 7.5 12.5 0 10 7.5 7.5z" fill="#6FDFFF"/></svg>
+    <svg class="sombra-spark spark-2" viewBox="0 0 20 20"><path d="M10 0 12.5 7.5 20 10 12.5 12.5 10 20 7.5 12.5 0 10 7.5 7.5z" fill="#6FDFFF"/></svg>
+    <svg class="sombra-spark spark-3" viewBox="0 0 20 20"><path d="M10 0 12.5 7.5 20 10 12.5 12.5 10 20 7.5 12.5 0 10 7.5 7.5z" fill="#6FDFFF"/></svg>
+    <svg class="sombra-spark spark-4" viewBox="0 0 20 20"><path d="M10 0 12.5 7.5 20 10 12.5 12.5 10 20 7.5 12.5 0 10 7.5 7.5z" fill="#6FDFFF"/></svg>
+    <svg class="sombra-spark spark-5" viewBox="0 0 20 20"><path d="M10 0 12.5 7.5 20 10 12.5 12.5 10 20 7.5 12.5 0 10 7.5 7.5z" fill="#6FDFFF"/></svg>
+    <svg class="sombra-spark spark-6" viewBox="0 0 20 20"><path d="M10 0 12.5 7.5 20 10 12.5 12.5 10 20 7.5 12.5 0 10 7.5 7.5z" fill="#6FDFFF"/></svg>
+  </div>
+
   <script src="/vendor/supabase.js"></script>
   <script src="/supabase-config.js"></script>
   <script src="/app.js"></script>

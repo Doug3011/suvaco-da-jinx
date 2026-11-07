@@ -2990,10 +2990,64 @@ function renderMemberSidebar() {
   els.memberList.appendChild(buildSupportCard());
 }
 
+// icone do card de nudge por tema sazonal - ilustracoes literais com cor
+// propria fixa (nao seguem a paleta do tema), mesmos SVGs dos mockups
+// originais de cada tema.
+const NUDGE_THEME_ICONS = {
+  halloween: `<svg aria-hidden="true" width="46" height="42" viewBox="0 0 44 40" class="nudge-theme-icon">
+    <path d="M21 7c0-3 2-5 5-5" stroke="#6BAA3A" stroke-width="3" fill="none" stroke-linecap="round"></path>
+    <ellipse cx="14" cy="24" rx="11" ry="14" fill="#D9600C"></ellipse>
+    <ellipse cx="30" cy="24" rx="11" ry="14" fill="#D9600C"></ellipse>
+    <ellipse cx="22" cy="24" rx="10" ry="15" fill="#FF7A1A"></ellipse>
+    <path d="M13 19l5 4h-7zM31 19l-5 4h7z" fill="#2A1206"></path>
+    <path d="M12 29q10 7 20 0l-3 1.2-2.2-2-2.4 3-2.4-3-2.4 3-2.4-3-2.2 2z" fill="#2A1206"></path>
+  </svg>`,
+  natal: `<svg aria-hidden="true" width="40" height="46" viewBox="0 0 40 46" class="nudge-theme-icon">
+    <path d="M20 1l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7z" fill="#F2C14E"></path>
+    <path d="M20 12 9 26h6L5 38h30L25 26h6z" fill="#2E8B57"></path>
+    <rect x="17" y="38" width="6" height="7" rx="1" fill="#7A4A2A"></rect>
+    <circle cx="15" cy="24" r="1.8" fill="#E5484D"></circle>
+    <circle cx="24" cy="30" r="1.8" fill="#F2C14E"></circle>
+    <circle cx="13" cy="34" r="1.8" fill="#F2C14E"></circle>
+    <circle cx="27" cy="35" r="1.8" fill="#E5484D"></circle>
+  </svg>`,
+  lagoa: `<svg aria-hidden="true" width="78" height="58" viewBox="0 0 78 58" class="nudge-theme-icon">
+    <path d="M39 48 70 40A34 12 0 1 1 39 35z" fill="#2F9E55"></path>
+    <path d="M39 48 70 40" stroke="#1E6B3A" stroke-width="1.4"></path>
+    <path d="M20 44q-6 2-8 0 3-4 9-3zM58 44q6 2 8 0-3-4-9-3z" fill="#3FA85A"></path>
+    <ellipse cx="39" cy="34" rx="17" ry="12" fill="#4FBF6A"></ellipse>
+    <ellipse cx="39" cy="38" rx="10" ry="7" fill="#BDEB9C"></ellipse>
+    <circle cx="30" cy="22" r="7" fill="#4FBF6A"></circle>
+    <circle cx="48" cy="22" r="7" fill="#4FBF6A"></circle>
+    <circle cx="30" cy="21" r="4.6" fill="#FFFFFF"></circle>
+    <circle cx="48" cy="21" r="4.6" fill="#FFFFFF"></circle>
+    <circle cx="31" cy="21.5" r="2.4" fill="#0A2010"></circle>
+    <circle cx="49" cy="21.5" r="2.4" fill="#0A2010"></circle>
+    <circle cx="31.8" cy="20.6" r="0.8" fill="#FFFFFF"></circle>
+    <circle cx="49.8" cy="20.6" r="0.8" fill="#FFFFFF"></circle>
+    <path d="M32 30q7 5 14 0" stroke="#1E6B3A" stroke-width="1.6" fill="none" stroke-linecap="round"></path>
+    <path d="M27 44q-3 3 1 3h5q2-1 0-3zM51 44q3 3-1 3h-5q-2-1 0-3z" fill="#3FA85A"></path>
+    <circle cx="62" cy="38" r="2.2" fill="#FF8A5B"></circle>
+    <circle cx="64.5" cy="36.5" r="1.6" fill="#FFB38A"></circle>
+  </svg>`,
+  nevoa: `<svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" class="nudge-theme-icon">
+    <defs><linearGradient id="nv-wing-nudge" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F3EEFF"></stop><stop offset="0.45" stop-color="#A7C8FF"></stop><stop offset="1" stop-color="#FF9AD5"></stop></linearGradient></defs>
+    <path d="M19 19C14 6 3 4 4 12c1 6 8 8 15 8zM21 19C26 6 37 4 36 12c-1 6-8 8-15 8z" fill="url(#nv-wing-nudge)"></path>
+    <path d="M19 21C13 23 8 30 12 33c3 2 7-4 7-11zM21 21c6 2 11 9 7 12-3 2-7-4-7-11z" fill="url(#nv-wing-nudge)" opacity="0.85"></path>
+    <path d="M20 13v20" stroke="#2A1A55" stroke-width="1.8" stroke-linecap="round"></path>
+  </svg>`,
+  sombra: `<svg aria-hidden="true" width="44" height="34" viewBox="0 0 44 34" class="nudge-theme-icon" style="filter: drop-shadow(0 0 6px rgba(46, 197, 255, 0.55))">
+    <path d="M2 32c6-2 8-10 6-16 6 4 8 10 8 14 2-8 8-14 14-16-2 6 0 12 4 16 2-6 6-10 10-10-4 4-4 10-2 12z" fill="#251C40"></path>
+    <path d="M22 2 24 10 32 12 24 14 22 22 20 14 12 12 20 10z" fill="#6FDFFF"></path>
+  </svg>`,
+};
+
 function buildNudgeCard(title, sub) {
   const card = document.createElement('div');
   card.className = 'sidebar-nudge-card';
+  const icon = NUDGE_THEME_ICONS[document.documentElement.getAttribute('data-theme')] || '';
   card.innerHTML = `
+    ${icon}
     <strong>${escapeHtml(title)}</strong>
     <span>${escapeHtml(sub)}</span>
     <button type="button" class="primary">Copiar convite</button>

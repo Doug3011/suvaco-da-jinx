@@ -524,6 +524,37 @@ button.primary:hover { filter: brightness(1.08); }
 
 .profile-modal { width: 420px; max-width: 100%; }
 
+.onboarding-modal { width: 640px; max-width: 100%; padding: 28px 28px 24px; }
+.onboarding-header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; margin-bottom: 20px; }
+.onboarding-logo { width: 56px; height: 56px; border-radius: 16px; margin-bottom: 6px; }
+.onboarding-header h2 { margin: 0; font-size: 21px; font-family: var(--font-display); }
+.onboarding-header p { margin: 0; font-size: 13px; }
+.onboarding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; max-height: 420px; overflow-y: auto; }
+.onboarding-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+.onboarding-item-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-gradient);
+  color: var(--on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.onboarding-item-icon svg { width: 17px; height: 17px; }
+.onboarding-item strong { display: block; font-size: 13.5px; margin-bottom: 2px; }
+.onboarding-item span { display: block; font-size: 12px; color: var(--muted); line-height: 1.4; }
+#onboardingOkBtn { width: 100%; }
+
 .whats-new-modal { width: 420px; max-width: 100%; padding: 28px 24px 24px; }
 .whats-new-header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; margin-bottom: 18px; }
 .whats-new-header .empty-state-icon { width: 56px; height: 56px; margin-bottom: 4px; }

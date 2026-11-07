@@ -3186,6 +3186,10 @@ els.serverIconInput.addEventListener('change', async () => {
 // abrir o app direto (se já tiver instalado) ou mostra onde baixar - sem
 // precisar copiar/colar um código na mão. O código cru pasted continua
 // funcionando em "Entrar com código" (extractInviteCodeFromText aceita os dois).
+// repo/Pages do GitHub continuam com o nome antigo por enquanto (renomear o
+// repo é uma decisão separada - afeta o updater de quem já tem o app
+// instalado) - só a MARCA (nome exibido, protocolo ribbit://, e-mails) virou
+// "Ribbit" nessa leva.
 const INVITE_WEB_BASE = 'https://doug3011.github.io/suvaco-da-jinx/invite.html';
 function buildInviteLink(code) {
   return `${INVITE_WEB_BASE}?c=${code}`;
@@ -3587,7 +3591,7 @@ async function joinServerByCode(code) {
 }
 
 els.serverJoinBtn.addEventListener('click', async () => {
-  // aceita colar o link inteiro (suvacodajinx://join/codigo ou a página
+  // aceita colar o link inteiro (ribbit://join/codigo ou a página
   // web de convite com ?c=codigo) em vez de só o código cru, pra não
   // confundir quem recebeu o link e tentou colar ele aqui por engano.
   const raw = els.serverJoinCodeInput.value.trim();
@@ -3606,14 +3610,16 @@ els.serverJoinBtn.addEventListener('click', async () => {
 
 function extractInviteCodeFromText(raw) {
   if (!raw) return '';
-  const protocolMatch = /suvacodajinx:\/\/join\/([a-zA-Z0-9]+)/.exec(raw);
+  // aceita os dois esquemas: ribbit:// (atual) e suvacodajinx:// (links
+  // antigos que alguém ainda tenha guardado/compartilhado por aí).
+  const protocolMatch = /(?:ribbit|suvacodajinx):\/\/join\/([a-zA-Z0-9]+)/.exec(raw);
   if (protocolMatch) return protocolMatch[1].toLowerCase();
   const webMatch = /[?&]c=([a-zA-Z0-9]+)/.exec(raw);
   if (webMatch) return webMatch[1].toLowerCase();
   return raw.trim().toLowerCase();
 }
 
-// link de convite (suvacodajinx://join/<codigo>), vindo do processo
+// link de convite (ribbit://join/<codigo>), vindo do processo
 // principal (clique no link com o app já aberto, ou acabou de abrir por
 // causa do link). Se ainda não tiver logado quando o link chega, guarda e
 // processa assim que o login terminar.
@@ -5736,6 +5742,9 @@ const CHANGELOG = {
     'Configurações do servidor agora abrem como aba cheia, igual as Configurações normais.',
     'Novo seletor de tema (Configurações → Geral): Azul, Roxo, Verde ou Neutro.',
     'Modo admin (controle remoto) liberado pra qualquer um — agora sempre pede consentimento da outra pessoa antes de começar, nos dois sentidos (pedir ou oferecer via "Transmissão interativa").',
+  ],
+  '4.0.0': [
+    '"Suvaco da Jinx" agora é "Ribbit"! Nome e ícone novos em todo lugar — janela, bandeja, atalhos, e-mails. Link de convite antigo (suvacodajinx://) continua funcionando normalmente.',
   ],
 };
 

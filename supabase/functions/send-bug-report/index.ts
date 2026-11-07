@@ -18,7 +18,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const DEST_EMAIL = 'gilbertodinossaro01@gmail.com';
-const FROM_EMAIL = 'Suvaco da Jinx <onboarding@resend.dev>';
+const FROM_EMAIL = 'Ribbit <onboarding@resend.dev>';
 
 Deno.serve(async (req) => {
   try {
@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         from: FROM_EMAIL,
         to: [DEST_EMAIL],
-        subject: `[Suvaco da Jinx] Bug report de ${report.reporter_name || 'alguém'}`,
+        subject: `[Ribbit] Bug report de ${report.reporter_name || 'alguém'}`,
         text: body,
         attachments,
       }),

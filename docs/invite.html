@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Convite — Suvaco da Jinx</title>
+<title>Convite — Ribbit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
@@ -87,18 +87,18 @@
     <div class="logo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><line x1="8" y1="22" x2="16" y2="22"/><line x1="12" y1="18" x2="12" y2="22"/></svg>
     </div>
-    <h1>Você foi convidado pro Suvaco da Jinx</h1>
+    <h1>Você foi convidado pro Ribbit</h1>
     <div id="codeChip" class="code-chip">...</div>
     <p id="statusText">Tentando abrir o app automaticamente...</p>
     <p id="noCodeError" class="error">Esse link não tem um código de convite válido.</p>
     <a id="openBtn" class="btn btn-primary" href="#">Abrir no app</a>
-    <a id="downloadBtn" class="btn btn-secondary" href="https://github.com/Doug3011/suvaco-da-jinx/releases/latest" target="_blank" rel="noopener">Baixar o Suvaco da Jinx</a>
+    <a id="downloadBtn" class="btn btn-secondary" href="https://github.com/Doug3011/suvaco-da-jinx/releases/latest" target="_blank" rel="noopener">Baixar o Ribbit</a>
     <div class="hint">Já tem o app instalado? Clicar em "Abrir no app" leva direto pro convite. Se não tiver, baixa ele primeiro e depois usa o mesmo link de novo.</div>
   </div>
   <script>
     const params = new URLSearchParams(window.location.search);
     const code = params.get('c');
-    const appLink = code ? `suvacodajinx://join/${code}` : null;
+    const appLink = code ? `ribbit://join/${code}` : null;
 
     if (code) {
       document.getElementById('codeChip').textContent = code;

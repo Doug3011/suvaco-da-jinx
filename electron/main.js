@@ -20,15 +20,16 @@ if (!gotSingleInstanceLock) {
   app.quit();
   process.exit(0);
 }
-// Convite por link: suvacodajinx://join/<codigo> - registrado como
-// protocolo customizado (build.protocols no package.json, o NSIS escreve
-// a chave de registro certa no instalador). Extrai o código de qualquer
-// argv que pareça com esse link, de onde quer que ele apareça na lista
-// (o SO pode colocar em posições diferentes dependendo de como foi
-// lançado).
+// Convite por link: ribbit://join/<codigo> - registrado como protocolo
+// customizado (build.protocols no package.json, o NSIS escreve a chave de
+// registro certa no instalador). Extrai o código de qualquer argv que
+// pareça com esse link, de onde quer que ele apareça na lista (o SO pode
+// colocar em posições diferentes dependendo de como foi lançado). Aceita
+// também o esquema antigo (suvacodajinx://) pra não quebrar link que
+// alguém ainda tenha guardado de antes da troca de nome.
 function extractInviteCodeFromArgv(argv) {
   for (const arg of argv) {
-    const match = /^suvacodajinx:\/\/join\/([a-zA-Z0-9]+)/.exec(arg);
+    const match = /^(?:ribbit|suvacodajinx):\/\/join\/([a-zA-Z0-9]+)/.exec(arg);
     if (match) return match[1];
   }
   return null;
@@ -51,7 +52,7 @@ app.on('second-instance', (_event, commandLine) => {
 // efeito no Windows, mas não custa nada deixar coberto.
 app.on('open-url', (event, url) => {
   event.preventDefault();
-  const match = /^suvacodajinx:\/\/join\/([a-zA-Z0-9]+)/.exec(url);
+  const match = /^(?:ribbit|suvacodajinx):\/\/join\/([a-zA-Z0-9]+)/.exec(url);
   if (match) sendInviteCodeToRenderer(match[1]);
 });
 
@@ -86,7 +87,7 @@ autoUpdater.on('update-downloaded', (info) => {
       .showMessageBox({
         type: 'info',
         title: 'Atualização pronta',
-        message: `Uma nova versão (${info.version}) do Suvaco da Jinx foi baixada.`,
+        message: `Uma nova versão (${info.version}) do Ribbit foi baixada.`,
         detail: 'Reiniciar agora pra aplicar, ou continuar usando e aplicar só quando fechar o app.',
         buttons: ['Reiniciar agora', 'Depois'],
         defaultId: 0,
@@ -193,7 +194,7 @@ function createMainWindow() {
 function createTray() {
   const iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
   tray = new Tray(nativeImage.createFromPath(iconPath));
-  tray.setToolTip('Suvaco da Jinx');
+  tray.setToolTip('Ribbit');
   const menu = Menu.buildFromTemplate([
     {
       label: 'Abrir',
@@ -409,8 +410,11 @@ app.whenReady().then(() => {
 
   // Só registra em build empacotado - em dev o "exe" é o electron.exe
   // genérico, registrar o protocolo nele faria QUALQUER coisa que abra um
-  // link suvacodajinx:// disparar o Electron cru sem carregar nosso app.
-  if (app.isPackaged) app.setAsDefaultProtocolClient('suvacodajinx');
+  // link ribbit:// disparar o Electron cru sem carregar nosso app.
+  if (app.isPackaged) {
+    app.setAsDefaultProtocolClient('ribbit');
+    app.setAsDefaultProtocolClient('suvacodajinx'); // links antigos continuam abrindo o app
+  }
 
   createMainWindow();
   createTray();

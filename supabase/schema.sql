@@ -1,4 +1,4 @@
--- Suvaco da Jinx — schema Supabase (rodar no SQL Editor do seu projeto, de cima pra baixo)
+-- Ribbit (ex-"Suvaco da Jinx") — schema Supabase (rodar no SQL Editor do seu projeto, de cima pra baixo)
 
 -- ====== PERFIS ======
 create table public.profiles (

@@ -1,4 +1,4 @@
-// Servidor local do "Suvaco da Jinx" — roda dentro do executável.
+// Servidor local do "Ribbit" (ex-"Suvaco da Jinx") — roda dentro do executável.
 // Só serve os arquivos estáticos do app (public/) — toda a lógica de rede
 // (login, servidores/canais, presença, chat, sinalização WebRTC) agora
 // vive no Supabase (Auth + Postgres + Realtime), não mais aqui.

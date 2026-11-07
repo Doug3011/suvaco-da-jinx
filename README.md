@@ -1,7 +1,11 @@
-# Suvaco da Jinx
+# Ribbit
 
-(nome interno do projeto/pasta continua `tela-radmin`; o app se chama "Suvaco
-da Jinx" — por Doug Muller Burro)
+(nome interno do projeto/pasta continua `tela-radmin`; o app se chama
+"Ribbit", ex-"Suvaco da Jinx" — por Doug Muller Burro)
+
+> Nota: o resto deste README ainda descreve uma versão bem mais antiga do
+> app (rede local via Radmin VPN, sem Supabase) — desatualizado em relação
+> ao app atual, mas não foi reescrito ainda.
 
 Compartilhamento de tela ao vivo entre PCs na mesma rede local (**Radmin VPN**,
 Hamachi, ZeroTier, Wi-Fi da casa, etc.) — sem internet, sem conta, sem instalar

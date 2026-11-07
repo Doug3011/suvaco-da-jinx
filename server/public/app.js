@@ -2899,6 +2899,7 @@ function renderMemberSidebar() {
       buildNudgeCard('Tá meio vazio aqui', 'Manda o convite pra galera. Quem entrar já cai no servidor.'),
     );
   }
+  els.memberList.appendChild(buildSupportCard());
 }
 
 function buildNudgeCard(title, sub) {
@@ -2910,6 +2911,28 @@ function buildNudgeCard(title, sub) {
     <button type="button" class="primary">Copiar convite</button>
   `;
   card.querySelector('button').addEventListener('click', copyServerInviteCode);
+  return card;
+}
+
+// chave aleatoria (EVP) - nao carrega CPF/celular/e-mail, so pra doacao
+const PIX_KEY = 'ec5eca4b-d5a4-4178-b9d1-5070d2b50171';
+function buildSupportCard() {
+  const card = document.createElement('div');
+  card.className = 'sidebar-support-card';
+  card.innerHTML = `
+    <strong>Ajude a manter o Ribbit no ar</strong>
+    <span>Sua doação via Pix ajuda a pagar os custos do servidor.</span>
+    <img src="/pix-qr.png" alt="QR code Pix pra doação" class="support-qr" />
+    <button type="button" class="ghost">Copiar chave Pix</button>
+  `;
+  card.querySelector('button').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(PIX_KEY);
+      showToast('Chave Pix copiada!', 2000);
+    } catch {
+      showToast(`Chave Pix: ${PIX_KEY}`, 4000);
+    }
+  });
   return card;
 }
 
@@ -2954,6 +2977,7 @@ function renderCallMemberSidebar() {
       els.memberList.appendChild(buildNudgeCard('Transmitindo sozinho?', 'Manda o convite e a galera já entra assistindo.'));
     }
   }
+  els.memberList.appendChild(buildSupportCard());
 }
 
 async function fetchChannels(serverId) {

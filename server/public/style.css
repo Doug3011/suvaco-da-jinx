@@ -854,6 +854,29 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .sidebar-nudge-card span { font-size: 13px; color: var(--muted-2); line-height: 1.5; }
 .sidebar-nudge-card button { height: 40px; }
 
+.sidebar-support-card {
+  margin-top: 16px;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+.sidebar-support-card strong { font-family: var(--font-display); font-size: 14px; }
+.sidebar-support-card span { font-size: 12.5px; color: var(--muted-2); line-height: 1.5; }
+.sidebar-support-card .support-qr {
+  width: 140px;
+  height: 140px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 6px;
+}
+.sidebar-support-card button { height: 36px; width: 100%; }
+
 .voice-connected-panel {
   margin: 0 10px 10px;
   padding: 12px;

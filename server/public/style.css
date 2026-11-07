@@ -42,9 +42,11 @@
    Os outros 3 trocam só as variáveis de cor via [data-theme="..."] - o
    app inteiro muda porque tudo já usa var(--bg)/var(--accent)/etc, nunca
    hex direto. Paletas vieram prontas (Neutro/Grafite, Verde/Floresta,
-   Roxo/Ametista) - online-soft-bg/text são calculados com color-mix() em
-   vez de hardcoded porque só veio uma cor "online" por tema, não o par
-   claro/escuro que os outros valores já tinham. */
+   Roxo/Ametista, Halloween/Abóbora, Natal/Pinheiro, Lagoa/Chuva na
+   floresta, Névoa/Fumaça violeta, Sombra/Azul-elétrico) - online-soft-bg/
+   text são calculados com color-mix() em vez de hardcoded porque só veio
+   uma cor "online" por tema, não o par claro/escuro que os outros valores
+   já tinham. */
 :root[data-theme="neutro"] {
   --bg: #0a0a0a;
   --panel: #181818;
@@ -117,6 +119,131 @@
   --accent-gradient: var(--accent);
   --on-accent: #ffffff;
   --online: #34d399;
+  --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
+  --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
+}
+:root[data-theme="halloween"] {
+  --bg: #0f0a12;
+  --panel: #201425;
+  --panel-2: #2e1c33;
+  --bg-rail: #09060b;
+  --bg-sidebar: #160e1a;
+  --bg-main: #0f0a12;
+  --input-bg: #201425;
+  --border: #3a2440;
+  --border-strong: #3a2440;
+  --text: #fbefe3;
+  --text-2: #fbefe3;
+  --muted: #d9bfa8;
+  --muted-2: #d9bfa8;
+  --dim: #a88c9e;
+  --accent: #ff7a1a;
+  --accent-2: #ffa45c;
+  --accent-light: #ffa45c;
+  --accent-hover: #ffa45c;
+  --accent-gradient: var(--accent);
+  --on-accent: #1a0a00;
+  --online: #9be34a;
+  --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
+  --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
+}
+:root[data-theme="natal"] {
+  --bg: #08130f;
+  --panel: #13261e;
+  --panel-2: #1c3529;
+  --bg-rail: #050c09;
+  --bg-sidebar: #0d1c16;
+  --bg-main: #08130f;
+  --input-bg: #13261e;
+  --border: #264233;
+  --border-strong: #264233;
+  --text: #f6f2e8;
+  --text-2: #f6f2e8;
+  --muted: #cfc8b4;
+  --muted-2: #cfc8b4;
+  --dim: #9dae9f;
+  --accent: #c8282f;
+  --accent-2: #f2c14e;
+  --accent-light: #f2c14e;
+  --accent-hover: #f2c14e;
+  --accent-gradient: var(--accent);
+  --on-accent: #ffffff;
+  --online: #4ade80;
+  --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
+  --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
+}
+:root[data-theme="lagoa"] {
+  --bg: #071a1c;
+  --panel: #10302f;
+  --panel-2: #174140;
+  --bg-rail: #041110;
+  --bg-sidebar: #0b2426;
+  --bg-main: #071a1c;
+  --input-bg: #10302f;
+  --border: #1f4d49;
+  --border-strong: #1f4d49;
+  --text: #eaf8f2;
+  --text-2: #eaf8f2;
+  --muted: #a9d3c6;
+  --muted-2: #a9d3c6;
+  --dim: #80b0a4;
+  --accent: #7ed957;
+  --accent-2: #6fd3f2;
+  --accent-light: #6fd3f2;
+  --accent-hover: #6fd3f2;
+  --accent-gradient: var(--accent);
+  --on-accent: #0a2010;
+  --online: #f6c744;
+  --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
+  --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
+}
+:root[data-theme="nevoa"] {
+  --bg: #0e0b1f;
+  --panel: #1d1742;
+  --panel-2: #2a2259;
+  --bg-rail: #08061a;
+  --bg-sidebar: #151033;
+  --bg-main: #0e0b1f;
+  --input-bg: #1d1742;
+  --border: #362c6b;
+  --border-strong: #362c6b;
+  --text: #f3eeff;
+  --text-2: #f3eeff;
+  --muted: #c9bdf0;
+  --muted-2: #c9bdf0;
+  --dim: #9c8fcc;
+  --accent: #b57cff;
+  --accent-2: #ff9ad5;
+  --accent-light: #ff9ad5;
+  --accent-hover: #ff9ad5;
+  --accent-gradient: var(--accent);
+  --on-accent: #14082e;
+  --online: #ffd66b;
+  --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
+  --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
+}
+:root[data-theme="sombra"] {
+  --bg: #0a0e17;
+  --panel: #141c2c;
+  --panel-2: #1e2940;
+  --bg-rail: #06090f;
+  --bg-sidebar: #0e1420;
+  --bg-main: #0a0e17;
+  --input-bg: #141c2c;
+  --border: #26334d;
+  --border-strong: #26334d;
+  --text: #e6eefa;
+  --text-2: #e6eefa;
+  --muted: #a9b8d3;
+  --muted-2: #a9b8d3;
+  --dim: #8191b0;
+  --accent: #2ec5ff;
+  --accent-2: #6fdfff;
+  --accent-light: #6fdfff;
+  --accent-hover: #6fdfff;
+  --accent-gradient: var(--accent);
+  --on-accent: #031620;
+  --online: #46f2c6;
   --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
   --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
 }

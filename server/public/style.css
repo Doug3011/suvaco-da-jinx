@@ -19,6 +19,7 @@
   --accent-light: #8fb0ff;
   --accent-hover: #6e8bff;
   --accent-gradient: linear-gradient(90deg, var(--accent), var(--accent-2));
+  --on-accent: #ffffff;
   --danger: #d93a42;
   --danger-hover: #ff6363;
   --live: #e5484d;
@@ -64,6 +65,7 @@
   --accent-light: #e5e5e5;
   --accent-hover: #e5e5e5;
   --accent-gradient: var(--accent);
+  --on-accent: #0a0a0a;
   --online: #22c55e;
   --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
   --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
@@ -88,6 +90,7 @@
   --accent-light: #5be8a6;
   --accent-hover: #5be8a6;
   --accent-gradient: var(--accent);
+  --on-accent: #04140c;
   --online: #2fd98a;
   --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
   --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
@@ -112,6 +115,7 @@
   --accent-light: #c4a8ff;
   --accent-hover: #c4a8ff;
   --accent-gradient: var(--accent);
+  --on-accent: #ffffff;
   --online: #34d399;
   --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
   --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
@@ -139,7 +143,45 @@ h1, h2, h3,
 
 .hidden { display: none !important; }
 
-#app { min-height: 100vh; display: flex; flex-direction: column; position: relative; z-index: 1; }
+#app { min-height: 100vh; padding-top: 36px; display: flex; flex-direction: column; position: relative; z-index: 1; }
+
+.custom-titlebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  padding-left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg);
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  z-index: 10000;
+  -webkit-app-region: drag;
+}
+.custom-titlebar-icon { width: 16px; height: 16px; border-radius: 4px; -webkit-app-region: no-drag; }
+.custom-titlebar-title { -webkit-app-region: no-drag; }
+.custom-titlebar-controls { margin-left: auto; display: flex; align-items: stretch; height: 100%; -webkit-app-region: no-drag; }
+.custom-titlebar-btn {
+  width: 46px;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+.custom-titlebar-btn:hover { background: var(--panel-2); color: var(--text); transform: none; }
+.custom-titlebar-btn-close:hover { background: var(--danger); color: white; }
 
 svg { display: block; }
 
@@ -167,14 +209,14 @@ svg { display: block; }
 
 .brand-badge {
   position: fixed;
-  top: 20px;
+  top: 52px;
   left: 20px;
   z-index: 2;
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
   background: var(--accent-gradient);
-  color: white;
+  color: var(--on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -203,7 +245,7 @@ button {
 }
 button:hover { transform: translateY(-1px); }
 button:active { transform: translateY(0); }
-button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 button.ghost { background: transparent; }
 button.ghost:hover { background: var(--panel-2); }
@@ -259,7 +301,7 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
 .lobby-rail-btn.active {
   background: var(--accent-gradient);
   border-color: transparent;
-  color: white;
+  color: var(--on-accent);
   box-shadow: var(--shadow-glow);
 }
 
@@ -411,7 +453,7 @@ button:disabled { opacity: 0.5; cursor: default; transform: none; }
   border-radius: var(--radius-sm);
   color: var(--muted);
 }
-.auth-tab.active { background: var(--accent-gradient); color: white; }
+.auth-tab.active { background: var(--accent-gradient); color: var(--on-accent); }
 .auth-form { width: 100%; display: flex; flex-direction: column; }
 .auth-submit-btn { width: 100%; margin-top: 18px; padding: 11px 16px; }
 .auth-error {
@@ -628,7 +670,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .mode-tab svg { width: 15px; height: 15px; flex-shrink: 0; }
 .mode-tab.active {
   background: var(--accent-gradient);
-  color: white;
+  color: var(--on-accent);
   box-shadow: var(--shadow-glow);
 }
 .mode-tab:hover { transform: none; }
@@ -718,7 +760,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .channel-row img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 .channel-row.occupied {
   background: var(--accent-gradient);
-  color: white;
+  color: var(--on-accent);
   box-shadow: var(--shadow-glow);
 }
 .channel-row-dot {
@@ -876,7 +918,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .server-rail-btn.active {
   background: var(--accent-gradient);
   border-color: transparent;
-  color: white;
+  color: var(--on-accent);
   box-shadow: var(--shadow-glow);
   border-radius: var(--radius-md);
 }
@@ -1362,7 +1404,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   padding: 9px 12px;
   font-size: 13px;
 }
-.chat-input-row .icon-btn.primary { background: var(--accent-gradient); border: none; color: white; flex-shrink: 0; }
+.chat-input-row .icon-btn.primary { background: var(--accent-gradient); border: none; color: var(--on-accent); flex-shrink: 0; }
 .chat-input-row .icon-btn.primary svg { width: 15px; height: 15px; }
 
 /* ---------- overlay da câmera ---------- */
@@ -1643,7 +1685,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   position: absolute;
   left: 6px; top: 2px;
   width: 6px; height: 11px;
-  border: solid white;
+  border: solid var(--on-accent);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);
 }
@@ -1738,7 +1780,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .dock-btn svg { width: 18px; height: 18px; }
 /* estado "ligado"/ativo (câmera ligada, compartilhando tela, mic ativo) */
 .dock-btn.primary,
-.dock-btn.active { background: var(--accent-gradient); border-color: transparent; }
+.dock-btn.active { background: var(--accent-gradient); border-color: transparent; color: var(--on-accent); }
 .dock-btn.primary:hover,
 .dock-btn.active:hover { filter: brightness(1.1); }
 /* estado "mudo"/alerta suave (mic mutado) — diferente do vermelho sólido
@@ -1873,7 +1915,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
   background: var(--panel);
   color: var(--muted);
 }
-.settings-tab.active .settings-tab-icon { background: var(--accent-gradient); color: #fff; }
+.settings-tab.active .settings-tab-icon { background: var(--accent-gradient); color: var(--on-accent); }
 
 .settings-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .settings-content-header {
@@ -2055,7 +2097,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 /* ---------- trilho: botão Home + separador ---------- */
 
 .rail-divider { width: 32px; height: 1px; background: var(--border); margin: 2px 0 6px; flex-shrink: 0; }
-.home-btn.active { background: var(--accent-gradient); border-color: transparent; color: white; box-shadow: var(--shadow-glow); }
+.home-btn.active { background: var(--accent-gradient); border-color: transparent; color: var(--on-accent); box-shadow: var(--shadow-glow); }
 
 /* ---------- barra de usuário: identidade clicável (abre seu perfil) ---------- */
 
@@ -2089,7 +2131,7 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .friends-tabs { display: flex; gap: 6px; background: var(--panel-2); border-radius: 999px; padding: 4px; }
 .friends-tab { background: transparent; border: none; padding: 8px 14px; border-radius: 999px; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .friends-tab:hover { transform: none; }
-.friends-tab.active { background: var(--accent-gradient); color: white; box-shadow: var(--shadow-glow); }
+.friends-tab.active { background: var(--accent-gradient); color: var(--on-accent); box-shadow: var(--shadow-glow); }
 .friends-tab-body { flex: 1; min-height: 0; overflow-y: auto; }
 .friends-tab-panel { display: none; flex-direction: column; gap: 16px; }
 .friends-tab-panel.active { display: flex; }

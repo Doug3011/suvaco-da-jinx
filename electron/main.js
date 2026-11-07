@@ -140,6 +140,18 @@ function createMainWindow() {
     width: 1200,
     height: 800,
     autoHideMenuBar: true,
+    // frame:false tira a barra nativa inteira (que no Windows do usuário
+    // pinta com a cor de destaque do sistema, sempre destoando do tema do
+    // app) - o index.html desenha a própria faixa do topo, 100% CSS
+    // (var(--bg) etc.), reagindo ao tema sozinha sem precisar de IPC
+    // nenhum pra recolorir nada nativo. Os botões de minimizar/maximizar/
+    // fechar também são HTML próprios agora (ver window:minimize/
+    // window:maximizeToggle/window:close abaixo) - tentei primeiro o
+    // caminho "oficial" (titleBarStyle:'hidden' + titleBarOverlay, que
+    // mantém os botões nativos só recolorindo a faixa deles) mas essa API
+    // tem bugs conhecidos entre versões/config do Windows e não funcionou
+    // aqui; frame:false é o jeito mais antigo mas também o mais confiável.
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -320,6 +332,22 @@ app.whenReady().then(() => {
       console.warn('Não deu pra salvar a preferência de fechar o app:', err.message);
     }
   });
+  // botões de minimizar/maximizar/fechar da faixa própria (frame:false tirou
+  // os nativos) - maximizeToggle alterna com base no estado atual da janela,
+  // e avisa o renderer (window:maximizeChanged) pra trocar o ícone certo
+  // (maximizar vs restaurar) mesmo quando o usuário maximiza/restaura pelo
+  // SO (ex: arrastando pro topo da tela), não só pelo próprio botão.
+  ipcMain.handle('window:minimize', () => mainWindow && mainWindow.minimize());
+  ipcMain.handle('window:maximizeToggle', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+  });
+  ipcMain.handle('window:close', () => mainWindow && mainWindow.close());
+  if (mainWindow) {
+    mainWindow.on('maximize', () => mainWindow.webContents.send('window:maximizeChanged', true));
+    mainWindow.on('unmaximize', () => mainWindow.webContents.send('window:maximizeChanged', false));
+  }
 
   // Só registra em build empacotado - em dev o "exe" é o electron.exe
   // genérico, registrar o protocolo nele faria QUALQUER coisa que abra um

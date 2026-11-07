@@ -18,6 +18,14 @@ contextBridge.exposeInMainWorld('telaNative', {
   quitAndInstall: () => ipcRenderer.invoke('app:quitAndInstall'),
   getCloseBehavior: () => ipcRenderer.invoke('app:getCloseBehavior'),
   setCloseBehavior: (value) => ipcRenderer.invoke('app:setCloseBehavior', value),
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  maximizeToggleWindow: () => ipcRenderer.invoke('window:maximizeToggle'),
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+  onMaximizeChanged: (cb) => {
+    const listener = (_e, isMaximized) => cb(isMaximized);
+    ipcRenderer.on('window:maximizeChanged', listener);
+    return () => ipcRenderer.removeListener('window:maximizeChanged', listener);
+  },
   sendRemoteInput: (msg) => ipcRenderer.invoke('native:remoteInput', msg),
   onJoinByCode: (cb) => {
     const listener = (_event, code) => cb(code);

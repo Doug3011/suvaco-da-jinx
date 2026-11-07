@@ -163,6 +163,9 @@ const els = {
   voiceConnectedPanel: document.getElementById('voiceConnectedPanel'),
   voiceConnectedDetail: document.getElementById('voiceConnectedDetail'),
   closeBehaviorSelect: document.getElementById('closeBehaviorSelect'),
+  winMinimizeBtn: document.getElementById('winMinimizeBtn'),
+  winMaximizeBtn: document.getElementById('winMaximizeBtn'),
+  winCloseBtn: document.getElementById('winCloseBtn'),
   themePicker: document.getElementById('themePicker'),
   authEmailLoginLink: document.getElementById('authEmailLoginLink'),
   accountEmailStatus: document.getElementById('accountEmailStatus'),
@@ -1052,6 +1055,8 @@ els.clipEnabledCheck.addEventListener('change', () => {
 function applyTheme(theme) {
   if (theme && theme !== 'azul') document.documentElement.setAttribute('data-theme', theme);
   else document.documentElement.removeAttribute('data-theme');
+  // a faixa própria do topo é CSS puro (var(--bg) etc.) - já reage ao tema
+  // sozinha, sem precisar de nada aqui.
 }
 applyTheme(state.settings.theme);
 if (els.themePicker) {
@@ -1277,6 +1282,25 @@ async function initCloseBehaviorSelect() {
 els.closeBehaviorSelect.addEventListener('change', () => {
   if (isElectron) window.telaNative.setCloseBehavior(els.closeBehaviorSelect.value);
 });
+
+/* ---------------- faixa própria do topo (frame:false tirou a nativa) ----------------
+   Fora do Electron (web puro) os botões simplesmente não fazem nada -
+   window.telaNative não existe, os listeners nem são registrados. */
+if (isElectron && els.winMinimizeBtn) {
+  els.winMinimizeBtn.addEventListener('click', () => window.telaNative.minimizeWindow());
+  els.winMaximizeBtn.addEventListener('click', () => window.telaNative.maximizeToggleWindow());
+  els.winCloseBtn.addEventListener('click', () => window.telaNative.closeWindow());
+  if (window.telaNative.onMaximizeChanged) {
+    window.telaNative.onMaximizeChanged((isMaximized) => {
+      els.winMaximizeBtn.title = isMaximized ? 'Restaurar' : 'Maximizar';
+      // ícone muda pra "janelas sobrepostas" quando maximizado, avisando
+      // que clicar de novo restaura - mesmo padrão visual do Windows.
+      els.winMaximizeBtn.innerHTML = isMaximized
+        ? '<svg viewBox="0 0 12 12" width="10" height="10"><rect x="1" y="3" width="8" height="8" fill="none" stroke="currentColor" stroke-width="1"/><path d="M3 3V1.5h8v8H9.5" fill="none" stroke="currentColor" stroke-width="1"/></svg>'
+        : '<svg viewBox="0 0 12 12" width="10" height="10"><rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
+    });
+  }
+}
 
 function openSettingsModal() {
   els.settingsModal.classList.remove('hidden');

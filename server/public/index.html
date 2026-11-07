@@ -10,6 +10,29 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <!-- faixa própria do topo (Electron, frame:false) - substitui a barra
+       nativa do Windows (que pintava com a cor de destaque do sistema,
+       sempre destoando do tema do app) por uma 100% CSS, que já reage ao
+       tema sozinha (var(--bg) etc.) sem precisar de IPC nenhum. Os botões
+       de minimizar/maximizar/fechar também são próprios (window:minimize
+       etc. no preload/app.js) já que frame:false tira os nativos junto.
+       Fora do Electron (ex: aberto num navegador comum) os botões só não
+       fazem nada - inofensivo, window.telaNative não existe. -->
+  <div id="customTitleBar" class="custom-titlebar">
+    <img src="/logo.png" alt="" class="custom-titlebar-icon" />
+    <span class="custom-titlebar-title">Suvaco da Jinx</span>
+    <div class="custom-titlebar-controls">
+      <button type="button" id="winMinimizeBtn" class="custom-titlebar-btn" title="Minimizar" aria-label="Minimizar">
+        <svg viewBox="0 0 12 12" width="12" height="12"><rect x="1" y="5.5" width="10" height="1" fill="currentColor"/></svg>
+      </button>
+      <button type="button" id="winMaximizeBtn" class="custom-titlebar-btn" title="Maximizar" aria-label="Maximizar">
+        <svg viewBox="0 0 12 12" width="10" height="10"><rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button type="button" id="winCloseBtn" class="custom-titlebar-btn custom-titlebar-btn-close" title="Fechar" aria-label="Fechar">
+        <svg viewBox="0 0 12 12" width="12" height="12"><line x1="1" y1="1" x2="11" y2="11" stroke="currentColor" stroke-width="1.2"/><line x1="11" y1="1" x2="1" y2="11" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+    </div>
+  </div>
   <div class="bg-decor" aria-hidden="true"></div>
   <div class="brand-badge" aria-hidden="true">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><line x1="8" y1="22" x2="16" y2="22"/><line x1="12" y1="18" x2="12" y2="22"/></svg>

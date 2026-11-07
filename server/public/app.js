@@ -5980,6 +5980,9 @@ const CHANGELOG = {
     '5 temas novos nas Configurações: Halloween, Natal, Lagoa, Névoa e Sombra.',
     'Card de doação (Pix) na barra lateral agora aparece de vez em quando, não fica sempre visível.',
   ],
+  '4.2.0': [
+    'Os 5 temas novos ganharam enfeite de verdade, não só cor: Halloween (teia, aranha e morcegos), Natal (pisca-pisca e neve caindo), Lagoa (chuva, folha e um sapo espiando), Névoa (fumaça roxa e borboletas) e Sombra (fumaça escura e faíscas elétricas).',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

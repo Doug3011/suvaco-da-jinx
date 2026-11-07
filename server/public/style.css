@@ -36,6 +36,87 @@
   --shadow-glow: 0 8px 28px rgba(36, 89, 230, 0.4);
 }
 
+/* ---------- temas alternativos (Configurações > Geral > Tema) ----------
+   "Azul" (acima) continua sendo o padrão, sem atributo nenhum em <html>.
+   Os outros 3 trocam só as variáveis de cor via [data-theme="..."] - o
+   app inteiro muda porque tudo já usa var(--bg)/var(--accent)/etc, nunca
+   hex direto. Paletas vieram prontas (Neutro/Grafite, Verde/Floresta,
+   Roxo/Ametista) - online-soft-bg/text são calculados com color-mix() em
+   vez de hardcoded porque só veio uma cor "online" por tema, não o par
+   claro/escuro que os outros valores já tinham. */
+:root[data-theme="neutro"] {
+  --bg: #0a0a0a;
+  --panel: #181818;
+  --panel-2: #262626;
+  --bg-rail: #050505;
+  --bg-sidebar: #111111;
+  --bg-main: #0a0a0a;
+  --input-bg: #181818;
+  --border: #2a2a2a;
+  --border-strong: #2a2a2a;
+  --text: #f5f5f5;
+  --text-2: #f5f5f5;
+  --muted: #b3b3b3;
+  --muted-2: #b3b3b3;
+  --dim: #8a8a8a;
+  --accent: #f5f5f5;
+  --accent-2: #e5e5e5;
+  --accent-light: #e5e5e5;
+  --accent-hover: #e5e5e5;
+  --accent-gradient: var(--accent);
+  --online: #22c55e;
+  --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
+  --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
+}
+:root[data-theme="verde"] {
+  --bg: #07110d;
+  --panel: #10241a;
+  --panel-2: #173424;
+  --bg-rail: #040a07;
+  --bg-sidebar: #0b1a13;
+  --bg-main: #07110d;
+  --input-bg: #10241a;
+  --border: #1e3d2c;
+  --border-strong: #1e3d2c;
+  --text: #e8f5ee;
+  --text-2: #e8f5ee;
+  --muted: #a8cbb8;
+  --muted-2: #a8cbb8;
+  --dim: #7fa893;
+  --accent: #2fd98a;
+  --accent-2: #5be8a6;
+  --accent-light: #5be8a6;
+  --accent-hover: #5be8a6;
+  --accent-gradient: var(--accent);
+  --online: #2fd98a;
+  --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
+  --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
+}
+:root[data-theme="roxo"] {
+  --bg: #0d0816;
+  --panel: #1b122e;
+  --panel-2: #2a1e45;
+  --bg-rail: #08050f;
+  --bg-sidebar: #130c20;
+  --bg-main: #0d0816;
+  --input-bg: #1b122e;
+  --border: #33244f;
+  --border-strong: #33244f;
+  --text: #f1eafe;
+  --text-2: #f1eafe;
+  --muted: #c2b3de;
+  --muted-2: #c2b3de;
+  --dim: #9786b5;
+  --accent: #8b5cf6;
+  --accent-2: #c4a8ff;
+  --accent-light: #c4a8ff;
+  --accent-hover: #c4a8ff;
+  --accent-gradient: var(--accent);
+  --online: #34d399;
+  --online-soft-bg: color-mix(in srgb, var(--online) 16%, var(--bg));
+  --online-soft-text: color-mix(in srgb, var(--online) 65%, white);
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -441,17 +522,22 @@ button.primary:hover { filter: brightness(1.08); }
 }
 .profile-banner-hint {
   position: absolute;
-  inset: 0;
+  right: 10px;
+  bottom: 10px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
+  gap: 6px;
+  background: rgba(12, 14, 24, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   color: white;
-  font-size: 13px;
-  opacity: 0;
-  transition: opacity 0.15s ease;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  transition: background 0.15s ease;
 }
-.profile-banner-edit:hover .profile-banner-hint { opacity: 1; }
+.profile-banner-edit:hover .profile-banner-hint { background: rgba(12, 14, 24, 0.85); }
 
 .profile-modal-body { padding: 0 20px 20px; }
 
@@ -1661,6 +1747,28 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .dock-btn.muted:hover { filter: brightness(1.15); }
 .dock-btn.dock-hangup { background: var(--danger); border-color: var(--danger); color: white; }
 .dock-btn.dock-hangup:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
+
+.theme-picker { display: flex; gap: 10px; margin: 10px 0 4px; flex-wrap: wrap; }
+.theme-swatch-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.theme-swatch-btn.active { border-color: var(--accent); color: var(--text); }
+.theme-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
 
 .link-btn {
   background: transparent;

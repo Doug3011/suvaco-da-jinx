@@ -131,6 +131,10 @@ const els = {
   serverSettingsBtn: document.getElementById('serverSettingsBtn'),
   serverSettingsModal: document.getElementById('serverSettingsModal'),
   serverSettingsModalClose: document.getElementById('serverSettingsModalClose'),
+  serverSettingsTabTitle: document.getElementById('serverSettingsTabTitle'),
+  serverSettingsTabSub: document.getElementById('serverSettingsTabSub'),
+  serverSettingsTabs: document.querySelectorAll('#serverSettingsTabs .settings-tab'),
+  serverSettingsTabPanels: document.querySelectorAll('#serverSettingsTabBody .settings-tab-panel'),
   serverIconLabel: document.getElementById('serverIconLabel'),
   serverIconPreview: document.getElementById('serverIconPreview'),
   serverIconInput: document.getElementById('serverIconInput'),
@@ -159,6 +163,7 @@ const els = {
   voiceConnectedPanel: document.getElementById('voiceConnectedPanel'),
   voiceConnectedDetail: document.getElementById('voiceConnectedDetail'),
   closeBehaviorSelect: document.getElementById('closeBehaviorSelect'),
+  themePicker: document.getElementById('themePicker'),
   authEmailLoginLink: document.getElementById('authEmailLoginLink'),
   accountEmailStatus: document.getElementById('accountEmailStatus'),
   openLinkEmailBtn: document.getElementById('openLinkEmailBtn'),
@@ -991,6 +996,7 @@ function loadSettings() {
     cameraOverlayEnabled: false,
     chatNotifications: true,
     remoteAdminEnabled: false,
+    theme: 'azul',
   };
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
@@ -1030,6 +1036,26 @@ els.hideCursorCheck.checked = state.settings.hideCursor;
 els.autoMicCheck.checked = state.settings.autoMic;
 els.chatNotificationsCheck.checked = state.settings.chatNotifications;
 els.remoteAdminCheck.checked = state.settings.remoteAdminEnabled;
+
+// Tema: aplica já no carregamento (tela de login inclusive, não só depois
+// de logar) - "azul" é o padrão de sempre e não precisa de atributo
+// nenhum, as variáveis base do :root já são ele.
+function applyTheme(theme) {
+  if (theme && theme !== 'azul') document.documentElement.setAttribute('data-theme', theme);
+  else document.documentElement.removeAttribute('data-theme');
+}
+applyTheme(state.settings.theme);
+if (els.themePicker) {
+  els.themePicker.querySelectorAll('.theme-swatch-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.themeValue === state.settings.theme);
+    btn.addEventListener('click', () => {
+      state.settings.theme = btn.dataset.themeValue;
+      saveSettings();
+      applyTheme(state.settings.theme);
+      els.themePicker.querySelectorAll('.theme-swatch-btn').forEach((b) => b.classList.toggle('active', b === btn));
+    });
+  });
+}
 
 els.resolutionSelect.addEventListener('change', () => {
   state.settings.resolution = els.resolutionSelect.value;
@@ -3008,6 +3034,12 @@ function openServerSettingsModal() {
   els.serverSettingsError.classList.add('hidden');
   els.leaveServerBtn.classList.toggle('hidden', isOwner);
   els.deleteServerBtn.classList.toggle('hidden', !isOwner);
+  // sempre abre na aba "Geral" - evita abrir já em "Avançado" se foi a
+  // última aba vista da vez anterior.
+  els.serverSettingsTabs.forEach((t) => t.classList.toggle('active', t.dataset.serverTab === 'general'));
+  els.serverSettingsTabPanels.forEach((p) => p.classList.toggle('active', p.dataset.serverPanel === 'general'));
+  els.serverSettingsTabTitle.textContent = 'Geral';
+  els.serverSettingsTabSub.textContent = 'Nome e ícone do servidor';
   els.serverSettingsModal.classList.remove('hidden');
 }
 function closeServerSettingsModal() {
@@ -3015,6 +3047,15 @@ function closeServerSettingsModal() {
 }
 els.serverSettingsBtn.addEventListener('click', openServerSettingsModal);
 els.serverSettingsModalClose.addEventListener('click', closeServerSettingsModal);
+els.serverSettingsTabs.forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const name = tab.dataset.serverTab;
+    els.serverSettingsTabs.forEach((t) => t.classList.toggle('active', t === tab));
+    els.serverSettingsTabPanels.forEach((p) => p.classList.toggle('active', p.dataset.serverPanel === name));
+    els.serverSettingsTabTitle.textContent = tab.dataset.title;
+    els.serverSettingsTabSub.textContent = tab.dataset.sub;
+  });
+});
 
 function showServerSettingsError(text) {
   els.serverSettingsError.textContent = text;

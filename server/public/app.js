@@ -5915,6 +5915,17 @@ const CHANGELOG = {
     'Tela de boas-vindas nova, apresentando os recursos do app pra quem tá chegando agora.',
     'Bolinha de notificação nas Configurações lembrando de vincular um e-mail (evita perder a conta se reinstalar o app ou trocar de computador).',
   ],
+  '4.1.0': [
+    'Corrigido: upload de foto de perfil/ícone do servidor travando depois da primeira troca.',
+    'Foto do servidor na barra lateral agora atualiza na hora pra quem trocou, em vez de demorar.',
+    'Corrigido: pedido de amizade não chegava em tempo real — agora chega na hora.',
+    'Corrigido: lista de quem tá na call às vezes "piscava" gente saindo sozinha.',
+    'Corrigido: ícone do app na barra de tarefas às vezes continuava o antigo depois de atualizar.',
+    'Aviso de tela preta na transmissão agora dá uma dica melhor de como resolver.',
+    'Botão de "Reportar um bug" finalmente funciona — manda direto pro desenvolvedor.',
+    '5 temas novos nas Configurações: Halloween, Natal, Lagoa, Névoa e Sombra.',
+    'Card de doação (Pix) na barra lateral agora aparece de vez em quando, não fica sempre visível.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

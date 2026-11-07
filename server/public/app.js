@@ -3004,9 +3004,32 @@ function buildNudgeCard(title, sub) {
 
 // chave aleatoria (EVP) - nao carrega CPF/celular/e-mail, so pra doacao
 const PIX_KEY = 'ec5eca4b-d5a4-4178-b9d1-5070d2b50171';
+
+// aparece/some em ciclo (em vez de ficar sempre visível) pra não parecer
+// que tá cobrando o tempo todo - visível por 2min, some por 15min, repete.
+// Controla a visibilidade de QUALQUER card já montado no DOM (não refaz o
+// render), então funciona mesmo que renderMemberSidebar/renderCallMemberSidebar
+// não rodem de novo nesse meio tempo.
+const SUPPORT_CARD_VISIBLE_MS = 2 * 60 * 1000;
+const SUPPORT_CARD_HIDDEN_MS = 15 * 60 * 1000;
+let supportCardVisible = true;
+function applySupportCardVisibility() {
+  document.querySelectorAll('.sidebar-support-card').forEach((el) => {
+    el.classList.toggle('hidden', !supportCardVisible);
+  });
+}
+function scheduleSupportCardCycle() {
+  setTimeout(() => {
+    supportCardVisible = !supportCardVisible;
+    applySupportCardVisibility();
+    scheduleSupportCardCycle();
+  }, supportCardVisible ? SUPPORT_CARD_VISIBLE_MS : SUPPORT_CARD_HIDDEN_MS);
+}
+scheduleSupportCardCycle();
+
 function buildSupportCard() {
   const card = document.createElement('div');
-  card.className = 'sidebar-support-card';
+  card.className = supportCardVisible ? 'sidebar-support-card' : 'sidebar-support-card hidden';
   card.innerHTML = `
     <strong>Ajude a manter o Ribbit no ar</strong>
     <span>Sua doação via Pix ajuda a pagar os custos do servidor.</span>

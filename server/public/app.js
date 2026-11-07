@@ -204,6 +204,9 @@ const els = {
   interactiveShareBtn: document.getElementById('interactiveShareBtn'),
   clipBtn: document.getElementById('clipBtn'),
   clipEnabledCheck: document.getElementById('clipEnabledCheck'),
+  clipSaveDirInput: document.getElementById('clipSaveDirInput'),
+  clipChooseDirBtn: document.getElementById('clipChooseDirBtn'),
+  clipResetDirBtn: document.getElementById('clipResetDirBtn'),
   leaveBtn: document.getElementById('leaveBtn'),
   inviteBtn: document.getElementById('inviteBtn'),
   toast: document.getElementById('toast'),
@@ -1049,6 +1052,32 @@ els.clipEnabledCheck.addEventListener('change', () => {
   updateClipBtnVisibility();
 });
 
+// pasta de destino dos clipes - só existe de verdade no Electron (web
+// puro não tem acesso a pasta nenhuma, sempre cai no download do
+// navegador) - os botões ficam desabilitados fora dele.
+async function refreshClipSaveDirDisplay() {
+  if (!isElectron || !window.telaNative.getClipSaveDir) {
+    els.clipSaveDirInput.value = '(pasta de downloads do navegador)';
+    els.clipChooseDirBtn.disabled = true;
+    els.clipResetDirBtn.disabled = true;
+    return;
+  }
+  els.clipSaveDirInput.value = await window.telaNative.getClipSaveDir();
+}
+if (els.clipChooseDirBtn) {
+  els.clipChooseDirBtn.addEventListener('click', async () => {
+    if (!isElectron) return;
+    const dir = await window.telaNative.chooseClipSaveDir();
+    els.clipSaveDirInput.value = dir;
+  });
+  els.clipResetDirBtn.addEventListener('click', async () => {
+    if (!isElectron) return;
+    const dir = await window.telaNative.resetClipSaveDir();
+    els.clipSaveDirInput.value = dir;
+    showToast('Voltou pra pasta padrão.', 2000);
+  });
+}
+
 // Tema: aplica já no carregamento (tela de login inclusive, não só depois
 // de logar) - "azul" é o padrão de sempre e não precisa de atributo
 // nenhum, as variáveis base do :root já são ele.
@@ -1309,6 +1338,7 @@ function openSettingsModal() {
   refreshAppList();
   initCloseBehaviorSelect();
   updateAccountEmailStatus();
+  refreshClipSaveDirDisplay();
   const activeTab = document.querySelector('.settings-tab.active');
   if (activeTab && activeTab.dataset.tab === 'devices') startCameraPreview();
 }
@@ -4005,16 +4035,36 @@ function startRollingClip(stream, bufferSeconds) {
         /* já pode ter parado sozinho (ex: track encerrada) */
       }
     },
-    save(filenameHint) {
+    async save(filenameHint) {
       if (!chunks.length) {
         showToast('Ainda não gravou o suficiente pra clipar — espera uns segundos.');
         return;
       }
       const blob = new Blob(chunks.map((c) => c.blob), { type: mimeType });
+      const filename = `${filenameHint}-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+
+      // no Electron, salva de verdade na pasta configurada (padrão
+      // Vídeos/Ribbit) via IPC - fora dele (web puro), cai no truque de
+      // <a download>, que só sabe jogar na pasta de downloads do navegador.
+      if (isElectron && window.telaNative.saveClipFile) {
+        try {
+          const buffer = await blob.arrayBuffer();
+          const result = await window.telaNative.saveClipFile(filename, buffer);
+          if (result && result.ok) {
+            showToast(`Clipe salvo em ${result.path}`, 4000);
+          } else {
+            showToast('Não consegui salvar o clipe: ' + (result ? result.error : 'erro desconhecido'), 4000);
+          }
+        } catch (err) {
+          showToast('Não consegui salvar o clipe: ' + err.message, 4000);
+        }
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${filenameHint}-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -5677,6 +5727,15 @@ const CHANGELOG = {
   ],
   '3.13.1': [
     'Corrigido: depois de sair e voltar pra uma call (às vezes por causa de uma reconexão de rede), a pessoa podia ficar presa sumida da lista "Na call"/online do servidor pra sempre, mesmo com a chamada funcionando normal. Agora detecta isso e se reconecta sozinho.',
+  ],
+  '3.14.0': [
+    'Novo: clipar a transmissão — 30s pra quem assiste (sempre disponível, botão direito na tela de alguém) e 60s pra quem transmite (opt-in nas Configurações → Transmissão, qualidade reduzida pra não pesar).',
+    'A pasta onde os clipes são salvos agora é configurável (Configurações → Transmissão) — por padrão fica em Vídeos/Ribbit.',
+    'A barra do topo da janela agora acompanha a cor do tema escolhido, em vez da barra padrão do Windows.',
+    'Corrigido: texto ilegível (branco em cima de fundo quase-branco) no tema Neutro em vários botões/abas selecionadas.',
+    'Configurações do servidor agora abrem como aba cheia, igual as Configurações normais.',
+    'Novo seletor de tema (Configurações → Geral): Azul, Roxo, Verde ou Neutro.',
+    'Modo admin (controle remoto) liberado pra qualquer um — agora sempre pede consentimento da outra pessoa antes de começar, nos dois sentidos (pedir ou oferecer via "Transmissão interativa").',
   ],
 };
 

@@ -135,6 +135,22 @@ try {
   /* primeira vez rodando (arquivo não existe ainda) ou arquivo corrompido — fica no padrão */
 }
 
+// Pasta onde os clipes (30s/60s) são salvos - padrão dentro de "Vídeos" com
+// o nome NOVO do app ("Ribbit", já decidido pelo usuário pra não precisar
+// renomear a pasta de novo quando a troca de nome acontecer de verdade em
+// todo o resto). Criada sob demanda (só quando o primeiro clipe realmente
+// for salvo), não aqui na subida - não faz sentido criar uma pasta vazia
+// no PC de todo mundo só por ter instalado o app.
+const DEFAULT_CLIP_DIR = path.join(app.getPath('videos'), 'Ribbit');
+const clipDirFile = path.join(app.getPath('userData'), 'clip-dir.json');
+let clipSaveDir = DEFAULT_CLIP_DIR;
+try {
+  const saved = JSON.parse(fs.readFileSync(clipDirFile, 'utf8'));
+  if (saved && typeof saved.clipSaveDir === 'string' && saved.clipSaveDir) clipSaveDir = saved.clipSaveDir;
+} catch {
+  /* primeira vez rodando ou arquivo corrompido - fica no padrão */
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -332,6 +348,48 @@ app.whenReady().then(() => {
       console.warn('Não deu pra salvar a preferência de fechar o app:', err.message);
     }
   });
+  // clipes: pasta de destino configurável (padrão Vídeos/Ribbit) + salvar
+  // de verdade no disco. O renderer manda o Blob já pronto (como
+  // ArrayBuffer, via IPC - contextIsolation:true usa structured clone, que
+  // transporta ArrayBuffer sem problema) e o processo principal escreve o
+  // arquivo, criando a pasta se ainda não existir.
+  ipcMain.handle('clip:getSaveDir', () => clipSaveDir);
+  ipcMain.handle('clip:chooseSaveDir', async () => {
+    if (!mainWindow) return clipSaveDir;
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Escolher pasta pra salvar os clipes',
+      defaultPath: clipSaveDir,
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (result.canceled || !result.filePaths[0]) return clipSaveDir;
+    clipSaveDir = result.filePaths[0];
+    try {
+      fs.writeFileSync(clipDirFile, JSON.stringify({ clipSaveDir }));
+    } catch (err) {
+      console.warn('Não deu pra salvar a pasta de clipes escolhida:', err.message);
+    }
+    return clipSaveDir;
+  });
+  ipcMain.handle('clip:resetSaveDir', () => {
+    clipSaveDir = DEFAULT_CLIP_DIR;
+    try {
+      fs.writeFileSync(clipDirFile, JSON.stringify({ clipSaveDir }));
+    } catch (err) {
+      console.warn('Não deu pra salvar a pasta de clipes (reset):', err.message);
+    }
+    return clipSaveDir;
+  });
+  ipcMain.handle('clip:saveFile', async (_event, { filename, buffer }) => {
+    try {
+      fs.mkdirSync(clipSaveDir, { recursive: true });
+      const fullPath = path.join(clipSaveDir, filename);
+      fs.writeFileSync(fullPath, Buffer.from(buffer));
+      return { ok: true, path: fullPath };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  });
+
   // botões de minimizar/maximizar/fechar da faixa própria (frame:false tirou
   // os nativos) - maximizeToggle alterna com base no estado atual da janela,
   // e avisa o renderer (window:maximizeChanged) pra trocar o ícone certo

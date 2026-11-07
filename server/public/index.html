@@ -628,7 +628,15 @@
                 <span class="switch-track"><span class="switch-knob"></span></span>
               </label>
             </div>
-            <p class="settings-hint">Liga um botão "Clipar" na barra de controles enquanto você transmite — guarda os últimos 60 segundos (tempo suficiente pra dar alt-tab e clicar) e salva num arquivo .webm na pasta de downloads. Grava numa cópia menor (720p/30fps), separada da transmissão real, pra não pesar no seu PC nem na qualidade de quem assiste. Fica desligado até você ligar.</p>
+            <p class="settings-hint">Liga um botão "Clipar" na barra de controles enquanto você transmite — guarda os últimos 60 segundos (tempo suficiente pra dar alt-tab e clicar) e salva um arquivo .webm. Grava numa cópia menor (720p/30fps), separada da transmissão real, pra não pesar no seu PC nem na qualidade de quem assiste. Fica desligado até você ligar. Vale também pros clipes de 30s de quem você está assistindo.</p>
+            <label class="settings-row">
+              <span>Pasta onde salvar os clipes</span>
+            </label>
+            <div class="manual-join-row">
+              <input id="clipSaveDirInput" type="text" readonly />
+              <button type="button" id="clipChooseDirBtn">Escolher pasta</button>
+              <button type="button" id="clipResetDirBtn" class="ghost">Usar padrão</button>
+            </div>
           </div>
           <div class="settings-tab-panel" data-panel="apps">
             <div class="sidebar-section-title">Nesta sessão</div>

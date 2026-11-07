@@ -621,6 +621,7 @@ button.primary:hover { filter: brightness(1.08); }
   position: relative;
 }
 .profile-avatar { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
+.profile-avatar-edit.uploading { cursor: wait; pointer-events: none; opacity: 0.6; }
 
 .profile-modal-name { display: block; font-size: 17px; margin-bottom: 14px; }
 

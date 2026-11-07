@@ -69,6 +69,7 @@ const els = {
   profileBanner: document.getElementById('profileBanner'),
   bannerInput: document.getElementById('bannerInput'),
   modalAvatarPreview: document.getElementById('modalAvatarPreview'),
+  modalAvatarLabel: document.getElementById('modalAvatarLabel'),
   modalAvatarInput: document.getElementById('modalAvatarInput'),
   profileModalName: document.getElementById('profileModalName'),
   profileModalHandle: document.getElementById('profileModalHandle'),
@@ -342,6 +343,7 @@ function showLobbyScreen() {
   }
   fetchMyServers();
   joinGlobalPresence();
+  joinFriendRequestsRealtime();
   joinAttachmentSignaling();
   fetchFriends();
   startLastSeenLoop();
@@ -603,6 +605,18 @@ function rememberAppsInHistory(apps) {
   if (changed) saveAppHistory();
 }
 
+// falha explícita depois de N segundos em vez de ficar esperando pra
+// sempre uma promise que travou (rede caiu no meio, Storage não respondeu
+// etc.) - sem isso um upload travado deixava a UI "presa" sem nenhum
+// aviso, parecia bug sem dar erro nenhum.
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Demorou demais (${label}) - confere sua internet e tenta de novo.`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function resizeImageToBlob(file, width, height) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -626,16 +640,16 @@ function resizeImageToBlob(file, width, height) {
 // path FIXO (sem timestamp) de propósito: upsert:true só sobrescreve de
 // verdade se o caminho for sempre o mesmo - com timestamp cada troca de
 // foto deixava a versão anterior pra trás pra sempre, vazando aos pouco
-// o 1GB grátis do Storage. Cache do navegador fica só 1h (padrão do
-// Supabase Storage); quem acabou de trocar a própria foto vê a nova na
-// hora porque quem chama isso bota um "?t=" na própria tela (ver
-// els.modalAvatarInput/bannerInput abaixo) - o resto da galera só vê
-// depois que o cache deles expirar, troca aceitável por não vazar espaço.
+// o 1GB grátis do Storage. cacheControl baixo (60s, bem abaixo do padrão
+// de 3600s do Supabase Storage) pra quem NÃO foi quem trocou (ex: o resto
+// da galera vendo seu avatar na lista) ver a foto nova rapidinho sem
+// precisar de timestamp por URL - quem trocou já vê a nova na hora de
+// qualquer jeito, via o "?t=" que quem chama isso bota na própria tela.
 async function uploadProfileImage(blob, folder) {
   const path = `${folder}/${currentUser.id}.jpg`;
   const { error: uploadError } = await window.supabaseClient.storage
     .from('avatars')
-    .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+    .upload(path, blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '60' });
   if (uploadError) throw uploadError;
   const { data } = window.supabaseClient.storage.from('avatars').getPublicUrl(path);
   return data.publicUrl;
@@ -896,13 +910,23 @@ els.profileNameInput.addEventListener('change', async () => {
   els.userBarName.textContent = name;
 });
 
+let avatarUploadBusy = false;
 els.modalAvatarInput.addEventListener('change', async (ev) => {
   const file = ev.target.files[0];
   ev.target.value = '';
   if (!file) return;
+  // trava contra clique duplo/segunda seleção enquanto a primeira ainda
+  // está subindo - sem isso dava pra disparar dois uploads concorrentes
+  // e o mais lento "vencer" por último, parecendo que a troca não pegou.
+  if (avatarUploadBusy) {
+    showToast('Já tem uma foto sendo enviada, espera terminar.', 2000);
+    return;
+  }
+  avatarUploadBusy = true;
+  els.modalAvatarLabel.classList.add('uploading');
   try {
     const blob = await resizeImageToBlob(file, 256, 256);
-    const url = await uploadProfileImage(blob, 'profile-icons');
+    const url = await withTimeout(uploadProfileImage(blob, 'profile-icons'), 20000, 'enviar foto');
     const { error } = await window.supabaseClient.from('profiles').update({ avatar_url: url }).eq('id', currentUser.id);
     if (error) throw error;
     currentProfile = { ...currentProfile, avatar_url: url };
@@ -913,7 +937,10 @@ els.modalAvatarInput.addEventListener('change', async (ev) => {
     els.userBarAvatar.src = freshUrl;
   } catch (err) {
     console.error('Erro ao trocar avatar:', err);
-    showToast('Não deu pra trocar a foto.', 2500);
+    showToast(err.message || 'Não deu pra trocar a foto.', 3500);
+  } finally {
+    avatarUploadBusy = false;
+    els.modalAvatarLabel.classList.remove('uploading');
   }
 });
 
@@ -1686,6 +1713,9 @@ function escapeHtml(s) {
    voz na Fase 4) ainda não existe — por enquanto só mostra um aviso. */
 
 let myServers = [];
+// serverId -> timestamp de quando EU troquei o ícone desse servidor nessa
+// sessão - usado só pra cache-bust do meu próprio rail (ver renderServerRail).
+const serverIconCacheBust = new Map();
 let activeServerId = null;
 let activeChannels = [];
 
@@ -1718,8 +1748,10 @@ function renderServerRail() {
     btn.type = 'button';
     btn.className = 'server-rail-btn' + (server.id === activeServerId ? ' active' : '');
     btn.title = server.name;
-    btn.innerHTML = server.icon_url
-      ? `<img src="${escapeHtml(server.icon_url)}" alt="" />`
+    const bust = serverIconCacheBust.get(server.id);
+    const iconSrc = server.icon_url && bust ? `${server.icon_url}?t=${bust}` : server.icon_url;
+    btn.innerHTML = iconSrc
+      ? `<img src="${escapeHtml(iconSrc)}" alt="" />`
       : escapeHtml((server.name || '?').trim().slice(0, 2).toUpperCase());
     btn.addEventListener('click', () => selectServer(server.id));
     els.serverRail.appendChild(btn);
@@ -2023,6 +2055,7 @@ async function sendFriendRequestFromSearch(otherId) {
    amigos online/offline na tela de amigos. */
 
 let globalPresenceChannel = null;
+let friendRequestsChannels = null;
 
 function joinGlobalPresence() {
   if (globalPresenceChannel || !currentUser) return;
@@ -2034,6 +2067,25 @@ function joinGlobalPresence() {
     if (status === 'SUBSCRIBED') rt.track({});
   });
   globalPresenceChannel = rt;
+}
+
+// sem isso, um pedido de amizade só aparecia quando a pessoa relogava (ou
+// mexia em algo que já desse fetchFriends por conta própria) - friend_requests
+// envolve OU requester_id OU addressee_id ser você, e o filtro de
+// postgres_changes só aceita igualdade numa coluna só, então são duas
+// assinaturas (uma por coluna) em vez de uma só com "OR".
+function joinFriendRequestsRealtime() {
+  if (friendRequestsChannels || !currentUser) return;
+  const onChange = () => fetchFriends();
+  const asRequester = window.supabaseClient
+    .channel(`friend-requests:requester:${currentUser.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'friend_requests', filter: `requester_id=eq.${currentUser.id}` }, onChange)
+    .subscribe();
+  const asAddressee = window.supabaseClient
+    .channel(`friend-requests:addressee:${currentUser.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'friend_requests', filter: `addressee_id=eq.${currentUser.id}` }, onChange)
+    .subscribe();
+  friendRequestsChannels = [asRequester, asAddressee];
 }
 
 // Camada de segurança pro "às vezes fulano não aparece online": o socket do
@@ -3194,10 +3246,16 @@ els.serverSettingsSaveBtn.addEventListener('click', async () => {
 // input), reaciona o MESMO listener, e o preventDefault() incondicional
 // cancelava o próprio diálogo nativo que tinha acabado de ser disparado -
 // por isso clicar em "Trocar ícone" não abria nada.
+let serverIconUploadBusy = false;
 els.serverIconInput.addEventListener('change', async () => {
   const file = els.serverIconInput.files[0];
   els.serverIconInput.value = '';
   if (!file) return;
+  if (serverIconUploadBusy) {
+    showServerSettingsError('Já tem um ícone sendo enviado, espera terminar.');
+    return;
+  }
+  serverIconUploadBusy = true;
   els.serverSettingsError.classList.add('hidden');
   try {
     // redimensiona/comprime igual avatar/banner (ícone só aparece a
@@ -3207,9 +3265,11 @@ els.serverIconInput.addEventListener('change', async () => {
     // vazando o Storage grátis - mesma lição do avatar/banner.
     const blob = await resizeImageToBlob(file, 256, 256);
     const path = `server-icons/${activeServerId}.jpg`;
-    const { error: uploadError } = await window.supabaseClient.storage
-      .from('avatars')
-      .upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
+    const { error: uploadError } = await withTimeout(
+      window.supabaseClient.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg', cacheControl: '60' }),
+      20000,
+      'enviar ícone',
+    );
     if (uploadError) throw uploadError;
     const { data: publicUrlData } = window.supabaseClient.storage.from('avatars').getPublicUrl(path);
     const { error: updateError } = await window.supabaseClient
@@ -3218,9 +3278,15 @@ els.serverIconInput.addEventListener('change', async () => {
       .eq('id', activeServerId);
     if (updateError) throw updateError;
     els.serverIconPreview.src = `${publicUrlData.publicUrl}?t=${Date.now()}`;
+    // "?t=" também aqui - sem isso o rail de servidores (renderServerRail)
+    // mostra a URL crua e só atualizaria quando o cache de 60s expirasse,
+    // mesmo pra quem acabou de trocar o próprio ícone agorinha.
+    serverIconCacheBust.set(activeServerId, Date.now());
     await fetchMyServers();
   } catch (err) {
     showServerSettingsError(err.message || 'Não deu pra trocar o ícone.');
+  } finally {
+    serverIconUploadBusy = false;
   }
 });
 

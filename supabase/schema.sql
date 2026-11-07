@@ -179,6 +179,10 @@ create policy "so quem recebeu aceita" on public.friend_requests for update
 create policy "qualquer um dos dois remove (cancela/recusa/desfaz)" on public.friend_requests for delete
   using (auth.uid() = requester_id or auth.uid() = addressee_id);
 
+-- sem isso, pedido de amizade só aparecia depois de reabrir o app (nenhum
+-- evento em tempo real chegava pra quem recebeu o pedido)
+alter publication supabase_realtime add table public.friend_requests;
+
 create function public.are_friends(other uuid) returns boolean
 language sql security definer stable set search_path = public as $$
   select exists (

@@ -258,6 +258,8 @@ const els = {
   noiseSuppressionCheck: document.getElementById('noiseSuppressionCheck'),
   onboardingModal: document.getElementById('onboardingModal'),
   onboardingOkBtn: document.getElementById('onboardingOkBtn'),
+  settingsNotifDot: document.getElementById('settingsNotifDot'),
+  generalTabNotifDot: document.getElementById('generalTabNotifDot'),
   whatsNewModal: document.getElementById('whatsNewModal'),
   whatsNewClose: document.getElementById('whatsNewClose'),
   whatsNewVersion: document.getElementById('whatsNewVersion'),
@@ -277,6 +279,11 @@ const els = {
 
 let currentUser = null; // auth.users (via sessão)
 let currentProfile = null; // public.profiles
+// marca o instante exato em que uma conta NOVA é criada (signInAnonymously
+// pelo form de apelido) - é a única forma de login que cria usuário do zero,
+// então é o sinal certo de "pessoa nova entrando por aqui pela primeira
+// vez", independente do PC/instalação. Consumido e resetado em showLobbyScreen.
+let justCreatedAccount = false;
 
 function showAuthScreen() {
   if (activeVoiceChannel) leaveRoom(); // fecha mic/camera/tela e desconecta do Realtime antes de deslogar
@@ -338,7 +345,10 @@ function showLobbyScreen() {
   joinAttachmentSignaling();
   fetchFriends();
   startLastSeenLoop();
-  checkFirstTimeOnboarding();
+  if (justCreatedAccount) {
+    justCreatedAccount = false;
+    els.onboardingModal.classList.remove('hidden');
+  }
   if (pendingInviteCode) {
     const code = pendingInviteCode;
     pendingInviteCode = null;
@@ -382,12 +392,14 @@ els.authForm.addEventListener('submit', async (ev) => {
   els.authError.classList.add('hidden');
   els.authSubmitBtn.disabled = true;
   try {
+    justCreatedAccount = true;
     const { error } = await window.supabaseClient.auth.signInAnonymously({
       options: { data: { display_name: displayName } },
     });
     if (error) throw error;
     // onAuthStateChange cuida do resto (busca o perfil, mostra o lobby).
   } catch (err) {
+    justCreatedAccount = false;
     els.authError.textContent = err.message || 'Erro ao entrar.';
     els.authError.classList.remove('hidden');
   } finally {
@@ -448,6 +460,9 @@ function friendlyAuthError(message) {
 function updateAccountEmailStatus() {
   if (!els.accountEmailStatus) return;
   els.accountEmailStatus.textContent = currentUser && currentUser.email ? currentUser.email : 'Nenhum';
+  const needsEmail = !!(currentUser && !currentUser.email);
+  els.settingsNotifDot.classList.toggle('hidden', !needsEmail);
+  els.generalTabNotifDot.classList.toggle('hidden', !needsEmail);
 }
 
 let emailAuthMode = 'login';
@@ -5748,23 +5763,15 @@ const CHANGELOG = {
   ],
   '4.0.0': [
     '"Suvaco da Jinx" agora é "Ribbit"! Nome e ícone novos em todo lugar — janela, bandeja, atalhos, e-mails. Link de convite antigo (suvacodajinx://) continua funcionando normalmente.',
-    'Tela de boas-vindas nova, mostrando os recursos do app pra quem tá chegando agora.',
+    'Tela de boas-vindas nova, apresentando os recursos do app pra quem tá chegando agora.',
+    'Bolinha de notificação nas Configurações lembrando de vincular um e-mail (evita perder a conta se reinstalar o app ou trocar de computador).',
   ],
 };
 
-// Boas-vindas: aparece uma vez só, no primeiro login depois de instalar (ou
-// depois de qualquer reset de sessão local, como a troca de nome pro
-// Ribbit, que zera a pasta de dados e por tabela esse localStorage também)
-// - mostra rapidinho os recursos do app pra quem tá chegando agora não
-// ficar perdido. Independente de conta (fica marcado por instalação local,
-// não por usuário) - de propósito, já que o pedido era "todo mundo vê isso
-// de novo como se fosse a primeira vez" depois da troca de nome.
-const ONBOARDING_SEEN_KEY = 'tela-radmin:onboarding-seen';
-function checkFirstTimeOnboarding() {
-  if (localStorage.getItem(ONBOARDING_SEEN_KEY)) return;
-  localStorage.setItem(ONBOARDING_SEEN_KEY, '1');
-  els.onboardingModal.classList.remove('hidden');
-}
+// Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no
+// submit do form de apelido - a única forma de login que cria um usuário do
+// zero), não por instalação/PC - assim qualquer pessoa que entrar por aqui
+// pela primeira vez vê a apresentação, em qualquer máquina.
 els.onboardingOkBtn.addEventListener('click', () => els.onboardingModal.classList.add('hidden'));
 
 const LAST_SEEN_VERSION_KEY = 'tela-radmin:last-seen-version';

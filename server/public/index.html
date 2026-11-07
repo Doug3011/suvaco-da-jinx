@@ -114,6 +114,7 @@
           </button>
           <button type="button" id="userBarSettingsBtn" class="icon-btn ghost" title="Configurações">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span id="settingsNotifDot" class="notif-dot hidden" title="Vincule um e-mail pra não perder sua conta"></span>
           </button>
         </div>
       </aside>
@@ -487,7 +488,7 @@
           <button type="button" class="settings-tab" data-tab="stream" data-title="Transmissão" data-sub="Qualidade e fps da tela compartilhada"><span class="settings-tab-icon">TR</span>Transmissão</button>
           <button type="button" class="settings-tab" data-tab="apps" data-title="Apps mutados" data-sub="Apps que não entram no áudio da transmissão"><span class="settings-tab-icon">AM</span>Apps mutados</button>
           <button type="button" class="settings-tab" data-tab="chat" data-title="Chat" data-sub="Notificações e aparência das mensagens"><span class="settings-tab-icon">CH</span>Chat</button>
-          <button type="button" class="settings-tab" data-tab="general" data-title="Geral" data-sub="Comportamento do app"><span class="settings-tab-icon">GE</span>Geral</button>
+          <button type="button" class="settings-tab" data-tab="general" data-title="Geral" data-sub="Comportamento do app"><span class="settings-tab-icon">GE</span>Geral<span id="generalTabNotifDot" class="notif-dot hidden" title="Vincule um e-mail pra não perder sua conta"></span></button>
         </div>
       </nav>
 
@@ -816,50 +817,19 @@
   </div>
 
   <!-- modal de novidades: aparece sozinho quando o app abre numa versão nova -->
-  <!-- boas-vindas: aparece uma vez só, no primeiro login depois de instalar
-       (ou depois de um reset de sessão, como a troca de nome pro Ribbit) -
-       mostra rapidinho tudo que dá pra fazer no app, pra quem tá entrando
-       pela primeira vez não ficar perdido. -->
+  <!-- boas-vindas: aparece pra toda conta nova (ver justCreatedAccount em
+       app.js), como uma apresentação corrida do app com a logo em destaque -
+       sem menção ao nome antigo do app. -->
   <div id="onboardingModal" class="modal-overlay hidden">
     <div class="modal-card onboarding-modal">
       <div class="onboarding-header">
         <img src="/logo.png" alt="" class="onboarding-logo" />
-        <h2>Bem-vindo ao Ribbit!</h2>
-        <p class="muted">Um resumão rápido do que dá pra fazer por aqui:</p>
+        <h2>Seja bem-vindo ao Ribbit!</h2>
       </div>
-      <div class="onboarding-grid">
-        <div class="onboarding-item">
-          <span class="onboarding-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
-          <div><strong>Transmita sua tela</strong><span>Compartilhe a tela ou um jogo com a galera, com áudio por app controlável.</span></div>
-        </div>
-        <div class="onboarding-item">
-          <span class="onboarding-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>
-          <div><strong>Câmera com moldura</strong><span>Liga a câmera e personaliza com uma moldura/overlay, se quiser.</span></div>
-        </div>
-        <div class="onboarding-item">
-          <span class="onboarding-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></span>
-          <div><strong>Clipes</strong><span>Clipa os últimos segundos de uma transmissão com um clique — sua ou de quem você assiste.</span></div>
-        </div>
-        <div class="onboarding-item">
-          <span class="onboarding-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a4 4 0 0 0-4 4v6a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4M8 22h8"/></svg></span>
-          <div><strong>Chamada de voz</strong><span>Converse com a galera com redução de ruído e mute por app individual.</span></div>
-        </div>
-        <div class="onboarding-item">
-          <span class="onboarding-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
-          <div><strong>Chat com reações</strong><span>Mensagens, reações com emoji, indicador de "digitando..." e anexos P2P.</span></div>
-        </div>
-        <div class="onboarding-item">
-          <span class="onboarding-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span>
-          <div><strong>Convite por link</strong><span>Chama a galera com um link — abre o app sozinho, sem precisar digitar código.</span></div>
-        </div>
-        <div class="onboarding-item">
-          <span class="onboarding-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2a10 10 0 1 0 10 10 4 4 0 0 1-5-4 4 4 0 0 1-5-4 4 4 0 0 1-2.88-1.3A9.9 9.9 0 0 1 12 2z"/></svg></span>
-          <div><strong>Temas</strong><span>Deixa o app com a sua cara em Configurações → Geral: Azul, Roxo, Verde ou Neutro.</span></div>
-        </div>
-        <div class="onboarding-item">
-          <span class="onboarding-item-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"/><circle cx="12" cy="14" r="2.5"/></svg></span>
-          <div><strong>Controle remoto</strong><span>Com consentimento dos dois lados, dá pra controlar (ou deixar controlar) uma tela — Configurações → Transmissão.</span></div>
-        </div>
+      <div class="onboarding-intro">
+        <p>Aqui você pode <strong>transmitir sua tela</strong> pra galera assistir, <strong>clipar</strong> os melhores momentos com um clique, entrar em <strong>chamadas de voz</strong> com redução de ruído e ligar a <strong>câmera</strong> quando quiser aparecer.</p>
+        <p>Tem <strong>chat com reações</strong> e anexos, <strong>convite por link</strong> pra chamar a galera direto pro app, <strong>temas</strong> pra deixar tudo com a sua cara, e até <strong>controle remoto</strong> pra ajudar (ou pedir ajuda) numa tela, sempre com acordo dos dois lados.</p>
+        <p class="muted">Dá uma olhada nas Configurações quando quiser — é só explorar.</p>
       </div>
       <button type="button" id="onboardingOkBtn" class="primary">Bora começar</button>
     </div>

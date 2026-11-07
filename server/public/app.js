@@ -724,6 +724,25 @@ els.bugReportText.addEventListener('paste', (ev) => {
   }
 });
 
+async function notifyBugReportWebhook(reportId, screenshotPath) {
+  let screenshotUrl = null;
+  if (screenshotPath) {
+    const { data, error } = await window.supabaseClient.storage
+      .from('bug-reports')
+      .createSignedUrl(screenshotPath, 60 * 60 * 24 * 7);
+    if (error) console.error('não consegui gerar o link do print do bug report:', error);
+    screenshotUrl = data && data.signedUrl;
+  }
+  // a URL do webhook do Discord fica só no banco (function notify_bug_report,
+  // ver supabase/migration-bug-report-webhook-server-side.sql) - nunca no
+  // client, que é servido pra qualquer um.
+  const { error: rpcErr } = await window.supabaseClient.rpc('notify_bug_report', {
+    report_id: reportId,
+    screenshot_url: screenshotUrl,
+  });
+  if (rpcErr) throw rpcErr;
+}
+
 els.bugReportSendBtn.addEventListener('click', async () => {
   const description = els.bugReportText.value.trim();
   if (!description) {
@@ -759,12 +778,10 @@ els.bugReportSendBtn.addEventListener('click', async () => {
       .single();
     if (insertErr) throw insertErr;
 
-    // o insert já valeu (fica salvo no banco mesmo se o e-mail falhar) - a
-    // function só dispara o aviso por e-mail, não é o que garante o registro.
-    const { error: fnErr } = await window.supabaseClient.functions.invoke('send-bug-report', {
-      body: { reportId: row.id },
-    });
-    if (fnErr) console.error('send-bug-report falhou (o report já foi salvo mesmo assim):', fnErr);
+    // o insert já valeu (fica salvo no banco mesmo se o aviso falhar) - o
+    // webhook só dispara a notificação, não é o que garante o registro.
+    notifyBugReportWebhook(row.id, screenshotPath)
+      .catch((err) => console.error('aviso do bug report falhou (o report já foi salvo mesmo assim):', err));
 
     showToast('Bug reportado, obrigado por avisar!');
     closeBugReportModal();

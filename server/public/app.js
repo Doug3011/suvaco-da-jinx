@@ -2081,7 +2081,12 @@ function joinGlobalPresence() {
   });
   rt.on('presence', { event: 'sync' }, () => renderFriendsPanels());
   rt.subscribe((status) => {
-    if (status === 'SUBSCRIBED') rt.track({});
+    if (status === 'SUBSCRIBED') { rt.track({}); return; }
+    // mesmo caso do server presence (ver rejoinGlobalPresence abaixo): sem
+    // isso, só o poll de 20s notava o canal caído.
+    if ((status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && globalPresenceChannel === rt) {
+      rejoinGlobalPresence();
+    }
   });
   globalPresenceChannel = rt;
 }
@@ -2758,7 +2763,15 @@ function joinServerPresence(serverId) {
     // junto) em vez de duplicar um track() parcial aqui - evita a pessoa
     // aparecer "fora da call" por um instante logo numa reconexão que
     // acontece enquanto ela já está dentro de uma call.
-    if (status === 'SUBSCRIBED') retrackServerPresence();
+    if (status === 'SUBSCRIBED') { retrackServerPresence(); return; }
+    // antes só reagia a SUBSCRIBED - quando o canal caía (CLOSED/
+    // CHANNEL_ERROR/TIMED_OUT), ninguém notava até o poll de 20s
+    // (PRESENCE_REFRESH_MS) rodar de novo, deixando a pessoa sumida de
+    // "Na call" (caindo em "Offline") por até 20s. O SDK já avisa isso na
+    // hora pelo próprio callback de subscribe - só precisava escutar.
+    if ((status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && serverPresenceChannel === rt && activeServerId) {
+      joinServerPresence(activeServerId);
+    }
   });
   fetchServerMembers(serverId);
 

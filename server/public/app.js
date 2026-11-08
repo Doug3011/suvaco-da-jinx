@@ -3103,11 +3103,14 @@ function buildSupportCard() {
 
 function renderCallMemberSidebar() {
   const occupants = voiceChannelOccupants(activeVoiceChannel.id);
+  const occupantIds = new Set(occupants.map((o) => o.id));
   const onlineIds = serverPresenceChannel
     ? new Set(Object.keys(serverPresenceChannel.presenceState()))
     : new Set();
   const offline = [];
   for (const m of serverMembersCache) {
+    if (occupantIds.has(m.user_id)) continue; // já aparece em "Na call"
+    if (recentlyInVoiceChannel(m.user_id, activeVoiceChannel.id)) continue; // presence ainda sincronizando
     if (onlineIds.has(m.user_id)) continue;
     const profile = m.profiles || {};
     offline.push({ id: m.user_id, name: profile.display_name || 'Convidado', avatar: profile.avatar_url, lastSeenAt: profile.last_seen_at });
@@ -3220,6 +3223,21 @@ function renderChannelList() {
 // lê da presença POR SERVIDOR (todo mundo olhando o servidor assina, não
 // só quem já está na call), estendida com voiceChannelId/sharingScreen em
 // retrackServerPresence().
+// quando alguém entra numa call, o presence dos OUTROS clientes demora um
+// instante pra sincronizar (round-trip pelo Supabase Realtime) - nesse
+// intervalo, voiceChannelOccupants ainda não acha a pessoa, e ela cai na
+// lista de "Offline" por engano (serverMembersCache não sabe de call
+// nenhuma, só lista todo mundo que não está marcado como online). Guarda
+// a última vez que cada um foi visto de verdade nessa call pra dar uma
+// margem antes de chutar "offline" só por causa do atraso do sync.
+const voiceOccupancyLastSeen = new Map(); // userId -> { channelId, ts }
+const VOICE_OCCUPANCY_GRACE_MS = 4000;
+
+function recentlyInVoiceChannel(userId, channelId) {
+  const seen = voiceOccupancyLastSeen.get(userId);
+  return !!seen && seen.channelId === channelId && Date.now() - seen.ts < VOICE_OCCUPANCY_GRACE_MS;
+}
+
 function voiceChannelOccupants(channelId) {
   const out = [];
   // minha própria entrada vem sempre do estado LOCAL (activeVoiceChannel/
@@ -3242,7 +3260,10 @@ function voiceChannelOccupants(channelId) {
   for (const [userId, metas] of Object.entries(state_)) {
     if (userId === currentUser.id) continue; // já tratado acima com o estado local
     const meta = metas[0];
-    if (meta && meta.voiceChannelId === channelId) out.push({ id: userId, ...meta });
+    if (meta && meta.voiceChannelId === channelId) {
+      out.push({ id: userId, ...meta });
+      voiceOccupancyLastSeen.set(userId, { channelId, ts: Date.now() });
+    }
   }
   return out;
 }

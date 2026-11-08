@@ -6017,6 +6017,10 @@ const CHANGELOG = {
   '4.2.0': [
     'Os 5 temas novos ganharam enfeite de verdade, não só cor: Halloween (teia, aranha e morcegos), Natal (pisca-pisca e neve caindo), Lagoa (chuva, folha e um sapo espiando), Névoa (fumaça roxa e borboletas) e Sombra (fumaça escura e faíscas elétricas).',
   ],
+  '4.3.0': [
+    'Corrigido: mutar um app na barra lateral às vezes não bastava — se o programa que abriu ele (ex: a Steam abrindo um jogo) não estivesse mutado também, o som vazava mesmo assim.',
+    'Corrigido: às vezes alguém aparecia como "Offline" por alguns segundos logo depois de entrar numa call, mesmo estando lá — a lista agora reconecta na hora em vez de esperar até 20s.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

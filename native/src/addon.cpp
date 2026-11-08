@@ -180,7 +180,15 @@ class CaptureSession {
     AUDIOCLIENT_ACTIVATION_PARAMS params = {};
     params.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
     params.ProcessLoopbackParams.TargetProcessId = pid_;
-    params.ProcessLoopbackParams.ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
+    // EXCLUDE, nao INCLUDE: cada processo com sessao propria (ex: um jogo
+    // lancado pela Steam) ja vira sua PROPRIA linha/captura em
+    // EnumerateAudioApps + CaptureSession - nao precisa "puxar a arvore"
+    // pra pegar o audio dele. Com INCLUDE_TARGET_PROCESS_TREE, a captura do
+    // PROCESSO PAI (ex: steam.exe, se nao estiver mutado) reconstruia e
+    // vazava o audio do FILHO mesmo com o filho mutado e com a captura dele
+    // corretamente parada - o pai, sendo capturado "com a arvore inteira",
+    // recapturava o mesmo audio por fora do mute.
+    params.ProcessLoopbackParams.ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE;
 
     PROPVARIANT activateParams;
     PropVariantInit(&activateParams);

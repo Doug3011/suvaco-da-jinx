@@ -439,6 +439,18 @@ app.whenReady().then(() => {
     autoUpdater.checkForUpdates().catch((err) => {
       console.warn('[auto-update] não deu pra checar atualização agora:', err.message);
     });
+    // Fechar com o X só minimiza pra bandeja (ver 'close' do mainWindow
+    // abaixo) - o processo pode ficar vivo por dias sem reiniciar de
+    // verdade, e checkForUpdates() acima só roda uma vez, logo no boot.
+    // Sem isso, quem deixa o app sempre aberto na bandeja nunca recebe
+    // atualização nenhuma depois do primeiro check, mesmo com releases
+    // novas saindo - rechecar a cada 4h cobre isso sem bater na API do
+    // GitHub toda hora.
+    setInterval(() => {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.warn('[auto-update] não deu pra checar atualização agora:', err.message);
+      });
+    }, 4 * 60 * 60 * 1000);
   }
 });
 

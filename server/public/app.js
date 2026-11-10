@@ -5905,6 +5905,10 @@ const CHANGELOG = {
     'Novo: servidor de retransmissão (TURN) pras chamadas/transmissão — ajuda quem está numa rede mais fechada (4G, wifi corporativo, CGNAT) a conseguir conectar, resolvendo tela preta que só acontecia com alguns amigos específicos.',
     'Checagem de atualização agora repete a cada poucas horas, não só quando o app abre — quem deixa ele sempre aberto na bandeja não fica mais preso numa versão antiga.',
   ],
+  '4.5.0': [
+    'Chamadas de voz/tela/câmera agora passam por um servidor dedicado em vez de ligar direto entre os PCs de todo mundo — resolve a travada/queda de FPS de quem transmite quando tem 3 ou mais pessoas assistindo ao mesmo tempo.',
+    'Conexão de chamada deve ficar mais estável em geral, principalmente com várias pessoas na call ao mesmo tempo.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

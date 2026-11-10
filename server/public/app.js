@@ -5935,6 +5935,10 @@ const CHANGELOG = {
     'Corrigido: trocar de servidor rápido podia deixar a lista de membros (e às vezes de canais) mostrando o servidor errado por um tempo.',
     'Corrigido: o som do que você estava assistindo podia vazar e duplicar na sua própria transmissão ao compartilhar tela, causando eco crescente — o Ribbit estava se contando como "mais um app" na mixagem de áudio por app.',
   ],
+  '4.5.2': [
+    'Corrigido: mutar um app bem na hora que ele aparecia na lista às vezes não fazia efeito nenhum.',
+    'Corrigido: quem minimizava o Ribbit pra bandeja durante uma call podia sumir da lista "Na call"/aparecer Offline pros outros por vários minutos, mesmo seguindo ativo (compartilhando tela, por exemplo) — o Windows/Chromium throttla demais uma janela escondida, o que atrasava demais a atualização de presença.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

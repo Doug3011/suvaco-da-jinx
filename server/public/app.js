@@ -2931,6 +2931,11 @@ async function fetchServerMembers(serverId) {
     .from('server_members')
     .select('user_id, profiles(display_name, avatar_url, last_seen_at)')
     .eq('server_id', serverId);
+  // se o usuário já trocou de servidor enquanto essa resposta estava a
+  // caminho, essa resposta é de um servidor que não é mais o selecionado -
+  // aplicá-la agora sobrescreveria serverMembersCache com os membros
+  // errados (caso clássico de resposta antiga chegando depois da nova).
+  if (serverId !== activeServerId) return;
   serverMembersCache = error ? [] : (data || []);
   renderMemberSidebar();
 }
@@ -3298,6 +3303,10 @@ async function fetchChannels(serverId) {
     .select('*')
     .eq('server_id', serverId)
     .order('position', { ascending: true });
+  // mesmo cuidado de fetchServerMembers: descarta resposta de um servidor
+  // que não é mais o selecionado (troca rápida de servidor pode fazer a
+  // resposta antiga chegar depois da nova).
+  if (serverId !== activeServerId) return;
   activeChannels = error ? [] : (data || []);
   if (error) console.error('Erro ao buscar canais:', error);
   renderChannelList();

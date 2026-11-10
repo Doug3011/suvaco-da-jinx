@@ -5918,6 +5918,10 @@ const CHANGELOG = {
     'Chamadas de voz/tela/câmera agora passam por um servidor dedicado em vez de ligar direto entre os PCs de todo mundo — resolve a travada/queda de FPS de quem transmite quando tem 3 ou mais pessoas assistindo ao mesmo tempo.',
     'Conexão de chamada deve ficar mais estável em geral, principalmente com várias pessoas na call ao mesmo tempo.',
   ],
+  '4.5.1': [
+    'Corrigido: trocar de servidor rápido podia deixar a lista de membros (e às vezes de canais) mostrando o servidor errado por um tempo.',
+    'Corrigido: o som do que você estava assistindo podia vazar e duplicar na sua própria transmissão ao compartilhar tela, causando eco crescente — o Ribbit estava se contando como "mais um app" na mixagem de áudio por app.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

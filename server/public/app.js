@@ -6036,6 +6036,10 @@ const CHANGELOG = {
     'Corrigido: mutar um app na barra lateral às vezes não bastava — se o programa que abriu ele (ex: a Steam abrindo um jogo) não estivesse mutado também, o som vazava mesmo assim.',
     'Corrigido: às vezes alguém aparecia como "Offline" por alguns segundos logo depois de entrar numa call, mesmo estando lá — a lista agora reconecta na hora em vez de esperar até 20s.',
   ],
+  '4.4.0': [
+    'Novo: servidor de retransmissão (TURN) pras chamadas/transmissão — ajuda quem está numa rede mais fechada (4G, wifi corporativo, CGNAT) a conseguir conectar, resolvendo tela preta que só acontecia com alguns amigos específicos.',
+    'Checagem de atualização agora repete a cada poucas horas, não só quando o app abre — quem deixa ele sempre aberto na bandeja não fica mais preso numa versão antiga.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

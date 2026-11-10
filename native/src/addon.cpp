@@ -30,21 +30,42 @@ struct AppInfo {
   std::wstring name;
 };
 
-static std::wstring ProcessNameFromPid(DWORD pid) {
+// Caminho completo (.exe) de um processo, ou string vazia se não conseguir
+// abrir/consultar - usado tanto pra achar o nome amigável quanto pra
+// comparar com o nosso próprio executável (ver kOwnExePath).
+static std::wstring ProcessImagePath(DWORD pid) {
   HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-  if (!h) return L"PID " + std::to_wstring(pid);
+  if (!h) return L"";
   wchar_t path[MAX_PATH];
   DWORD size = MAX_PATH;
-  std::wstring name = L"PID " + std::to_wstring(pid);
-  if (QueryFullProcessImageNameW(h, 0, path, &size)) {
-    std::wstring full(path);
-    size_t slash = full.find_last_of(L"\\");
-    name = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
-    size_t dot = name.find_last_of(L".");
-    if (dot != std::wstring::npos) name = name.substr(0, dot);
-  }
+  std::wstring result;
+  if (QueryFullProcessImageNameW(h, 0, path, &size)) result = path;
   CloseHandle(h);
+  return result;
+}
+
+static std::wstring ProcessNameFromPid(DWORD pid) {
+  std::wstring full = ProcessImagePath(pid);
+  if (full.empty()) return L"PID " + std::to_wstring(pid);
+  size_t slash = full.find_last_of(L"\\");
+  std::wstring name = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+  size_t dot = name.find_last_of(L".");
+  if (dot != std::wstring::npos) name = name.substr(0, dot);
   return name;
+}
+
+// Caminho do NOSSO próprio .exe, calculado uma vez. O Electron roda vários
+// processos filhos (renderer, GPU, utility/audio service etc.) a partir do
+// mesmíssimo binário, cada um com PID diferente - todos eles compartilham
+// esse caminho. É assim, por caminho e não por nome, que filtramos TODOS
+// eles de uma vez em EnumerateAudioApps, não só o processo principal.
+static const std::wstring& OwnExecutablePath() {
+  static std::wstring path = [] {
+    wchar_t buf[MAX_PATH];
+    DWORD len = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+    return std::wstring(buf, len);
+  }();
+  return path;
 }
 
 static std::vector<AppInfo> EnumerateAudioApps() {
@@ -83,6 +104,18 @@ static std::vector<AppInfo> EnumerateAudioApps() {
       if (FAILED(control2->GetProcessId(&pid)) || pid == 0) continue;
       if (seen[pid]) continue;
       seen[pid] = true;
+
+      // Nunca lista o próprio Ribbit (nem seus processos filhos - renderer,
+      // GPU, utility/audio service) como um "app" capturável: ele é quem
+      // TOCA o áudio da call (inclusive o que você está assistindo), então
+      // incluí-lo aqui deixava recapturar e remixar esse mesmo áudio de
+      // volta na sua própria transmissão - vazamento, som duplicado e
+      // retorno crescente quando não estava perfeitamente mutado (e, pra
+      // processos filhos cujo nome falhava em resolver, nem dava pra mutar
+      // de jeito nenhum - cada um caía como um "PID NNNN" solto, separado
+      // do grupo "Ribbit").
+      std::wstring imgPath = ProcessImagePath(pid);
+      if (!imgPath.empty() && _wcsicmp(imgPath.c_str(), OwnExecutablePath().c_str()) == 0) continue;
 
       result.push_back({ pid, ProcessNameFromPid(pid) });
     }

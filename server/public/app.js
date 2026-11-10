@@ -1721,7 +1721,15 @@ function startCapturingApp(pid, name) {
   // não é só "gain zero", é a captura de fato parada (economiza CPU: sem
   // thread WASAPI, sem IPC de PCM, sem agendamento no Web Audio pra esse pid).
   if (!group.muted) {
-    window.telaNative.startCapture(pid).then((handle) => { entry.handle = handle; });
+    window.telaNative.startCapture(pid).then((handle) => {
+      // se alguém mutou esse grupo enquanto essa captura ainda estava
+      // subindo (IPC pro processo main + ativação WASAPI não é instantâneo),
+      // guardar o handle aqui ia "reviver" a captura por baixo do mute -
+      // setAppMuted já rodou e não viu handle nenhum pra parar, porque esse
+      // .then só resolve depois. Descarta e para na hora.
+      if (group.muted) { window.telaNative.stopCapture(handle); return; }
+      entry.handle = handle;
+    });
   }
 }
 
@@ -1786,7 +1794,12 @@ function setAppMuted(name, muted) {
         entry.handle = null;
       }
     } else if (entry.handle == null) {
-      window.telaNative.startCapture(pid).then((handle) => { entry.handle = handle; });
+      // mesmo cuidado de startCapturingApp: se remutar antes dessa promise
+      // resolver, não deixa o handle "reviver" a captura por baixo do mute.
+      window.telaNative.startCapture(pid).then((handle) => {
+        if (group.muted) { window.telaNative.stopCapture(handle); return; }
+        entry.handle = handle;
+      });
     }
   }
 }

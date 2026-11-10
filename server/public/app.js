@@ -345,6 +345,7 @@ function showLobbyScreen() {
   joinGlobalPresence();
   joinFriendRequestsRealtime();
   joinAttachmentSignaling();
+  loadIceServers();
   fetchFriends();
   startLastSeenLoop();
   if (justCreatedAccount) {
@@ -573,15 +574,29 @@ els.emailAuthConfirmBtn.addEventListener('click', async () => {
   }
 });
 
-// STUN públicos (gratuitos) — resolvem o caso em que os dois lados
-// conseguem ser alcançados direto (a maioria das redes domésticas). Sem um
-// servidor TURN ainda (pendente: VM Oracle Cloud + coturn, self-hosted),
-// NATs mais restritos (ex: CGNAT, bloqueio de dupla-NAT, redes corporativas)
-// não conseguem conectar — isso entra como complemento aqui depois.
-const ICE_SERVERS = [
+// STUN públicos (gratuitos) como ponto de partida/fallback — resolve o caso
+// em que os dois lados conseguem ser alcançados direto (maioria das redes
+// domésticas). A lista de verdade (com TURN via Metered.ca incluído) vem do
+// banco (get_ice_servers(), credenciais no Vault - nunca hardcoded aqui,
+// senão qualquer um lendo o repositório público conseguia gastar a cota
+// grátis) assim que loadIceServers() resolver, logo após o login. Sem TURN,
+// NATs mais restritos (CGNAT, wifi corporativo, 4G de operadora) não
+// conseguem conectar - era a causa provável de "tela preta só pra alguns
+// amigos" e "tive que sair e entrar de novo pra ver a transmissão".
+let ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
+
+async function loadIceServers() {
+  try {
+    const { data, error } = await window.supabaseClient.rpc('get_ice_servers');
+    if (error) throw error;
+    if (Array.isArray(data) && data.length) ICE_SERVERS = data;
+  } catch (err) {
+    console.warn('não consegui carregar o servidor TURN, usando só STUN:', err);
+  }
+}
 
 const HISTORY_KEY = 'tela-radmin:app-history';
 

@@ -1031,36 +1031,140 @@ function tileKey(id, source) {
   return `${id}:${source}`;
 }
 
-/* ---------------- tolerância a queda de conexão WebRTC ----------------
-   'disconnected' é quase sempre transitório (blip de rede, troca de
-   rota) e se recupera sozinho em poucos segundos - tratar igual a
-   'failed'/'closed' (como o código fazia antes) derrubava a
-   transmissão/chamada por qualquer oscilação normal de rede, o que
-   pareceria "a transmissão fica caindo" ou "às vezes não aparece".
-   Agora só desiste de verdade se continuar desconectado além de um
-   prazo de tolerância. Prefixo no Map evita colisão entre uma chave de
-   watchPcs e a mesma chave em broadcastPcs (podem coincidir: eu
-   assistindo a tela de alguém e transmitindo a minha pra essa mesma
-   pessoa usam o mesmo tileKey(outroId, 'screen') em Maps diferentes). */
+/* ---------------- chamada: LiveKit Cloud (SFU) ----------------
+   Cada canal de voz vira uma Room do LiveKit (nome da sala =
+   'voice-<channelId>'). O token é gerado no Postgres (RPC
+   get_livekit_token, credenciais do LiveKit no Vault) e só autoriza
+   entrar na sala de um canal do qual a pessoa é membro de verdade.
+   Publicar uma fonte (tela/câmera/mic) = 1 publishTrack só - o SFU
+   redistribui pra todo mundo, diferente da mesh antiga (1
+   RTCPeerConnection por espectador por fonte, O(N²) - o FPS de quem
+   transmitia caía com 3+ espectadores porque tava codificando a mesma
+   tela várias vezes em paralelo).
 
-const DISCONNECT_GRACE_MS = 8000;
-const disconnectTimers = new Map();
+   A sidebar "Na call"/badge "AO VIVO" continua vindo do canal
+   `server:<serverId>` (serverPresenceChannel/retrackServerPresence), que
+   é totalmente independente disso - não muda nada aqui.
 
-function scheduleDisconnectTimeout(timerKey, isStillDown, onGiveUp) {
-  clearDisconnectTimeout(timerKey);
-  const timeoutId = setTimeout(() => {
-    disconnectTimers.delete(timerKey);
-    if (isStillDown()) onGiveUp();
-  }, DISCONNECT_GRACE_MS);
-  disconnectTimers.set(timerKey, timeoutId);
+   adaptiveStream fica DESLIGADO de propósito: ele exige chamar
+   remoteTrack.attach(videoElement) pra funcionar direito (senão o vídeo
+   remoto pode nunca começar a tocar) - e addOrUpdateTile/os tiles desse
+   app são agnósticos à origem do stream, só fazem `video.srcObject =
+   stream`, sem passar pelo attach() do SDK. dynacast continua ligado
+   (reduz os layers de simulcast que ninguém tá assistindo do lado do
+   servidor - é a parte que resolve o problema de FPS de origem, sem
+   precisar de adaptiveStream pra isso). */
+
+let lkRoom = null;
+const remoteStreams = new Map(); // tileKey -> MediaStream (vídeo e áudio da tela chegam como 2 publishes separados, remonta aqui)
+
+function lkSourceToLocal(source) {
+  const LK = window.LivekitClient;
+  if (!LK) return null;
+  if (source === LK.Track.Source.Camera) return 'camera';
+  if (source === LK.Track.Source.Microphone) return 'mic';
+  if (source === LK.Track.Source.ScreenShare || source === LK.Track.Source.ScreenShareAudio) return 'screen';
+  return null;
+}
+function localSourceToLkSource(source) {
+  const LK = window.LivekitClient;
+  if (source === 'camera') return LK.Track.Source.Camera;
+  if (source === 'mic') return LK.Track.Source.Microphone;
+  if (source === 'screen') return LK.Track.Source.ScreenShare;
+  return LK.Track.Source.Unknown;
 }
 
-function clearDisconnectTimeout(timerKey) {
-  const existing = disconnectTimers.get(timerKey);
-  if (existing) {
-    clearTimeout(existing);
-    disconnectTimers.delete(timerKey);
+function memberInfo(userId) {
+  const m = serverMembersCache.find((x) => x.user_id === userId);
+  const p = (m && m.profiles) || {};
+  return { name: p.display_name || 'Convidado', avatar: p.avatar_url || null };
+}
+
+async function fetchLiveKitToken(channelId) {
+  const { data, error } = await window.supabaseClient.rpc('get_livekit_token', { p_channel_id: channelId });
+  if (error) throw error;
+  return data;
+}
+
+function getOrCreateRemoteStream(key) {
+  let stream = remoteStreams.get(key);
+  if (!stream) {
+    stream = new MediaStream();
+    remoteStreams.set(key, stream);
   }
+  return stream;
+}
+
+function handleTrackSubscribed(track, publication, participant) {
+  const localSource = lkSourceToLocal(publication.source);
+  if (!localSource) return;
+  const key = tileKey(participant.identity, localSource);
+  const stream = getOrCreateRemoteStream(key);
+  stream.addTrack(track.mediaStreamTrack);
+  const { name, avatar } = memberInfo(participant.identity);
+  addOrUpdateTile(key, name, avatar, stream, false, localSource);
+  if (localSource === 'screen' && !viewerClippers.has(key)) {
+    const clipper = startRollingClip(stream, 30);
+    if (clipper) viewerClippers.set(key, clipper);
+  }
+}
+
+function handleTrackUnsubscribed(track, publication, participant) {
+  const localSource = lkSourceToLocal(publication.source);
+  if (!localSource) return;
+  const key = tileKey(participant.identity, localSource);
+  const stream = remoteStreams.get(key);
+  if (stream) stream.removeTrack(track.mediaStreamTrack);
+  // só derruba o tile se não sobrou nenhuma track viva pra essa fonte - a
+  // tela manda vídeo e áudio como publishes separados, um pode sumir
+  // antes do outro (ex: a pessoa parou só o áudio por algum motivo).
+  if (!stream || stream.getTracks().length === 0) {
+    const clipper = viewerClippers.get(key);
+    if (clipper) { clipper.stop(); viewerClippers.delete(key); }
+    removeTile(key);
+    remoteStreams.delete(key);
+    updateStageMode();
+  }
+}
+
+function removeAllTilesFor(identity) {
+  for (const source of ['screen', 'camera', 'mic']) {
+    const key = tileKey(identity, source);
+    const clipper = viewerClippers.get(key);
+    if (clipper) { clipper.stop(); viewerClippers.delete(key); }
+    removeTile(key);
+    remoteStreams.delete(key);
+  }
+  updateStageMode();
+}
+
+function updatePeopleCount() {
+  const count = lkRoom ? lkRoom.remoteParticipants.size + 1 : 0;
+  els.peopleCount.textContent = `· ${count} na sala`;
+}
+
+// handshake de consentimento + input do controle remoto (modo admin) -
+// registrado aqui, despachado pelo handler único de DataReceived da Room
+// (ver setupLiveKitRoomEvents). Implementação completa mais abaixo, perto
+// do resto do subsistema de controle remoto.
+const controlHandlers = { onDataReceived: null };
+
+function setupLiveKitRoomEvents(room) {
+  const LK = window.LivekitClient;
+  room.on(LK.RoomEvent.TrackSubscribed, handleTrackSubscribed);
+  room.on(LK.RoomEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+  room.on(LK.RoomEvent.ParticipantConnected, updatePeopleCount);
+  room.on(LK.RoomEvent.ParticipantDisconnected, (participant) => {
+    removeAllTilesFor(participant.identity);
+    updatePeopleCount();
+    if (controlHandlers.onParticipantDisconnected) controlHandlers.onParticipantDisconnected(participant.identity);
+  });
+  room.on(LK.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+    if (topic === 'control' && controlHandlers.onDataReceived) controlHandlers.onDataReceived(payload, participant);
+  });
+  room.on(LK.RoomEvent.Disconnected, () => {
+    if (lkRoom === room) leaveRoom();
+  });
 }
 
 const SETTINGS_KEY = 'tela-radmin:settings';
@@ -1097,19 +1201,20 @@ function saveSettings() {
 }
 
 const state = {
-  transport: null,
   myId: null,
   myName: '',
   settings: loadSettings(),
-  watchPcs: new Map(), // `${transmissorId}:${source}` -> RTCPeerConnection (eu assistindo)
-  broadcastPcs: new Map(), // `${espectadorId}:${source}` -> RTCPeerConnection (eu transmitindo pra ele)
   tiles: new Map(), // mesma chave -> { root, video, isSelf }
   pinned: new Set(), // chaves marcadas pra entrar juntas na tela cheia
   focusOverlay: null,
   focusIds: null,
-  screen: { sharing: false, displayStream: null, localTracks: [], blackFrameStop: null, clipper: null, clipperDownscale: null },
-  camera: { sharing: false, camStream: null, localTracks: [] },
-  mic: { sharing: false, micStream: null, localTracks: [] },
+  // `publications` guarda as LocalTrackPublication do LiveKit retornadas por
+  // publishTrack - usado pra despublicar (unpublishLocalSource) e reaplicar
+  // limite de banda (reapplyBandwidthLimit) sem precisar varrer PCs (não
+  // existe mais 1 PC por espectador - é 1 publish só, o SFU distribui).
+  screen: { sharing: false, displayStream: null, localTracks: [], publications: [], blackFrameStop: null, clipper: null, clipperDownscale: null },
+  camera: { sharing: false, camStream: null, localTracks: [], publications: [] },
+  mic: { sharing: false, micStream: null, localTracks: [], publications: [] },
 };
 
 /* ---------------- configurações de transmissão (resolução/fps/ruído) ---------------- */
@@ -1374,8 +1479,7 @@ els.bandwidthSelect.addEventListener('change', () => {
   const v = els.bandwidthSelect.value;
   state.settings.bandwidthKbps = v === 'auto' ? null : Number(v);
   saveSettings();
-  // reaplica já nas transmissões em andamento, sem precisar recompartilhar
-  for (const pc of state.broadcastPcs.values()) applyBandwidthLimit(pc);
+  reapplyBandwidthLimit();
 });
 
 async function initCloseBehaviorSelect() {
@@ -1472,59 +1576,72 @@ function micConstraints() {
 }
 
 // Prioriza H264 (que costuma ter aceleração por hardware — NVENC/QuickSync/
-// AMD VCE) em vez do VP8/VP9 padrão do Chromium pra tela, que geralmente só
-// tem encoder por software. Isso tira carga da CPU durante a transmissão —
-// é a causa mais comum de queda de FPS em jogos leves enquanto transmite.
-function preferH264(pc) {
-  if (typeof RTCRtpSender === 'undefined' || !RTCRtpSender.getCapabilities) return;
-  const capabilities = RTCRtpSender.getCapabilities('video');
-  if (!capabilities) return;
-  const h264 = capabilities.codecs.filter((c) => c.mimeType.toLowerCase() === 'video/h264');
-  if (!h264.length) return; // sem suporte a H264 nesse PC, deixa o padrão do navegador
-  const others = capabilities.codecs.filter((c) => c.mimeType.toLowerCase() !== 'video/h264');
-  const preferred = [...h264, ...others];
-  for (const transceiver of pc.getTransceivers()) {
-    const track = transceiver.sender && transceiver.sender.track;
-    if (track && track.kind === 'video' && transceiver.setCodecPreferences) {
-      try {
-        transceiver.setCodecPreferences(preferred);
-      } catch {
-        /* alguns navegadores recusam certas combinações; segue com o padrão */
-      }
-    }
-  }
-}
-
-// Limita o bitrate máximo de upload por transmissão (cada espectador tem
-// sua própria RTCPeerConnection, então isso é por-espectador, não total).
-// Sem isso, o WebRTC tenta empurrar o máximo que o codec permite — em VPN
-// tunelada (Radmin) ou internet com upload fraco/instável, isso é a causa
-// mais comum de travamento/engasgo do lado de quem assiste, bem mais do que
-// a resolução/fps em si. "Automático" (padrão) mantém o comportamento de
-// sempre, sem limite artificial.
-function applyBandwidthLimit(pc) {
+// AMD VCE) em vez do VP8/VP9 padrão pra tela, que geralmente só tem encoder
+// por software — tira carga da CPU durante a transmissão. maxBitrate/
+// maxFramerate seguem a config de Configurações > Transmissão ("Automático"
+// = sem limite artificial, cai num teto generoso só pra não deixar sem
+// nenhum valor). degradationPreference prioriza manter o FPS configurado
+// em vez de degradar quadros quando a rede/CPU aperta — o padrão do browser
+// é o contrário (degrada FPS primeiro), ruim pra quem já escolheu um FPS
+// alvo baixo de propósito (ex: transmitindo jogo).
+function videoPublishOptions(name, lkSource) {
   const kbps = state.settings.bandwidthKbps;
-  for (const sender of pc.getSenders()) {
-    if (!sender.track || sender.track.kind !== 'video') continue;
-    const params = sender.getParameters();
-    if (!params.encodings || !params.encodings.length) params.encodings = [{}];
-    for (const enc of params.encodings) {
-      if (kbps) enc.maxBitrate = kbps * 1000;
-      else delete enc.maxBitrate;
-      enc.maxFramerate = state.settings.fps;
+  return {
+    name,
+    source: lkSource,
+    videoCodec: 'h264',
+    videoEncoding: { maxBitrate: (kbps || 6000) * 1000, maxFramerate: state.settings.fps },
+    degradationPreference: 'maintain-framerate',
+  };
+}
+
+function trackLkSource(source, track) {
+  const LK = window.LivekitClient;
+  if (source === 'screen' && track.kind === 'audio') return LK.Track.Source.ScreenShareAudio;
+  return localSourceToLkSource(source);
+}
+
+async function publishLocalSource(source) {
+  if (!lkRoom) return;
+  const tracks = state[source].localTracks;
+  if (!tracks.length) return;
+  for (const track of tracks) {
+    const lkSource = trackLkSource(source, track);
+    const options = track.kind === 'video' ? videoPublishOptions(source, lkSource) : { name: source, source: lkSource };
+    try {
+      const pub = await lkRoom.localParticipant.publishTrack(track, options);
+      state[source].publications.push(pub);
+    } catch (err) {
+      console.error(`não consegui publicar ${source}:`, err);
     }
-    // Prioriza manter o FPS configurado em vez de degradar quadros pra
-    // preservar resolução quando a rede/CPU aperta — o padrão do browser
-    // é o contrário (degrada FPS primeiro), o que é ruim pra quem tá
-    // transmitindo jogo e já configurou um FPS alvo baixo de propósito.
-    params.degradationPreference = 'maintain-framerate';
-    sender.setParameters(params).catch(() => {
-      /* alguns navegadores recusam mudar parâmetros antes da negociação terminar; a próxima chamada tenta de novo */
-    });
   }
 }
 
-const PRESENCE_FIELD = { screen: 'sharingScreen', camera: 'sharingCamera', mic: 'sharingMic' };
+// stopOnUnpublish:false sempre - quem chama já controla o ciclo de vida da
+// track (stopScreenShare/stopCameraShare/stopMicShare já param as tracks
+// deles mesmos quando é pra parar de verdade); deixar o LiveKit parar a
+// track aqui quebraria reapplyBandwidthLimit, que despublica e republica a
+// MESMA track pra aplicar uma config nova sem recompartilhar.
+async function unpublishLocalSource(source) {
+  if (!lkRoom) return;
+  for (const pub of state[source].publications) {
+    try {
+      await lkRoom.localParticipant.unpublishTrack(pub.track, false);
+    } catch {
+      /* já pode ter sido despublicada (ex: a Room caiu antes) - ignora */
+    }
+  }
+  state[source].publications = [];
+}
+
+// Não existe mais 1 RTCRtpSender por espectador acessível direto - reaplicar
+// config nova (banda/fps) é despublicar e publicar de novo com as
+// TrackPublishOptions atualizadas. Só mexe em fontes que já estão no ar.
+async function reapplyBandwidthLimit() {
+  if (!lkRoom) return;
+  if (state.screen.sharing) { await unpublishLocalSource('screen'); await publishLocalSource('screen'); }
+  if (state.camera.sharing) { await unpublishLocalSource('camera'); await publishLocalSource('camera'); }
+}
 
 /* ---------------- áudio por app (mixagem via Web Audio, só no Electron) ----------------
    Cada app vira sua própria captura nativa (PCM cru); aqui a gente agenda os
@@ -3167,8 +3284,7 @@ function renderCallMemberSidebar() {
   addGroup('Offline', offline, false);
 
   if (state.screen.sharing) {
-    let watching = 0;
-    for (const k of state.broadcastPcs.keys()) if (k.endsWith(':screen')) watching++;
+    const watching = lkRoom ? lkRoom.remoteParticipants.size : 0;
     if (watching === 0) {
       els.memberList.appendChild(buildNudgeCard('Transmitindo sozinho?', 'Manda o convite e a galera já entra assistindo.'));
     }
@@ -3908,51 +4024,28 @@ if (isElectron && window.telaNative.onJoinByCode) {
 
 els.copyInviteBtn.addEventListener('click', copyServerInviteCode);
 
-/* ---------------- transporte: canal de voz via Supabase Realtime ----------------
-   Cada canal de voz vira um Realtime Channel proprio (`voice:<channelId>`):
-   Presence cobre "quem esta no canal agora" (substitui a presenca por
-   WebSocket/PeerJS de antes) e Broadcast carrega a sinalizacao WebRTC
-   (offer/answer/ICE) entre os participantes. O resto do app (onPresence/
-   onSignal/createBroadcastPeer/etc.) nao muda nada - so fala com
-   state.transport.send(objeto), igual sempre falou com os transportes
-   antigos (LAN/PeerJS, ambos removidos daqui pra ficar so' esse). */
-
 let activeVoiceChannel = null;
 
-// Latência mostrada no painel "Voz conectada": não existe UMA conexão só
-// (é mesh, várias RTCPeerConnection por pessoa), então mede a média do RTT
-// de todas as conexões ativas no momento via getStats() — fica "—" só
-// quando não há nenhuma conexão ainda (ex: sozinho na call, mic desligado).
-async function measureVoiceLatencyMs() {
-  const pcs = [...state.broadcastPcs.values(), ...state.watchPcs.values()];
-  if (!pcs.length) return null;
-  let total = 0;
-  let count = 0;
-  for (const pc of pcs) {
-    try {
-      const stats = await pc.getStats();
-      stats.forEach((report) => {
-        if (report.type === 'candidate-pair' && report.state === 'succeeded' && typeof report.currentRoundTripTime === 'number') {
-          total += report.currentRoundTripTime;
-          count++;
-        }
-      });
-    } catch {
-      /* pc pode ter fechado entre o Promise.all e aqui — ignora essa amostra */
-    }
-  }
-  return count ? Math.round((total / count) * 1000) : null;
+function connectionQualityLabel(q) {
+  const LK = window.LivekitClient;
+  const CQ = LK && LK.ConnectionQuality;
+  if (!CQ) return '—';
+  if (q === CQ.Excellent) return 'excelente';
+  if (q === CQ.Good) return 'boa';
+  if (q === CQ.Poor) return 'ruim';
+  if (q === CQ.Lost) return 'perdida';
+  return '—';
 }
 
 let voiceConnectedTimer = null;
-async function updateVoiceConnectedPanel() {
+function updateVoiceConnectedPanel() {
   if (!activeVoiceChannel) {
     els.voiceConnectedPanel.classList.add('hidden');
     return;
   }
   els.voiceConnectedPanel.classList.remove('hidden');
-  const ms = await measureVoiceLatencyMs();
-  els.voiceConnectedDetail.textContent = `${activeVoiceChannel.name} · ${ms != null ? ms + ' ms' : '—'}`;
+  const q = lkRoom ? lkRoom.localParticipant.connectionQuality : null;
+  els.voiceConnectedDetail.textContent = `${activeVoiceChannel.name} · ${q != null ? connectionQualityLabel(q) : '—'}`;
 }
 function startVoiceConnectedLoop() {
   if (voiceConnectedTimer) return;
@@ -3960,67 +4053,39 @@ function startVoiceConnectedLoop() {
 }
 startVoiceConnectedLoop();
 
-function joinVoiceChannel(channel) {
+async function joinVoiceChannel(channel) {
   activeVoiceChannel = channel;
   renderChannelList();
   retrackServerPresence();
   updateVoiceConnectedPanel();
   const myId = currentUser.id;
   state.myName = currentProfile ? currentProfile.display_name : 'Convidado';
-  const presenceMeta = {
-    name: state.myName,
-    avatar: currentProfile ? currentProfile.avatar_url : null,
-    sharingScreen: false,
-    sharingCamera: false,
-    sharingMic: false,
-  };
 
-  const rt = window.supabaseClient.channel(`voice:${channel.id}`, {
-    config: { presence: { key: myId }, broadcast: { self: false } },
+  const LK = window.LivekitClient;
+  const room = new LK.Room({ adaptiveStream: false, dynacast: true });
+  setupLiveKitRoomEvents(room);
+  room.on(LK.RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+    if (participant.isLocal) updateVoiceConnectedPanel();
   });
 
-  rt.on('presence', { event: 'sync' }, () => {
-    const presenceState = rt.presenceState();
-    const clients = Object.entries(presenceState).map(([id, metas]) => ({ id, ...metas[0] }));
-    onPresence(clients);
-    // reforça o retrack da presença DO SERVIDOR aqui também (não só uma vez
-    // no topo de joinVoiceChannel) - bug reportado em uso real: depois de
-    // sair e voltar pra call, a pessoa reconectava direitinho pro WebRTC
-    // (o tile dela aparecia funcionando no grid) mas sumia da lista
-    // "NA CALL"/"OFFLINE" da sidebar, porque aquele retrack() inicial pode
-    // ter sido perdido num momento em que o canal server:<id> ainda não
-    // tinha voltado a ficar "joined" de verdade (ex: reconexão de rede).
-    // Esse evento de sync do canal de VOZ é prova concreta de que a
-    // conexão está ativa agora - um bom gatilho extra pra garantir que o
-    // retrack realmente chegue no servidor.
+  let token;
+  try {
+    token = await fetchLiveKitToken(channel.id);
+    await room.connect('wss://ribbit-b6l1aajo.livekit.cloud', token);
+  } catch (err) {
+    console.error('não consegui entrar na call:', err);
+    showToast('Não consegui entrar na call agora. Tenta de novo em alguns segundos.', 3500);
+    activeVoiceChannel = null;
+    renderChannelList();
     retrackServerPresence();
-  });
+    updateVoiceConnectedPanel();
+    return;
+  }
 
-  rt.on('broadcast', { event: 'signal' }, ({ payload }) => {
-    if (payload.to !== myId) return; // broadcast chega pra todo mundo no canal, cada um filtra o que e' seu
-    onSignal(payload.from, payload.data);
-  });
-
-  state.transport = {
-    send(obj) {
-      if (obj.type === 'signal') {
-        rt.send({ type: 'broadcast', event: 'signal', payload: { from: myId, to: obj.to, data: obj.data } });
-      } else if (obj.type === 'share:start' || obj.type === 'share:stop') {
-        const field = PRESENCE_FIELD[obj.source];
-        if (field) presenceMeta[field] = obj.type === 'share:start';
-        rt.track(presenceMeta);
-      }
-    },
-    close() { window.supabaseClient.removeChannel(rt); },
-  };
-
-  rt.subscribe((status) => {
-    if (status === 'SUBSCRIBED') {
-      state.myId = myId;
-      rt.track(presenceMeta);
-      enterRoomScreen(channel.name);
-    }
-  });
+  lkRoom = room;
+  state.myId = myId;
+  updatePeopleCount();
+  enterRoomScreen(channel.name);
 }
 
 function enterRoomScreen(label) {
@@ -4099,69 +4164,27 @@ function leaveRoom() {
   stopScreenShare();
   stopCameraShare();
   stopMicShare();
-  for (const key of [...state.watchPcs.keys()]) {
-    const sep = key.lastIndexOf(':');
-    teardownWatch(key.slice(0, sep), key.slice(sep + 1));
-  }
   exitFocusIfActive();
-  // fecha o transporte só DEPOIS de mandar os "parei de compartilhar" acima
-  // (stopScreenShare/stopCameraShare/stopMicShare) — fechar antes fazia o
-  // `.send()` deles cair num canal já fechado, gerando erro no console.
-  if (state.transport) state.transport.close();
-  state.transport = null;
+  if (lkRoom) {
+    const room = lkRoom;
+    lkRoom = null; // zera antes do disconnect() - o listener de RoomEvent.Disconnected só rechama leaveRoom() se lkRoom ainda apontar pra essa room
+    // remove os tiles de quem eu tava assistindo explicitamente, em vez de
+    // confiar que TrackUnsubscribed/ParticipantDisconnected disparam a
+    // tempo durante o disconnect() - não é garantido, e tile fantasma
+    // depois de sair da call seria um bug chato de perceber.
+    for (const participant of room.remoteParticipants.values()) removeAllTilesFor(participant.identity);
+    room.disconnect();
+  }
+  remoteStreams.clear();
   state.myId = null;
   activeVoiceChannel = null;
   retrackServerPresence();
   renderChannelList();
   updateVoiceConnectedPanel();
-  // reforça a atualização pouco depois — stopScreenShare/stopCameraShare/
-  // stopMicShare acima já dispararam seus próprios re-tracks com o estado
-  // intermediário (ainda "na call", só sem compartilhar nada); se algum
-  // deles chegar no servidor DEPOIS deste (fora de ordem), o roster de
-  // outras pessoas fica preso mostrando que eu ainda estou na call. Esse
-  // reforço garante que o estado final (fora da call) vença de qualquer jeito.
-  setTimeout(() => retrackServerPresence(), 1500);
   // volta pro canal de texto ou DM que estava aberto antes (se tinha
   // algum), senao cai na tela de amigos.
   showMainPanel(activeTextChannel ? 'text' : activeDmPeerId ? 'dm' : 'friends');
 }
-
-/* ---------------- presença: quem está na sala e quem compartilha ---------------- */
-
-function onPresence(list) {
-  els.peopleCount.textContent = `· ${list.length} na sala`;
-
-  const currentIds = new Set(list.map((c) => c.id));
-  const infoById = new Map(list.map((c) => [c.id, c]));
-
-  for (const source of ['screen', 'camera', 'mic']) {
-    const field = PRESENCE_FIELD[source];
-    const sharingIds = new Set(list.filter((c) => c[field] && c.id !== state.myId).map((c) => c.id));
-
-    // parou de compartilhar essa fonte ou saiu -> derruba a tela de quem eu assistia
-    for (const key of [...state.watchPcs.keys()]) {
-      if (!key.endsWith(`:${source}`)) continue;
-      const id = key.slice(0, key.lastIndexOf(':'));
-      if (!sharingIds.has(id)) teardownWatch(id, source);
-    }
-    // gente nova compartilhando essa fonte -> peço pra assistir
-    for (const id of sharingIds) {
-      if (!state.watchPcs.has(tileKey(id, source))) {
-        const info = infoById.get(id) || {};
-        requestWatch(id, source, info.name || 'Convidado', info.avatar || null);
-      }
-    }
-  }
-
-  // espectador que saiu da sala -> derruba minhas transmissões (qualquer fonte) pra ele
-  for (const key of [...state.broadcastPcs.keys()]) {
-    const viewerId = key.slice(0, key.lastIndexOf(':'));
-    if (!currentIds.has(viewerId)) teardownBroadcast(key);
-  }
-
-  updateEmptyHint();
-}
-
 
 function updateEmptyHint() {
   updateStageMode();
@@ -4227,41 +4250,11 @@ function notifyChatMessage(msg) {
   }
 }
 
-/* ---------------- sinalização ---------------- */
-
-function sendSignal(to, data) {
-  state.transport.send({ type: 'signal', to, data });
-}
-
-function onSignal(from, data) {
-  const source = data.source || 'screen';
-  const key = tileKey(from, source);
-  if (data.kind === 'watch-request') {
-    createBroadcastPeer(from, source);
-  } else if (data.kind === 'offer') {
-    handleOffer(from, source, data.sdp);
-  } else if (data.kind === 'answer') {
-    const pc = state.broadcastPcs.get(key);
-    if (pc) pc.setRemoteDescription(data.sdp);
-  } else if (data.kind === 'ice') {
-    const pc = state.broadcastPcs.get(key) || state.watchPcs.get(key);
-    if (pc && data.candidate) pc.addIceCandidate(data.candidate).catch(() => {});
-  } else if (data.kind === 'control-request') {
-    // se EU que convidei essa pessoa pra "Transmissão interativa" (ela está
-    // respondendo ao meu convite aceitando), não pede confirmação de novo -
-    // já é a segunda etapa de um fluxo que eu mesmo comecei escolhendo ela.
-    if (pendingControlOffers.has(from)) {
-      pendingControlOffers.delete(from);
-      startBeingControlledBy(from, source);
-    } else {
-      showIncomingControlRequest(from, source);
-    }
-  } else if (data.kind === 'control-declined') {
-    showToast('Pedido de controle recusado.');
-  } else if (data.kind === 'control-offer') {
-    showIncomingControlOffer(from, source);
-  }
-}
+// sinalização WebRTC (offer/answer/ICE) não existe mais aqui - é interna ao
+// SDK do LiveKit (room.connect()). O que sobra de "mensagem direcionada a
+// uma pessoa só" é o handshake+input do controle remoto, que usa
+// publishData/DataReceived da própria Room - ver controlHandlers acima e o
+// bloco "modo admin" mais abaixo.
 
 /* ---------------- lado de quem assiste ---------------- */
 
@@ -4386,80 +4379,6 @@ function createDownscaledStream(sourceTrack, targetWidth, targetHeight, fps) {
 
 const viewerClippers = new Map(); // tileKey -> clipper (ver startRollingClip)
 
-function requestWatch(id, source, name, avatar) {
-  const key = tileKey(id, source);
-  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  state.watchPcs.set(key, pc);
-
-  pc.addEventListener('icecandidate', (ev) => {
-    // .toJSON() vira um objeto simples — o transporte por PeerJS (modo
-    // internet) não sabe serializar a classe nativa RTCIceCandidate direto,
-    // só objetos comuns.
-    if (ev.candidate) sendSignal(id, { kind: 'ice', candidate: ev.candidate.toJSON(), source });
-  });
-  pc.addEventListener('track', (ev) => {
-    addOrUpdateTile(key, name, avatar, ev.streams[0], false, source);
-    if (source === 'screen' && !viewerClippers.has(key)) {
-      const clipper = startRollingClip(ev.streams[0], 30);
-      if (clipper) viewerClippers.set(key, clipper);
-    }
-  });
-  // canal de controle remoto (modo admin): só chega aqui se EU pedi
-  // "Controlar tela" antes (startRemoteControl -> sendSignal 'control-request')
-  // e a outra pessoa topou renegociar oferecendo o canal — nunca chega sem eu
-  // ter pedido primeiro, já que é quem transmite quem cria o canal.
-  pc.addEventListener('datachannel', (ev) => {
-    if (ev.channel.label !== 'control') return;
-    const tile = state.tiles.get(key);
-    if (!tile) return;
-    setupControllerChannel(ev.channel, tile.video);
-  });
-  pc.addEventListener('connectionstatechange', () => {
-    const timerKey = `watch:${key}`;
-    if (pc.connectionState === 'connected') {
-      clearDisconnectTimeout(timerKey);
-    } else if (pc.connectionState === 'closed') {
-      clearDisconnectTimeout(timerKey);
-      teardownWatch(id, source);
-    } else if (pc.connectionState === 'failed') {
-      teardownWatch(id, source);
-    } else if (pc.connectionState === 'disconnected') {
-      // da' um tempo pra recuperar sozinho antes de desistir de verdade
-      scheduleDisconnectTimeout(
-        timerKey,
-        () => pc.connectionState === 'disconnected',
-        () => teardownWatch(id, source),
-      );
-    }
-  });
-
-  sendSignal(id, { kind: 'watch-request', source });
-}
-
-async function handleOffer(from, source, sdp) {
-  const key = tileKey(from, source);
-  const pc = state.watchPcs.get(key);
-  if (!pc) return;
-  await pc.setRemoteDescription(sdp);
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-  sendSignal(from, { kind: 'answer', sdp: answer, source });
-}
-
-function teardownWatch(id, source) {
-  const key = tileKey(id, source);
-  const pc = state.watchPcs.get(key);
-  if (pc) pc.close();
-  state.watchPcs.delete(key);
-  const clipper = viewerClippers.get(key);
-  if (clipper) {
-    clipper.stop();
-    viewerClippers.delete(key);
-  }
-  removeTile(key);
-  updateEmptyHint();
-}
-
 /* ---------------- lado de quem transmite: tela ---------------- */
 
 els.shareBtn.addEventListener('click', () => {
@@ -4570,7 +4489,7 @@ async function startScreenShare() {
 
   addOrUpdateTile(tileKey(state.myId, 'screen'), `${state.myName} (você)`, currentProfile ? currentProfile.avatar_url : null, display, true, 'screen');
   updateEmptyHint();
-  state.transport.send({ type: 'share:start', source: 'screen' });
+  publishLocalSource('screen');
   retrackServerPresence();
   renderChannelList();
   renderMemberSidebar();
@@ -4597,7 +4516,7 @@ function setBtnLabel(btn, text) {
 const micMix = { ctx: null, destination: null, micSource: null, micGain: null };
 
 async function startMicShare() {
-  if (state.mic.sharing || !state.transport) return;
+  if (state.mic.sharing || !lkRoom) return;
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia(micConstraints());
@@ -4621,7 +4540,7 @@ async function startMicShare() {
   stream.getAudioTracks()[0].addEventListener('ended', stopMicShare);
   els.micMuteBtn.classList.remove('hidden');
   setMicMuteBtn(state.settings.micMuted);
-  state.transport.send({ type: 'share:start', source: 'mic' });
+  publishLocalSource('mic');
 }
 
 function stopMicShare() {
@@ -4640,11 +4559,8 @@ function stopMicShare() {
   // nós de um AudioContext já fechado.
   playingSounds.clear();
   soundMonitorGain.mix = null;
-  for (const key of [...state.broadcastPcs.keys()]) {
-    if (key.endsWith(':mic')) teardownBroadcast(key);
-  }
+  unpublishLocalSource('mic');
   els.micMuteBtn.classList.add('hidden');
-  if (state.transport) state.transport.send({ type: 'share:stop', source: 'mic' });
 }
 
 function setMicMuteBtn(muted) {
@@ -4941,15 +4857,10 @@ function stopScreenShare() {
   state.screen.localTracks = [];
   if (isElectron) teardownAppAudio();
 
-  for (const key of [...state.broadcastPcs.keys()]) {
-    if (key.endsWith(':screen')) teardownBroadcast(key);
-  }
+  unpublishLocalSource('screen');
   removeTile(tileKey(state.myId, 'screen'));
   updateEmptyHint();
 
-  if (state.transport) {
-    state.transport.send({ type: 'share:stop', source: 'screen' });
-  }
   retrackServerPresence();
   renderChannelList();
   renderMemberSidebar();
@@ -5151,7 +5062,7 @@ async function startCameraShare() {
 
   addOrUpdateTile(tileKey(state.myId, 'camera'), `${state.myName} (você)`, currentProfile ? currentProfile.avatar_url : null, composited, true, 'camera');
   updateEmptyHint();
-  state.transport.send({ type: 'share:start', source: 'camera' });
+  publishLocalSource('camera');
 }
 
 function stopCameraShare() {
@@ -5168,75 +5079,9 @@ function stopCameraShare() {
   state.camera.localTracks = [];
   stopCameraCompositor();
 
-  for (const key of [...state.broadcastPcs.keys()]) {
-    if (key.endsWith(':camera')) teardownBroadcast(key);
-  }
+  unpublishLocalSource('camera');
   removeTile(tileKey(state.myId, 'camera'));
   updateEmptyHint();
-
-  if (state.transport) {
-    state.transport.send({ type: 'share:stop', source: 'camera' });
-  }
-}
-
-/* ---------------- transmissão genérica (comum às duas fontes) ---------------- */
-
-async function createBroadcastPeer(viewerId, source) {
-  const localTracks =
-    source === 'camera' ? state.camera.localTracks : source === 'mic' ? state.mic.localTracks : state.screen.localTracks;
-  if (!localTracks.length) return; // pedido chegou depois que eu já parei essa fonte
-  const key = tileKey(viewerId, source);
-  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-  state.broadcastPcs.set(key, pc);
-
-  const combined = new MediaStream(localTracks);
-  for (const track of localTracks) pc.addTrack(track, combined);
-  preferH264(pc);
-  applyBandwidthLimit(pc);
-
-  pc.addEventListener('icecandidate', (ev) => {
-    if (ev.candidate) sendSignal(viewerId, { kind: 'ice', candidate: ev.candidate.toJSON(), source });
-  });
-
-  // sem esse listener antes, uma conexao que caia (rede instavel) ficava
-  // transmitindo pro vazio pra sempre - quem assiste via o tile sumir
-  // (corrigido em requestWatch), mas o lado de quem transmite nunca
-  // nem sabia e nunca tentava reconectar. Aqui e' quem oferta (criou o
-  // offer original), entao e' quem PODE reiniciar o ICE de verdade via
-  // renegociacao (restartIce + novo offer pelo mesmo canal de
-  // sinalizacao) em vez de só esperar passivamente.
-  pc.addEventListener('connectionstatechange', () => {
-    const timerKey = `broadcast:${key}`;
-    if (pc.connectionState === 'connected') {
-      clearDisconnectTimeout(timerKey);
-    } else if (pc.connectionState === 'closed') {
-      clearDisconnectTimeout(timerKey);
-    } else if (pc.connectionState === 'failed') {
-      clearDisconnectTimeout(timerKey);
-      pc.restartIce();
-      pc.createOffer().then((retryOffer) => {
-        return pc.setLocalDescription(retryOffer).then(() => {
-          sendSignal(viewerId, { kind: 'offer', sdp: retryOffer, source });
-        });
-      }).catch(() => teardownBroadcast(key));
-    } else if (pc.connectionState === 'disconnected') {
-      scheduleDisconnectTimeout(
-        timerKey,
-        () => pc.connectionState === 'disconnected',
-        () => teardownBroadcast(key),
-      );
-    }
-  });
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-  sendSignal(viewerId, { kind: 'offer', sdp: offer, source });
-}
-
-function teardownBroadcast(key) {
-  const pc = state.broadcastPcs.get(key);
-  if (pc) pc.close();
-  state.broadcastPcs.delete(key);
 }
 
 /* ---------------- modo admin: controle remoto (mouse/teclado) ----------------
@@ -5299,14 +5144,15 @@ function openTileContextMenu(x, y, key, name) {
 }
 
 function startRemoteControl(key) {
-  if (remoteControlChannel) {
+  if (remoteControlTargetId) {
     showToast('Você já está controlando uma tela — encerra antes de começar outra.');
     return;
   }
   const sep = key.lastIndexOf(':');
   const peerId = key.slice(0, sep);
   const source = key.slice(sep + 1);
-  sendSignal(peerId, { kind: 'control-request', source });
+  remoteControlTargetId = peerId;
+  sendControlMessage(peerId, { kind: 'control-request', source });
   showToast('Pedido de controle enviado — esperando a pessoa aceitar.');
 }
 
@@ -5348,26 +5194,26 @@ function showIncomingControlRequest(fromId, source) {
   showConsentDialog({
     title: 'Pedido de controle',
     message: `${nameOfPeer(fromId)} quer controlar sua tela. Aceitar?`,
-    onAccept: () => startBeingControlledBy(fromId, source),
-    onDecline: () => sendSignal(fromId, { kind: 'control-declined', source }),
+    onAccept: () => startBeingControlledBy(fromId),
+    onDecline: () => sendControlMessage(fromId, { kind: 'control-declined', source }),
   });
 }
 
 // convite de quem transmite ("Transmissão interativa") chegando aqui - a
-// pessoa ESCOLHIDA precisa aceitar antes de começar a controlar.
+// pessoa ESCOLHIDA precisa aceitar antes de começar a controlar. Com
+// autoSubscribe (padrão do LiveKit), se quem convidou já estiver
+// transmitindo a tela, o tile dela já existe aqui automaticamente - não
+// precisa de nenhum "requestWatch" equivalente antes de pedir controle.
 function showIncomingControlOffer(fromId, source) {
   showConsentDialog({
     title: 'Convite pra controlar uma tela',
     message: `${nameOfPeer(fromId)} quer que você controle a tela dele(a). Aceitar?`,
     onAccept: () => {
-      const key = tileKey(fromId, source);
-      if (!state.watchPcs.has(key)) {
-        requestWatch(fromId, source, nameOfPeer(fromId), null);
-      }
-      sendSignal(fromId, { kind: 'control-request', source });
+      remoteControlTargetId = fromId;
+      sendControlMessage(fromId, { kind: 'control-request', source });
       showToast('Controle aceito — conectando...');
     },
-    onDecline: () => sendSignal(fromId, { kind: 'control-declined', source }),
+    onDecline: () => sendControlMessage(fromId, { kind: 'control-declined', source }),
   });
 }
 
@@ -5400,7 +5246,7 @@ function openInteractiveShareMenu(anchorRect) {
       btn.addEventListener('click', () => {
         closeContextMenu();
         pendingControlOffers.add(person.id);
-        sendSignal(person.id, { kind: 'control-offer', source: 'screen' });
+        sendControlMessage(person.id, { kind: 'control-offer', source: 'screen' });
         showToast(`Convite de controle enviado pra ${person.name || 'essa pessoa'}.`);
       });
       menu.appendChild(btn);
@@ -5408,39 +5254,17 @@ function openInteractiveShareMenu(anchorRect) {
   });
 }
 
-// lado de quem está transmitindo (sendo controlado): cria o canal e
-// renegocia, igual ao restartIce já existente em createBroadcastPeer.
-async function startBeingControlledBy(viewerId, source) {
-  const key = tileKey(viewerId, source);
-  const pc = state.broadcastPcs.get(key);
-  if (!pc) return;
-  const channel = pc.createDataChannel('control');
-  setupControlledChannel(channel, viewerId);
-  try {
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    sendSignal(viewerId, { kind: 'offer', sdp: offer, source });
-  } catch {
-    /* renegociação falhou — sem canal, o controlador nunca recebe nada e desiste sozinho */
-  }
+// lado de quem está transmitindo (sendo controlado): sem RTCPeerConnection
+// dedicada mais, então "aceitar" é só guardar quem me controla e avisar
+// de volta (control-accepted) - é esse aviso que o controlador espera pra
+// começar a mandar input de verdade (ver handleControlDataReceived).
+function startBeingControlledBy(viewerId) {
+  controlledByPeerId = viewerId;
+  showRemoteControlOverlay(viewerId);
+  sendControlMessage(viewerId, { kind: 'control-accepted' });
 }
 
-function setupControlledChannel(channel, controllerId) {
-  channel.addEventListener('open', () => showRemoteControlOverlay(controllerId, channel));
-  channel.addEventListener('close', () => hideRemoteControlOverlay());
-  channel.addEventListener('message', (ev) => {
-    if (!isElectron) return;
-    let msg;
-    try {
-      msg = JSON.parse(ev.data);
-    } catch {
-      return;
-    }
-    window.telaNative.sendRemoteInput(msg);
-  });
-}
-
-function showRemoteControlOverlay(controllerId, channel) {
+function showRemoteControlOverlay(controllerId) {
   hideRemoteControlOverlay();
   const overlay = document.createElement('div');
   overlay.id = 'remoteControlOverlay';
@@ -5452,12 +5276,8 @@ function showRemoteControlOverlay(controllerId, channel) {
   `;
   document.body.appendChild(overlay);
   overlay.querySelector('#remoteControlEndBtn').addEventListener('click', () => {
-    try {
-      channel.send(JSON.stringify({ type: 'control-ended' }));
-    } catch {
-      /* canal já pode ter caído sozinho — fecha de qualquer jeito abaixo */
-    }
-    channel.close();
+    sendControlMessage(controllerId, { type: 'control-ended' });
+    controlledByPeerId = null;
     hideRemoteControlOverlay();
   });
 }
@@ -5467,38 +5287,86 @@ function hideRemoteControlOverlay() {
 }
 
 // lado de quem está assistindo (controlando): captura mouse/teclado no
-// <video> do tile e manda pelo canal. keyCode como "VK code" é uma
+// <video> do tile e manda via publishData direcionado (destinationIdentities)
+// pro identity de quem está sendo controlado. keyCode como "VK code" é uma
 // aproximação deliberada — na prática bate com os VK_* do Win32 pra tecla
 // de letra/número/função/seta/espaço/enter, que é o que importa aqui.
 let controlInputCleanup = null;
-let remoteControlChannel = null; // canal ativo de controle que EU estou usando pra controlar alguém (se houver)
+let remoteControlTargetId = null; // identity de quem EU estou controlando (se houver)
+let controlledByPeerId = null; // identity de quem está ME controlando (se houver)
+
+function sendControlMessage(toIdentity, obj) {
+  if (!lkRoom) return;
+  const payload = new TextEncoder().encode(JSON.stringify(obj));
+  lkRoom.localParticipant.publishData(payload, { destinationIdentities: [toIdentity], topic: 'control', reliable: true }).catch(() => {});
+}
+
+// despachante único de tudo que chega no topic 'control' - registrado em
+// controlHandlers.onDataReceived (ver setupLiveKitRoomEvents). Cobre tanto
+// o handshake de consentimento (control-request/accepted/declined/offer)
+// quanto o input cru (mousemove/mousebutton/wheel/key) e o fim de sessão
+// (control-ended), já que agora tudo passa pelo mesmo transporte - antes
+// o handshake ia por sendSignal/onSignal e só o input cru ia pelo
+// RTCDataChannel dedicado.
+function handleControlDataReceived(payload, participant) {
+  const fromId = participant && participant.identity;
+  if (!fromId) return;
+  let msg;
+  try {
+    msg = JSON.parse(new TextDecoder().decode(payload));
+  } catch {
+    return;
+  }
+
+  if (msg.kind === 'control-request') {
+    if (pendingControlOffers.has(fromId)) {
+      pendingControlOffers.delete(fromId);
+      startBeingControlledBy(fromId);
+    } else {
+      showIncomingControlRequest(fromId, msg.source);
+    }
+    return;
+  }
+  if (msg.kind === 'control-declined') {
+    showToast('Pedido de controle recusado.');
+    if (remoteControlTargetId === fromId) remoteControlTargetId = null;
+    return;
+  }
+  if (msg.kind === 'control-offer') {
+    showIncomingControlOffer(fromId, msg.source);
+    return;
+  }
+  if (msg.kind === 'control-accepted') {
+    if (remoteControlTargetId !== fromId) return;
+    showToast('Controle ativado — você já pode mexer na tela dele(a).');
+    const tile = state.tiles.get(tileKey(fromId, 'screen'));
+    if (tile) attachControlInputListeners(tile.video, fromId);
+    return;
+  }
+
+  // a partir daqui é input cru (mousemove/mousebutton/wheel/key) ou o fim
+  // de sessão - só processa se vier de quem realmente está no papel certo.
+  if (msg.type === 'control-ended') {
+    if (controlledByPeerId === fromId) { controlledByPeerId = null; hideRemoteControlOverlay(); }
+    if (remoteControlTargetId === fromId) { remoteControlTargetId = null; detachControlInputListeners(); }
+    return;
+  }
+  if (controlledByPeerId === fromId && isElectron) {
+    window.telaNative.sendRemoteInput(msg);
+  }
+}
+controlHandlers.onDataReceived = handleControlDataReceived;
+controlHandlers.onParticipantDisconnected = (identity) => {
+  if (remoteControlTargetId === identity) { remoteControlTargetId = null; detachControlInputListeners(); }
+  if (controlledByPeerId === identity) { controlledByPeerId = null; hideRemoteControlOverlay(); }
+};
+
 function mouseButtonName(button) {
   return button === 2 ? 'right' : button === 1 ? 'middle' : 'left';
 }
-function setupControllerChannel(channel, video) {
-  remoteControlChannel = channel;
-  channel.addEventListener('open', () => {
-    showToast('Controle ativado — você já pode mexer na tela dele(a).');
-    attachControlInputListeners(video, channel);
-  });
-  channel.addEventListener('close', () => {
-    detachControlInputListeners();
-    if (remoteControlChannel === channel) remoteControlChannel = null;
-  });
-  channel.addEventListener('message', (ev) => {
-    try {
-      const msg = JSON.parse(ev.data);
-      if (msg.type === 'control-ended') channel.close();
-    } catch {
-      /* ignora */
-    }
-  });
-}
-function attachControlInputListeners(video, channel) {
+function attachControlInputListeners(video, targetId) {
   detachControlInputListeners();
-  const send = (obj) => {
-    if (channel.readyState === 'open') channel.send(JSON.stringify(obj));
-  };
+  const send = (obj) => sendControlMessage(targetId, obj);
   const onMouseMove = (ev) => {
     const rect = video.getBoundingClientRect();
     const xNorm = (ev.clientX - rect.left) / rect.width;
@@ -5716,10 +5584,7 @@ function updateSelfScreenWatchersBadge() {
   const key = tileKey(state.myId, 'screen');
   const tile = state.tiles.get(key);
   if (!tile) return;
-  let watching = 0;
-  for (const k of state.broadcastPcs.keys()) {
-    if (k.endsWith(':screen')) watching++;
-  }
+  const watching = lkRoom ? lkRoom.remoteParticipants.size : 0;
   const badge = tile.root.querySelector('.tile-watchers-badge');
   badge.innerHTML = `${ICONS.monitor} ${watching} assistindo`;
   if (currentMainPanel === 'voice') renderMemberSidebar(); // mantém o nudge "Transmitindo sozinho?" em dia

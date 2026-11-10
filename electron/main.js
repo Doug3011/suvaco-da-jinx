@@ -173,6 +173,16 @@ function createMainWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // Fechar com o X só esconde a janela (ver comentário abaixo), de
+      // propósito pra deixar call/transmissão rolando minimizado na
+      // bandeja - mas o Chromium por padrão agressivamente throttla
+      // setInterval/setTimeout de uma janela escondida (chega a cair pra
+      // 1x/minuto). Isso atrasava demais o heartbeat/reconexão do Supabase
+      // Realtime e o retrackServerPresence() periódico, deixando quem
+      // estava minimizado "preso" aparecendo Offline/fora da call pros
+      // outros por minutos, mesmo seguindo ativo (áudio/vídeo real não
+      // passa por esses timers, só a presença).
+      backgroundThrottling: false,
     },
   });
   mainWindow.loadURL(`http://localhost:${PORT}/`);

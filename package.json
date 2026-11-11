@@ -1,7 +1,7 @@
 {
   "name": "tela-radmin",
   "private": true,
-  "version": "4.5.3",
+  "version": "4.6.0",
   "description": "Servidores, canais de texto/voz e compartilhamento de tela entre amigos, estilo Discord.",
   "author": "Doug Muller Burro",
   "main": "electron/main.js",

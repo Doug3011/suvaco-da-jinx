@@ -6368,6 +6368,14 @@ const CHANGELOG = {
   '4.5.3': [
     'Mute de apps na transmissão refeito do zero: agora só existe a lista "sempre mutar" nas Configurações (tirei o painel "Nesta sessão", que só confundia e dava bug). A lista de apps com som se atualiza sozinha a cada poucos segundos enquanto você compartilha, então um app que você abrir depois de já estar compartilhando (um jogo, uma notificação do Discord) também entra pra ser mutado, não só os que já estavam tocando som no começo.',
   ],
+  '4.6.0': [
+    'Corrigido: quem estava ativamente numa call (compartilhando tela, por exemplo) podia aparecer "Offline" pros outros mesmo estando lá de verdade — agora a lista usa o próprio LiveKit como fonte extra de verdade, não só a presença do servidor.',
+    'Limite de banda "Automático" na transmissão agora é esperto: calcula o bitrate ideal pela resolução e taxa de quadros escolhidas, em vez de sempre usar o mesmo teto fixo pra qualquer combinação.',
+    'Novo: inspetor de conexão por transmissão — clica no ícone de sinal no canto de qualquer tela/câmera pra ver resolução, fps, bitrate, codec, ping, perda de pacote e jitter em tempo real.',
+    'Novo: push-to-talk (segurar pra falar) — ativa em Configurações > Voz e grava a tecla (ou botão lateral do mouse) que abre o microfone só enquanto segurada.',
+    'Novo: auto-ducking — liga em Configurações > Voz pra abaixar automaticamente o volume de quem não está falando, ajuda a entender melhor quando várias pessoas falam ao mesmo tempo.',
+    'Novo: redução de ruído avançada (RNNoise) pro microfone, em Configurações > Voz — opcional, corta ruído de fundo bem melhor que a redução padrão.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

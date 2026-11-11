@@ -218,9 +218,7 @@ const els = {
   stageArea: document.getElementById('stageArea'),
   stageEmpty: document.getElementById('stageEmpty'),
   stageShareBtn: document.getElementById('stageShareBtn'),
-  appAudioList: document.getElementById('appAudioList'),
   leaveCallBtn: document.getElementById('leaveCallBtn'),
-  refreshAppsBtn: document.getElementById('refreshAppsBtn'),
   settingsBtn: document.getElementById('settingsBtn'),
   settingsModal: document.getElementById('settingsModal'),
   settingsModalClose: document.getElementById('settingsModalClose'),
@@ -1646,9 +1644,11 @@ async function reapplyBandwidthLimit() {
 /* ---------------- áudio por app (mixagem via Web Audio, só no Electron) ----------------
    Cada app vira sua própria captura nativa (PCM cru); aqui a gente agenda os
    pedaços de PCM como AudioBufferSource tocando em sequência (técnica comum
-   de streaming de PCM pelo Web Audio) e liga cada um num GainNode próprio —
-   mutar um app é só zerar o gain dele, sem afetar os outros. Isso só vale
-   pra transmissão de TELA (a câmera não carrega áudio do sistema). */
+   de streaming de PCM pelo Web Audio) e liga cada um num GainNode próprio,
+   um por pid, pra não afetar os outros. Mutar um app pára a captura nativa
+   dele de vez (ver isAppPermanentlyMuted) — não é só zerar gain, nem chega
+   a vir PCM nenhum desse pid. Isso só vale pra transmissão de TELA (a
+   câmera não carrega áudio do sistema). */
 
 // Agrupado por NOME do processo, não por PID individual: navegadores
 // baseados em Chromium (Brave, Edge, o próprio Chrome) rodam cada aba num
@@ -1659,7 +1659,7 @@ async function reapplyBandwidthLimit() {
 const appAudio = {
   ctx: null,
   destination: null,
-  groups: new Map(), // nome -> { muted, pids: Map(pid -> { gainNode, nextTime, handle }) }
+  groups: new Map(), // nome -> { pids: Map(pid -> { gainNode, nextTime, handle, starting }) }
 };
 let audioChunkUnsub = null;
 
@@ -1706,53 +1706,106 @@ function playPcmChunk(entry, rawBuffer) {
   entry.nextTime += frameCount / 48000;
 }
 
+// Fonte única de verdade pra mute: a lista "sempre mutar" das Configurações
+// (state.settings.permanentlyMutedApps). Nada de estado de mute por sessão
+// guardado à parte — group.muted somando com um toggle próprio é o que
+// dava pra ficar fora de sincronia com a captura de verdade. Em vez disso,
+// cada reconciliação (refreshAppList, no loop abaixo) RECALCULA se cada
+// grupo deveria estar mutado e ajusta a captura pra bater com isso.
+function isAppPermanentlyMuted(name) {
+  return state.settings.permanentlyMutedApps.includes(name);
+}
+
+function stopEntryCapture(entry) {
+  if (entry.handle != null) {
+    window.telaNative.stopCapture(entry.handle);
+    entry.handle = null;
+  }
+}
+
+function startEntryCapture(pid, name, entry) {
+  if (entry.handle != null || entry.starting) return;
+  entry.starting = true;
+  window.telaNative.startCapture(pid).then((handle) => {
+    entry.starting = false;
+    const group = appAudio.groups.get(name);
+    // o app pode ter fechado (pid saiu do grupo) ou entrado pra lista de
+    // "sempre mutar" enquanto essa ativação (IPC pro main + WASAPI) ainda
+    // estava subindo - nesse caso não guarda o handle, devolve pro native
+    // na hora em vez de deixar a captura "ressuscitar" por baixo do mute.
+    if (!group || !group.pids.has(pid) || isAppPermanentlyMuted(name)) {
+      window.telaNative.stopCapture(handle);
+      return;
+    }
+    entry.handle = handle;
+  });
+}
+
+// Ajusta a captura de um grupo (app) pro estado atual da lista "sempre
+// mutar" - chamada tanto no loop periódico (pega app que começou a tocar
+// som DEPOIS de já estar compartilhando) quanto na hora de marcar/desmarcar
+// o checkbox nas Configurações (feedback imediato, sem esperar o loop).
+function reconcileGroupMute(name) {
+  const group = appAudio.groups.get(name);
+  if (!group) return;
+  const muted = isAppPermanentlyMuted(name);
+  for (const [pid, entry] of group.pids) {
+    if (muted) stopEntryCapture(entry);
+    else startEntryCapture(pid, name, entry);
+  }
+}
+
 function startCapturingApp(pid, name) {
   ensureAudioGraph();
   let group = appAudio.groups.get(name);
   if (!group) {
-    group = { muted: state.settings.permanentlyMutedApps.includes(name), pids: new Map() };
+    group = { pids: new Map() };
     appAudio.groups.set(name, group);
   }
   const gainNode = appAudio.ctx.createGain();
   gainNode.connect(appAudio.destination);
-  const entry = { gainNode, nextTime: 0, handle: null };
+  const entry = { gainNode, nextTime: 0, handle: null, starting: false };
   group.pids.set(pid, entry);
-  // Se o grupo (nome) já estava mutado, nem começa a captura nativa — muted
-  // não é só "gain zero", é a captura de fato parada (economiza CPU: sem
-  // thread WASAPI, sem IPC de PCM, sem agendamento no Web Audio pra esse pid).
-  if (!group.muted) {
-    window.telaNative.startCapture(pid).then((handle) => {
-      // se alguém mutou esse grupo enquanto essa captura ainda estava
-      // subindo (IPC pro processo main + ativação WASAPI não é instantâneo),
-      // guardar o handle aqui ia "reviver" a captura por baixo do mute -
-      // setAppMuted já rodou e não viu handle nenhum pra parar, porque esse
-      // .then só resolve depois. Descarta e para na hora.
-      if (group.muted) { window.telaNative.stopCapture(handle); return; }
-      entry.handle = handle;
-    });
+  if (!isAppPermanentlyMuted(name)) startEntryCapture(pid, name, entry);
+}
+
+const APP_LIST_REFRESH_MS = 4000;
+let appListRefreshTimer = null;
+// Enquanto compartilhando, reconsulta a lista de apps com áudio periodicamente
+// (não só uma vez no começo) - sem isso, um app que só passa a tocar som
+// depois que a transmissão já começou (notificação do Discord, abrir um
+// jogo etc.) nunca era descoberto, então nunca entrava nem pra ser mutado.
+function startAppListRefreshLoop() {
+  if (appListRefreshTimer) return;
+  appListRefreshTimer = setInterval(refreshAppList, APP_LIST_REFRESH_MS);
+}
+function stopAppListRefreshLoop() {
+  if (appListRefreshTimer) {
+    clearInterval(appListRefreshTimer);
+    appListRefreshTimer = null;
   }
 }
 
 async function refreshAppList() {
   if (!isElectron || !state.screen.sharing) return;
   const available = await window.telaNative.available();
-  if (!available) {
-    els.appAudioList.innerHTML = '<p class="hint">Módulo nativo de áudio por app ainda não compilado neste PC.</p>';
-    return;
-  }
+  if (!available) return;
   const apps = await window.telaNative.listApps();
-  renderAppMuteList(apps);
   rememberAppsInHistory(apps);
   for (const app of apps) {
     const group = appAudio.groups.get(app.name);
     if (!group || !group.pids.has(app.pid)) startCapturingApp(app.pid, app.name);
   }
+  // reconcilia o mute de todo mundo já conhecido com a lista "sempre mutar"
+  // atual - cobre tanto editar a lista com a tela já compartilhando quanto
+  // um app que começou a tocar som depois (essa função roda em loop).
+  for (const name of appAudio.groups.keys()) reconcileGroupMute(name);
   // processos que sumiram da lista (app fechado/aba fechada) -> para a captura deles
   const seenPids = new Set(apps.map((a) => a.pid));
   for (const [name, group] of [...appAudio.groups]) {
     for (const [pid, entry] of [...group.pids]) {
       if (seenPids.has(pid)) continue;
-      if (entry.handle != null) window.telaNative.stopCapture(entry.handle);
+      stopEntryCapture(entry);
       entry.gainNode.disconnect();
       group.pids.delete(pid);
     }
@@ -1760,63 +1813,10 @@ async function refreshAppList() {
   }
 }
 
-function renderAppMuteList(apps) {
-  if (!apps.length) {
-    els.appAudioList.innerHTML = '<p class="hint">Nenhum app com áudio ativo encontrado agora.</p>';
-    return;
-  }
-  const names = [...new Set(apps.map((a) => a.name))];
-  els.appAudioList.innerHTML = '';
-  for (const name of names) {
-    const group = appAudio.groups.get(name);
-    const muted = group ? group.muted : false;
-    const row = document.createElement('div');
-    row.className = 'app-audio-row';
-    row.innerHTML = `<span>${escapeHtml(name)}</span>`;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'ghost icon-btn';
-    btn.innerHTML = muted ? ICONS.volumeMute : ICONS.volume;
-    btn.addEventListener('click', () => toggleAppMute(name, btn));
-    row.appendChild(btn);
-    els.appAudioList.appendChild(row);
-  }
-}
-
-function setAppMuted(name, muted) {
-  const group = appAudio.groups.get(name);
-  if (!group) return;
-  group.muted = muted;
-  for (const [pid, entry] of group.pids) {
-    if (muted) {
-      if (entry.handle != null) {
-        window.telaNative.stopCapture(entry.handle);
-        entry.handle = null;
-      }
-    } else if (entry.handle == null) {
-      // mesmo cuidado de startCapturingApp: se remutar antes dessa promise
-      // resolver, não deixa o handle "reviver" a captura por baixo do mute.
-      window.telaNative.startCapture(pid).then((handle) => {
-        if (group.muted) { window.telaNative.stopCapture(handle); return; }
-        entry.handle = handle;
-      });
-    }
-  }
-}
-
-function toggleAppMute(name, btn) {
-  const group = appAudio.groups.get(name);
-  if (!group) return;
-  setAppMuted(name, !group.muted);
-  btn.innerHTML = group.muted ? ICONS.volumeMute : ICONS.volume;
-}
-
-// Lista de "sempre mutar" — vive na aba "Apps mutados" das configurações,
-// separada do painel de mute da sessão na barra lateral (que só existe
-// enquanto a tela está sendo compartilhada). Essa funciona a qualquer
-// momento (não precisa estar compartilhando) e persiste entre sessões —
-// resolve o pedido de "mutei o Discord uma vez, quero que já comece mutado
-// da próxima vez".
+// Lista de "sempre mutar" — única forma de mutar um app (ver
+// isAppPermanentlyMuted acima). Funciona a qualquer momento (não precisa
+// estar compartilhando) e persiste entre sessões — resolve o pedido de
+// "mutei o Discord uma vez, quero que já comece mutado da próxima vez".
 async function renderPermMuteList() {
   if (!isElectron) {
     els.permMuteList.innerHTML = '<p class="hint">Esse recurso só existe na versão instalada do app.</p>';
@@ -1845,13 +1845,14 @@ async function renderPermMuteList() {
       if (ev.target.checked && idx === -1) list.push(name);
       else if (!ev.target.checked && idx !== -1) list.splice(idx, 1);
       saveSettings();
-      if (appAudio.groups.has(name)) setAppMuted(name, ev.target.checked);
+      reconcileGroupMute(name);
     });
     els.permMuteList.appendChild(row);
   }
 }
 
 function teardownAppAudio() {
+  stopAppListRefreshLoop();
   for (const group of appAudio.groups.values()) {
     for (const entry of group.pids.values()) {
       if (entry.handle != null) window.telaNative.stopCapture(entry.handle);
@@ -1860,10 +1861,7 @@ function teardownAppAudio() {
   }
   appAudio.groups.clear();
   if (appAudio.ctx) { appAudio.ctx.close(); appAudio.ctx = null; appAudio.destination = null; }
-  els.appAudioList.innerHTML = '<p class="hint">Só aparece enquanto você está compartilhando a tela.</p>';
 }
-
-els.refreshAppsBtn.addEventListener('click', refreshAppList);
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -4489,6 +4487,7 @@ async function startScreenShare() {
     ensureAudioGraph();
     initAudioChunkRouter();
     await refreshAppList();
+    startAppListRefreshLoop();
     const mixedAudioTrack = appAudio.destination.stream.getAudioTracks()[0];
     state.screen.localTracks = [...display.getVideoTracks(), mixedAudioTrack];
   } else {

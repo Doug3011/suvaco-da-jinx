@@ -2564,12 +2564,29 @@ function retrackServerPresence() {
     sharingScreen: state.screen.sharing,
   });
 }
+// Mesmo reforço periódico de retrackGlobalPresence/retrackServerPresence,
+// pro canal de sinalização de anexos (attach-signal:<id>) - ele não usa
+// track() (é só broadcast), mas sofre do mesmo jeito de "canal preso" sem
+// avisar ninguém: definida mais abaixo, chamada aqui só por referência
+// (hoisting - já está totalmente declarada quando o timer/heartbeat
+// realmente dispara, bem depois do script inteiro carregar).
+function ensureAttachmentSignaling() {
+  if (!attachmentSignalChannel) { joinAttachmentSignaling(); return; }
+  if (attachmentSignalChannel.state !== 'joined') {
+    const dead = attachmentSignalChannel;
+    attachmentSignalChannel = null;
+    window.supabaseClient.removeChannel(dead);
+    joinAttachmentSignaling();
+  }
+}
+
 let presenceRefreshTimer = null;
 function startPresenceRefreshLoop() {
   if (presenceRefreshTimer) return;
   presenceRefreshTimer = setInterval(() => {
     retrackGlobalPresence();
     retrackServerPresence();
+    ensureAttachmentSignaling();
   }, PRESENCE_REFRESH_MS);
 }
 startPresenceRefreshLoop();
@@ -2580,6 +2597,7 @@ if (window.supabaseClient.realtime && typeof window.supabaseClient.realtime.onHe
   window.supabaseClient.realtime.onHeartbeat(() => {
     retrackGlobalPresence();
     retrackServerPresence();
+    ensureAttachmentSignaling();
     renderFriendsPanels();
     renderMemberSidebar();
     renderChannelList();
@@ -2606,7 +2624,20 @@ function joinAttachmentSignaling() {
   if (attachmentSignalChannel || !currentUser) return;
   const rt = window.supabaseClient.channel(`attach-signal:${currentUser.id}`);
   rt.on('broadcast', { event: 'signal' }, ({ payload }) => onAttachmentSignal(payload.from, payload.data));
-  rt.subscribe();
+  rt.subscribe((status) => {
+    // mesmo bug do rejoinGlobalPresence/retrackServerPresence (ver comentários
+    // lá) - esse canal nunca tinha essa recuperação. Sem ela, uma queda de
+    // socket deixava esse canal "morto" pra sempre (CLOSED/CHANNEL_ERROR/
+    // TIMED_OUT) e a pessoa nunca mais recebia pedido de download de anexo
+    // de ninguém, mesmo aparecendo online em tudo o mais - exatamente o tipo
+    // de "baixar anexo não funciona" difícil de notar porque não dá erro
+    // nenhum pra quem está mandando (só o requester via "tempo esgotado").
+    if ((status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') && attachmentSignalChannel === rt) {
+      window.supabaseClient.removeChannel(rt);
+      attachmentSignalChannel = null;
+      joinAttachmentSignaling();
+    }
+  });
   attachmentSignalChannel = rt;
 }
 
@@ -2626,10 +2657,21 @@ function sendAttachmentSignal(toUserId, data) {
     entry = { channel, ready: false, queue: [] };
     outboundAttachChannels.set(toUserId, entry);
     channel.subscribe((status) => {
-      if (status !== 'SUBSCRIBED') return;
-      entry.ready = true;
-      for (const payload of entry.queue) channel.send(payload);
-      entry.queue = [];
+      if (status === 'SUBSCRIBED') {
+        entry.ready = true;
+        for (const payload of entry.queue) channel.send(payload);
+        entry.queue = [];
+        return;
+      }
+      // mesmo problema do attachmentSignalChannel de entrada: sem isso, um
+      // canal de saída que morre depois de já ter ficado "ready" uma vez
+      // fica preso assim pra sempre - send() num canal morto não dá erro
+      // nenhum, só não entrega. Descartar a entrada deixa a próxima
+      // sendAttachmentSignal recriar o canal do zero.
+      if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        if (outboundAttachChannels.get(toUserId) === entry) outboundAttachChannels.delete(toUserId);
+        window.supabaseClient.removeChannel(channel);
+      }
     });
   }
   const payload = { type: 'broadcast', event: 'signal', payload: { from: currentUser.id, data } };
@@ -4497,28 +4539,43 @@ function updateEmptyHint() {
 // Visão em destaque: quando alguém (eu ou outra pessoa) está transmitindo
 // tela, aquele tile vira o "palco" grande (movido pro #stageArea, sem
 // recriar o <video> - reparent preserva srcObject/reprodução), e todo
-// mundo mais vira uma tira pequena de bolhas abaixo. Sem transmissão
-// nenhuma, o palco mostra um convite pra compartilhar e todo mundo fica
-// na tira. Câmera sozinha (sem tela) nunca vira "palco" - só compartilhamento
-// de tela conta, igual a referência visual que o usuário mandou.
+// mundo mais vira uma tira pequena de bolhas abaixo. Câmera sozinha (sem
+// tela) nunca vira "palco" - só compartilhamento de tela conta, igual a
+// referência visual que o usuário mandou.
+// Sem NENHUM compartilhamento de tela ativo, "strip-mode" não faz sentido -
+// até pouco atrás ficava forçado sempre ligado, então numa call só de
+// câmera/voz (sem ninguém transmitindo tela) todo mundo ficava espremido
+// numa tirinha de 180x110 e o espaço grande só mostrava o convite pra
+// compartilhar. Igual a grade da referência (Backspace), uma call sem palco
+// agora usa a grade de verdade (.grid sem strip-mode), que já tem o
+// dimensionamento adaptativo de updateGridTileSize() - só nunca tinha
+// chance de aparecer porque strip-mode cobria ele por cima.
 function updateStageMode() {
   const screenEntries = [...state.tiles.entries()].filter(([, t]) => t.source === 'screen');
   let stageEntry = null;
   if (screenEntries.length) {
     stageEntry = screenEntries.find(([k]) => state.pinned && state.pinned.has(k)) || screenEntries[0];
   }
-  els.grid.classList.add('strip-mode');
+  els.grid.classList.toggle('strip-mode', !!stageEntry);
+  let visibleGridTiles = 0;
   for (const [key, tile] of state.tiles) {
     if (tile.audioOnly) continue;
     const isStage = stageEntry && stageEntry[0] === key;
     tile.root.classList.toggle('tile-stage', isStage);
     if (isStage) {
       els.stageArea.appendChild(tile.root);
-    } else if (tile.root.parentElement !== els.grid) {
-      els.grid.appendChild(tile.root);
+    } else {
+      if (tile.root.parentElement !== els.grid) els.grid.appendChild(tile.root);
+      visibleGridTiles += 1;
     }
   }
   els.stageEmpty.classList.toggle('hidden', !!stageEntry);
+  // Sem palco e com câmeras pra mostrar, o convite "compartilhe sua tela"
+  // não precisa mais dividir a tela ao meio com a grade (os dois são
+  // flex:1 - sem isso, uma call só de câmera ficava com metade da tela
+  // vazia só de convite). Some com o convite inteiro nesse caso; com zero
+  // tiles (ninguém de câmera ligada) ele volta a ocupar tudo, igual sempre.
+  els.stageArea.classList.toggle('hidden', !stageEntry && visibleGridTiles > 0);
 }
 
 els.stageShareBtn.addEventListener('click', () => {
@@ -6391,6 +6448,10 @@ const CHANGELOG = {
   ],
   '4.6.1': [
     'Melhorado: desconexão da call agora sempre mostra um aviso explicando o motivo (em vez de sumir sem explicação em alguns casos) — ajuda a identificar a causa de quedas que ainda não têm explicação clara.',
+  ],
+  '4.6.2': [
+    'Corrigido: numa call só de câmera/voz (sem ninguém compartilhando tela), todo mundo ficava espremido numa tirinha pequena com a tela toda vazia por baixo — agora a câmera usa o espaço de verdade, igual acontece quando alguém compartilha a tela.',
+    'Corrigido: o canal usado pra avisar que um anexo (imagem/arquivo) está disponível pra download podia cair e nunca mais se reconectar sozinho, fazendo o download falhar silenciosamente mesmo com quem mandou online — agora ele se reconecta automaticamente, igual já acontecia com a lista de quem está online.',
   ],
 };
 

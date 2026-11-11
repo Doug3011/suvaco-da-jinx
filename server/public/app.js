@@ -38,6 +38,7 @@ const ICONS = {
   pencil: `<svg ${ICON_ATTRS}><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>`,
   trash: `<svg ${ICON_ATTRS}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
   soundboard: `<svg ${ICON_ATTRS}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`,
+  signal: `<svg ${ICON_ATTRS}><line x1="4" y1="20" x2="4" y2="14"/><line x1="10" y1="20" x2="10" y2="10"/><line x1="16" y1="20" x2="16" y2="6"/><line x1="22" y1="20" x2="22" y2="3"/></svg>`,
   file: `<svg ${ICON_ATTRS}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
   close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   stop: `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>`,
@@ -1055,6 +1056,12 @@ function tileKey(id, source) {
 
 let lkRoom = null;
 const remoteStreams = new Map(); // tileKey -> MediaStream (vídeo e áudio da tela chegam como 2 publishes separados, remonta aqui)
+// tileKey -> Track de vídeo do LiveKit (local ou remota) pra ler estatística
+// de verdade via getRTCStatsReport() - badge de resolução/fps real e o
+// inspetor de conexão (ver pollTileStats) usam essa referência.
+const tileVideoTracks = new Map();
+const tileStatsPrev = new Map(); // tileKey -> { bytes, ts } (pra calcular kbps por delta)
+const tileStatsLatest = new Map(); // tileKey -> snapshot pro painel do inspetor
 
 function lkSourceToLocal(source) {
   const LK = window.LivekitClient;
@@ -1099,6 +1106,7 @@ function handleTrackSubscribed(track, publication, participant) {
   const key = tileKey(participant.identity, localSource);
   const stream = getOrCreateRemoteStream(key);
   stream.addTrack(track.mediaStreamTrack);
+  if (track.kind === 'video') tileVideoTracks.set(key, track);
   const { name, avatar } = memberInfo(participant.identity);
   addOrUpdateTile(key, name, avatar, stream, false, localSource);
   if (localSource === 'screen' && !viewerClippers.has(key)) {
@@ -1113,6 +1121,7 @@ function handleTrackUnsubscribed(track, publication, participant) {
   const key = tileKey(participant.identity, localSource);
   const stream = remoteStreams.get(key);
   if (stream) stream.removeTrack(track.mediaStreamTrack);
+  if (track.kind === 'video' && tileVideoTracks.get(key) === track) tileVideoTracks.delete(key);
   // só derruba o tile se não sobrou nenhuma track viva pra essa fonte - a
   // tela manda vídeo e áudio como publishes separados, um pode sumir
   // antes do outro (ex: a pessoa parou só o áudio por algum motivo).
@@ -1121,6 +1130,8 @@ function handleTrackUnsubscribed(track, publication, participant) {
     if (clipper) { clipper.stop(); viewerClippers.delete(key); }
     removeTile(key);
     remoteStreams.delete(key);
+    tileStatsPrev.delete(key);
+    tileStatsLatest.delete(key);
     updateStageMode();
   }
 }
@@ -1589,20 +1600,54 @@ function micConstraints() {
 
 // Prioriza H264 (que costuma ter aceleração por hardware — NVENC/QuickSync/
 // AMD VCE) em vez do VP8/VP9 padrão pra tela, que geralmente só tem encoder
-// por software — tira carga da CPU durante a transmissão. maxBitrate/
-// maxFramerate seguem a config de Configurações > Transmissão ("Automático"
-// = sem limite artificial, cai num teto generoso só pra não deixar sem
-// nenhum valor). degradationPreference prioriza manter o FPS configurado
-// em vez de degradar quadros quando a rede/CPU aperta — o padrão do browser
-// é o contrário (degrada FPS primeiro), ruim pra quem já escolheu um FPS
-// alvo baixo de propósito (ex: transmitindo jogo).
-function videoPublishOptions(name, lkSource) {
-  const kbps = state.settings.bandwidthKbps;
+// por software — tira carga da CPU durante a transmissão. degradationPreference
+// prioriza manter o FPS configurado em vez de degradar quadros quando a
+// rede/CPU aperta — o padrão do browser é o contrário (degrada FPS
+// primeiro), ruim pra quem já escolheu um FPS alvo baixo de propósito (ex:
+// transmitindo jogo).
+
+// Matriz de bitrate (kbps) por altura×fps conhecidos - pesquisada em apps
+// parecidos de código aberto (LiveKit também) e ajustada pra H264. Antes,
+// "Automático" caía num teto fixo de 6000kbps pra QUALQUER combinação de
+// resolução/fps - 720p a 15fps ficava tão "liberado" quanto 1440p a 60fps,
+// o que tanto desperdiçava banda à toa (720p15 não precisa de 6Mbps) quanto
+// sufocava a qualidade (1440p60 merecia mais que isso). Agora o automático
+// escala com a resolução/fps de verdade escolhidos nas Configurações.
+const VIDEO_BITRATE_MATRIX = {
+  720: { 15: 1500, 24: 2200, 30: 2800, 60: 4000 },
+  1080: { 15: 2500, 24: 3800, 30: 4500, 60: 7000 },
+  1440: { 15: 4000, 24: 6000, 30: 7000, 60: 11000 },
+};
+const MATRIX_HEIGHTS = Object.keys(VIDEO_BITRATE_MATRIX).map(Number);
+const MATRIX_FPS = [15, 24, 30, 60];
+
+function nearestFromList(list, value) {
+  return list.reduce((best, x) => (Math.abs(x - value) < Math.abs(best - value) ? x : best));
+}
+
+// "Nativa" (ou qualquer altura capturada fora da tabela, ex: monitor 4K)
+// não tem entrada direta - acha o degrau conhecido mais próximo e escala
+// proporcionalmente à área do quadro (altura² aproxima isso assumindo
+// mesma proporção 16:9), igual outros apps fazem pro modo "resolução
+// nativa". Clampa num intervalo sensato pra nunca sair um valor absurdo
+// pra uma tela muito maior/menor que qualquer degrau conhecido.
+function matrixBitrateKbps(height, fps) {
+  if (!height) height = 1080;
+  const nearestHeight = nearestFromList(MATRIX_HEIGHTS, height);
+  const nearestFps = nearestFromList(MATRIX_FPS, fps);
+  const base = VIDEO_BITRATE_MATRIX[nearestHeight][nearestFps];
+  const scale = (height * height) / (nearestHeight * nearestHeight);
+  return Math.min(45000, Math.max(500, Math.round(base * scale)));
+}
+
+function videoPublishOptions(name, lkSource, captureHeight) {
+  const manualKbps = state.settings.bandwidthKbps;
+  const kbps = manualKbps || matrixBitrateKbps(captureHeight, state.settings.fps);
   return {
     name,
     source: lkSource,
     videoCodec: 'h264',
-    videoEncoding: { maxBitrate: (kbps || 6000) * 1000, maxFramerate: state.settings.fps },
+    videoEncoding: { maxBitrate: kbps * 1000, maxFramerate: state.settings.fps },
     degradationPreference: 'maintain-framerate',
   };
 }
@@ -1619,10 +1664,12 @@ async function publishLocalSource(source) {
   if (!tracks.length) return;
   for (const track of tracks) {
     const lkSource = trackLkSource(source, track);
-    const options = track.kind === 'video' ? videoPublishOptions(source, lkSource) : { name: source, source: lkSource };
+    const captureHeight = track.kind === 'video' ? track.getSettings().height : null;
+    const options = track.kind === 'video' ? videoPublishOptions(source, lkSource, captureHeight) : { name: source, source: lkSource };
     try {
       const pub = await lkRoom.localParticipant.publishTrack(track, options);
       state[source].publications.push(pub);
+      if (track.kind === 'video') tileVideoTracks.set(tileKey(state.myId, source), pub.track);
     } catch (err) {
       console.error(`não consegui publicar ${source}:`, err);
     }
@@ -1644,6 +1691,7 @@ async function unpublishLocalSource(source) {
     }
   }
   state[source].publications = [];
+  tileVideoTracks.delete(tileKey(state.myId, source));
 }
 
 // Não existe mais 1 RTCRtpSender por espectador acessível direto - reaplicar
@@ -5538,12 +5586,14 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
           <span class="tile-live-badge tile-live-res"></span>
         </div>
         <span class="tile-watchers-badge hidden"></span>
+        <div class="tile-inspector-panel hidden"></div>
         <div class="tile-top-overlay">
           <label class="pin-check" title="Selecionar pra tela cheia">
             <input type="checkbox" class="pin-input" />
             <span class="pin-box"></span>
           </label>
           <div class="tile-top-actions">
+            <button type="button" class="btn-inspect icon-btn" title="Qualidade da conexão">${ICONS.signal}</button>
             <button type="button" class="btn-pip icon-btn" title="Janela flutuante (Picture-in-Picture)">${ICONS.pip}</button>
             <button type="button" class="btn-fullscreen icon-btn" title="Tela cheia">${ICONS.maximize}</button>
           </div>
@@ -5566,7 +5616,13 @@ function addOrUpdateTile(key, name, avatar, stream, isSelf, source) {
     const volSlider = root.querySelector('.vol-slider');
     const btnFullscreen = root.querySelector('.btn-fullscreen');
     const btnPip = root.querySelector('.btn-pip');
+    const btnInspect = root.querySelector('.btn-inspect');
     const pinInput = root.querySelector('.pin-input');
+
+    btnInspect.addEventListener('click', () => {
+      root.querySelector('.tile-inspector-panel').classList.toggle('hidden');
+      renderTileInspectorPanel(key);
+    });
 
     if (!isSelf) {
       const appliedPct = applyStoredPeerVolume(key, video);
@@ -5652,6 +5708,103 @@ function updateSelfScreenWatchersBadge() {
 }
 setInterval(updateSelfScreenWatchersBadge, 2000);
 
+// Estatística de verdade por tile de vídeo (local ou remoto), lida via
+// getRTCStatsReport() do próprio LiveKit - alimenta tanto o badge de
+// resolução/fps (agora com o fps REAL alcançado, não só o configurado -
+// antes só dava pra saber o configurado, ver updateTileLiveRes) quanto o
+// painel do inspetor de conexão (bitrate, codec, perda de pacote, jitter,
+// ping). kbps é calculado por delta de bytes entre duas voltas desse
+// loop, não vem pronto da stats API.
+async function pollTileStats() {
+  for (const [key, track] of tileVideoTracks) {
+    let report;
+    try {
+      report = await track.getRTCStatsReport();
+    } catch {
+      continue; // track pode estar no meio de uma troca/reconexão - tenta de novo na próxima volta
+    }
+    if (!report) continue;
+
+    let rtcStat = null;
+    for (const stat of report.values()) {
+      if ((stat.type === 'outbound-rtp' || stat.type === 'inbound-rtp') && stat.kind === 'video') {
+        rtcStat = stat;
+        break;
+      }
+    }
+    if (!rtcStat) continue;
+
+    let codec = null;
+    if (rtcStat.codecId && report.get(rtcStat.codecId)) {
+      const mime = report.get(rtcStat.codecId).mimeType || '';
+      codec = mime.split('/')[1] || null;
+    }
+
+    let rttMs = null;
+    for (const stat of report.values()) {
+      if (stat.type === 'candidate-pair' && stat.state === 'succeeded' && stat.currentRoundTripTime != null) {
+        rttMs = Math.round(stat.currentRoundTripTime * 1000);
+        break;
+      }
+    }
+
+    const isOutbound = rtcStat.type === 'outbound-rtp';
+    const bytes = isOutbound ? rtcStat.bytesSent : rtcStat.bytesReceived;
+    const now = performance.now();
+    const prev = tileStatsPrev.get(key);
+    let kbps = null;
+    if (prev && bytes != null && now > prev.ts) {
+      kbps = Math.round(((bytes - prev.bytes) * 8) / (now - prev.ts));
+    }
+    if (bytes != null) tileStatsPrev.set(key, { bytes, ts: now });
+
+    tileStatsLatest.set(key, {
+      width: rtcStat.frameWidth || null,
+      height: rtcStat.frameHeight || null,
+      fps: rtcStat.framesPerSecond != null ? Math.round(rtcStat.framesPerSecond) : null,
+      kbps: kbps != null && kbps >= 0 ? kbps : null,
+      codec,
+      packetsLost: rtcStat.packetsLost ?? null,
+      jitterMs: rtcStat.jitter != null ? Math.round(rtcStat.jitter * 1000) : null,
+      rttMs,
+    });
+
+    const tile = state.tiles.get(key);
+    if (tile && rtcStat.frameWidth) {
+      const resEl = tile.root.querySelector('.tile-live-res');
+      if (resEl) {
+        const fpsTxt = rtcStat.framesPerSecond != null ? ` · ${Math.round(rtcStat.framesPerSecond)} fps` : '';
+        resEl.textContent = `${rtcStat.frameWidth}×${rtcStat.frameHeight}${fpsTxt}`;
+      }
+      const panel = tile.root.querySelector('.tile-inspector-panel');
+      if (panel && !panel.classList.contains('hidden')) renderTileInspectorPanel(key);
+    }
+  }
+}
+setInterval(pollTileStats, 2000);
+
+function renderTileInspectorPanel(key) {
+  const tile = state.tiles.get(key);
+  if (!tile) return;
+  const panel = tile.root.querySelector('.tile-inspector-panel');
+  if (!panel) return;
+  const s = tileStatsLatest.get(key);
+  if (!s) {
+    panel.innerHTML = '<p class="hint">Calculando…</p>';
+    return;
+  }
+  const row = (label, value) => (value == null ? '' : `<div class="tile-inspector-row"><span>${label}</span><strong>${value}</strong></div>`);
+  panel.innerHTML = [
+    row('Resolução', s.width ? `${s.width}×${s.height}` : null),
+    row('FPS', s.fps),
+    row('Bitrate', s.kbps != null ? `${(s.kbps / 1000).toFixed(1)} Mbps` : null),
+    row('Codec', s.codec ? s.codec.toUpperCase() : null),
+    row('Ping', s.rttMs != null ? `${s.rttMs} ms` : null),
+    row('Pacotes perdidos', s.packetsLost),
+    row('Jitter', s.jitterMs != null ? `${s.jitterMs} ms` : null),
+  ].join('') || '<p class="hint">Sem dados ainda.</p>';
+}
+
 function removeTile(key) {
   const tile = state.tiles.get(key);
   if (!tile) return;
@@ -5659,6 +5812,12 @@ function removeTile(key) {
   if (state.focusIds && state.focusIds.includes(key)) exitFocusIfActive();
   tile.root.remove();
   state.tiles.delete(key);
+  // rede de segurança - os pontos normais de saída (handleTrackUnsubscribed,
+  // unpublishLocalSource) já limpam isso, mas um tile pode sumir por outro
+  // caminho (ex: removeAllTilesFor) sem passar por lá.
+  tileVideoTracks.delete(key);
+  tileStatsPrev.delete(key);
+  tileStatsLatest.delete(key);
   updateFocusBar();
   updateGridTileSize();
 }

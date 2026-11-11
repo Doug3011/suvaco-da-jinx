@@ -235,6 +235,7 @@ const els = {
   autoMicCheck: document.getElementById('autoMicCheck'),
   pushToTalkCheck: document.getElementById('pushToTalkCheck'),
   pushToTalkBindBtn: document.getElementById('pushToTalkBindBtn'),
+  autoDuckingCheck: document.getElementById('autoDuckingCheck'),
   refreshPermMuteBtn: document.getElementById('refreshPermMuteBtn'),
   permMuteList: document.getElementById('permMuteList'),
   soundboardBtn: document.getElementById('soundboardBtn'),
@@ -1173,6 +1174,9 @@ function setupLiveKitRoomEvents(room) {
   room.on(LK.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
     if (topic === 'control' && controlHandlers.onDataReceived) controlHandlers.onDataReceived(payload, participant);
   });
+  room.on(LK.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+    applyActiveSpeakerDucking(speakers.map((p) => p.identity));
+  });
   room.on(LK.RoomEvent.Disconnected, (reason) => {
     if (lkRoom !== room) return;
     // O LiveKit já tenta reconectar sozinho por baixo dos panos
@@ -1206,6 +1210,7 @@ function loadSettings() {
     autoMic: true,
     pushToTalkEnabled: false,
     pushToTalkBind: null, // { type: 'key', code: 'KeyT', label: 'T' } ou { type: 'mouse', button: 3, label: 'Botão lateral do mouse' }
+    autoDuckingEnabled: false,
     permanentlyMutedApps: [],
     micMuted: false,
     soundboardVolume: 70,
@@ -1254,6 +1259,7 @@ els.hideCursorCheck.checked = state.settings.hideCursor;
 els.autoMicCheck.checked = state.settings.autoMic;
 els.pushToTalkCheck.checked = state.settings.pushToTalkEnabled;
 renderPushToTalkBindBtn();
+els.autoDuckingCheck.checked = state.settings.autoDuckingEnabled;
 els.chatNotificationsCheck.checked = state.settings.chatNotifications;
 els.remoteAdminCheck.checked = state.settings.remoteAdminEnabled;
 els.clipEnabledCheck.checked = state.settings.clipEnabled;
@@ -1447,6 +1453,52 @@ window.addEventListener('blur', () => {
     applyMicGain();
   }
 });
+
+/* ---------------- auto-ducking ----------------
+   Abaixa o volume de quem NÃO está falando enquanto alguém fala, sem mexer
+   no volume manual que cada um já tem (multiplica em cima do volume ATUAL
+   do elemento, guarda o valor de antes pra restaurar exatamente quando a
+   pessoa para de falar). Só mexe no tile de MIC de cada um - câmera não
+   carrega áudio nenhum, e abaixar o áudio da tela compartilhada de alguém
+   só porque ela também está falando no mic seria estranho (duck é só
+   "vozes concorrendo", não a tela/jogo da pessoa). */
+const DUCK_FACTOR = 0.35;
+const duckedMicBaseline = new Map(); // peerId (identity) -> volume de antes de duckar
+
+function applyActiveSpeakerDucking(speakingIdentities) {
+  if (!lkRoom) return;
+  const speaking = new Set(speakingIdentities);
+  const anyoneSpeaking = state.settings.autoDuckingEnabled && speaking.size > 0;
+  for (const participant of lkRoom.remoteParticipants.values()) {
+    const peerId = participant.identity;
+    const micTile = state.tiles.get(tileKey(peerId, 'mic'));
+    if (!micTile || !micTile.video) continue;
+    const el = micTile.video;
+    const shouldDuck = anyoneSpeaking && !speaking.has(peerId);
+    if (shouldDuck && !duckedMicBaseline.has(peerId)) {
+      duckedMicBaseline.set(peerId, el.volume);
+      el.volume = el.volume * DUCK_FACTOR;
+    } else if (!shouldDuck && duckedMicBaseline.has(peerId)) {
+      el.volume = duckedMicBaseline.get(peerId);
+      duckedMicBaseline.delete(peerId);
+    }
+  }
+}
+
+function restoreAllDuckedVolumes() {
+  for (const [peerId, vol] of duckedMicBaseline) {
+    const micTile = state.tiles.get(tileKey(peerId, 'mic'));
+    if (micTile && micTile.video) micTile.video.volume = vol;
+  }
+  duckedMicBaseline.clear();
+}
+
+els.autoDuckingCheck.addEventListener('change', () => {
+  state.settings.autoDuckingEnabled = els.autoDuckingCheck.checked;
+  saveSettings();
+  if (!state.settings.autoDuckingEnabled) restoreAllDuckedVolumes();
+});
+
 els.refreshPermMuteBtn.addEventListener('click', renderPermMuteList);
 els.chatNotificationsCheck.addEventListener('change', () => {
   state.settings.chatNotifications = els.chatNotificationsCheck.checked;
@@ -4403,6 +4455,7 @@ function leaveRoom() {
     room.disconnect();
   }
   remoteStreams.clear();
+  duckedMicBaseline.clear(); // tiles já foram removidos acima - não tem volume pra restaurar, só descarta
   state.myId = null;
   activeVoiceChannel = null;
   retrackServerPresence();

@@ -233,6 +233,8 @@ const els = {
   cameraPreviewVideo: document.getElementById('cameraPreviewVideo'),
   cameraPreviewEmptyHint: document.getElementById('cameraPreviewEmptyHint'),
   autoMicCheck: document.getElementById('autoMicCheck'),
+  pushToTalkCheck: document.getElementById('pushToTalkCheck'),
+  pushToTalkBindBtn: document.getElementById('pushToTalkBindBtn'),
   refreshPermMuteBtn: document.getElementById('refreshPermMuteBtn'),
   permMuteList: document.getElementById('permMuteList'),
   soundboardBtn: document.getElementById('soundboardBtn'),
@@ -1202,6 +1204,8 @@ function loadSettings() {
     camDeviceId: '',
     speakerDeviceId: '',
     autoMic: true,
+    pushToTalkEnabled: false,
+    pushToTalkBind: null, // { type: 'key', code: 'KeyT', label: 'T' } ou { type: 'mouse', button: 3, label: 'Botão lateral do mouse' }
     permanentlyMutedApps: [],
     micMuted: false,
     soundboardVolume: 70,
@@ -1248,6 +1252,8 @@ els.noiseSuppressionCheck.checked = state.settings.noiseSuppression;
 els.bandwidthSelect.value = state.settings.bandwidthKbps ? String(state.settings.bandwidthKbps) : 'auto';
 els.hideCursorCheck.checked = state.settings.hideCursor;
 els.autoMicCheck.checked = state.settings.autoMic;
+els.pushToTalkCheck.checked = state.settings.pushToTalkEnabled;
+renderPushToTalkBindBtn();
 els.chatNotificationsCheck.checked = state.settings.chatNotifications;
 els.remoteAdminCheck.checked = state.settings.remoteAdminEnabled;
 els.clipEnabledCheck.checked = state.settings.clipEnabled;
@@ -1327,6 +1333,119 @@ els.autoMicCheck.addEventListener('change', () => {
   state.settings.autoMic = els.autoMicCheck.checked;
   saveSettings();
   // só vale pra próxima sala que entrar — não liga/desliga o mic no meio da atual sozinho
+});
+
+/* ---------------- push-to-talk ----------------
+   Reaproveita o GainNode de mute que já existia (micMix.micGain) em vez de
+   parar/começar a publicação do mic a cada aperto - well mais barato e sem
+   o risco de reconectar a track toda hora. Só funciona com a janela do
+   Ribbit em foco: keydown/keyup/mousedown/mouseup do DOM só chegam aqui
+   quando esta janela tem o foco do sistema operacional - detectar a tecla
+   com OUTRO app/jogo em foco precisaria de um hook global de teclado (uma
+   dependência nativa nova, tipo uiohook-napi, que mexe com o risco de
+   antivírus reclamar de "keylogger") - ficou de fora de propósito por
+   enquanto. */
+let pushToTalkKeyHeld = false;
+
+function applyMicGain() {
+  if (!micMix.micGain) return;
+  const manualMuted = state.settings.micMuted;
+  const effective = manualMuted
+    ? 0
+    : (state.settings.pushToTalkEnabled ? (pushToTalkKeyHeld ? 1 : 0) : 1);
+  micMix.micGain.gain.value = effective;
+}
+
+function bindMatchesEvent(bind, ev) {
+  if (!bind) return false;
+  if (bind.type === 'key') return ev.code === bind.code;
+  if (bind.type === 'mouse') return ev.button === bind.button;
+  return false;
+}
+
+function renderPushToTalkBindBtn() {
+  const bind = state.settings.pushToTalkBind;
+  els.pushToTalkBindBtn.textContent = bind ? bind.label : 'Não definida';
+}
+
+const MOUSE_BUTTON_LABELS = { 0: 'Botão esquerdo', 1: 'Botão do meio', 2: 'Botão direito', 3: 'Botão lateral (voltar)', 4: 'Botão lateral (avançar)' };
+
+let recordingPushToTalkBind = false;
+els.pushToTalkBindBtn.addEventListener('click', () => {
+  if (recordingPushToTalkBind) return;
+  recordingPushToTalkBind = true;
+  els.pushToTalkBindBtn.textContent = 'Aperta uma tecla ou botão do mouse…';
+
+  const finish = (bind) => {
+    recordingPushToTalkBind = false;
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('mousedown', onMouse, true);
+    if (bind) {
+      state.settings.pushToTalkBind = bind;
+      saveSettings();
+    }
+    renderPushToTalkBindBtn();
+  };
+  const onKey = (ev) => {
+    ev.preventDefault();
+    if (ev.code === 'Escape') { finish(null); return; }
+    finish({ type: 'key', code: ev.code, label: ev.key.length === 1 ? ev.key.toUpperCase() : ev.code });
+  };
+  const onMouse = (ev) => {
+    // botão esquerdo (0) fecharia o próprio clique que abriu a gravação -
+    // não faz sentido como bind de PTT de qualquer forma (precisa do mouse
+    // livre pra jogar/usar o PC), então só aceita os outros.
+    if (ev.button === 0) return;
+    ev.preventDefault();
+    finish({ type: 'mouse', button: ev.button, label: MOUSE_BUTTON_LABELS[ev.button] || `Botão ${ev.button}` });
+  };
+  document.addEventListener('keydown', onKey, true);
+  document.addEventListener('mousedown', onMouse, true);
+});
+
+els.pushToTalkCheck.addEventListener('change', () => {
+  state.settings.pushToTalkEnabled = els.pushToTalkCheck.checked;
+  saveSettings();
+  pushToTalkKeyHeld = false;
+  applyMicGain();
+});
+
+window.addEventListener('keydown', (ev) => {
+  if (!state.settings.pushToTalkEnabled || pushToTalkKeyHeld) return;
+  if (bindMatchesEvent(state.settings.pushToTalkBind, ev)) {
+    pushToTalkKeyHeld = true;
+    applyMicGain();
+  }
+});
+window.addEventListener('keyup', (ev) => {
+  if (!state.settings.pushToTalkEnabled || !pushToTalkKeyHeld) return;
+  if (bindMatchesEvent(state.settings.pushToTalkBind, ev)) {
+    pushToTalkKeyHeld = false;
+    applyMicGain();
+  }
+});
+window.addEventListener('mousedown', (ev) => {
+  if (!state.settings.pushToTalkEnabled || pushToTalkKeyHeld) return;
+  if (bindMatchesEvent(state.settings.pushToTalkBind, ev)) {
+    pushToTalkKeyHeld = true;
+    applyMicGain();
+  }
+});
+window.addEventListener('mouseup', (ev) => {
+  if (!state.settings.pushToTalkEnabled || !pushToTalkKeyHeld) return;
+  if (bindMatchesEvent(state.settings.pushToTalkBind, ev)) {
+    pushToTalkKeyHeld = false;
+    applyMicGain();
+  }
+});
+// Solta a tecla sozinho se a janela perder o foco sem passar pelo keyup
+// (ex: alt-tab segurando a tecla) - sem isso o microfone ficava "preso"
+// aberto, transmitindo mudo de propósito errado até alguém apertar nada.
+window.addEventListener('blur', () => {
+  if (pushToTalkKeyHeld) {
+    pushToTalkKeyHeld = false;
+    applyMicGain();
+  }
 });
 els.refreshPermMuteBtn.addEventListener('click', renderPermMuteList);
 els.chatNotificationsCheck.addEventListener('change', () => {
@@ -4641,7 +4760,11 @@ async function startMicShare() {
   // lembra se você tinha mutado antes de sair — o mic já liga mutado de
   // novo na próxima vez, não importa quanto tempo passou (preferência
   // persistida, não um estado de sessão que reseta a cada entrada na sala).
-  micMix.micGain.gain.value = state.settings.micMuted ? 0 : 1;
+  // Se push-to-talk estiver ligado, começa mutado até a tecla ser
+  // segurada, não importa o estado de state.settings.micMuted (ver
+  // applyMicGain).
+  pushToTalkKeyHeld = false;
+  applyMicGain();
   micMix.micSource.connect(micMix.micGain).connect(micMix.destination);
 
   state.mic.localTracks = micMix.destination.stream.getAudioTracks();
@@ -4682,9 +4805,9 @@ function setMicMuteBtn(muted) {
 
 els.micMuteBtn.addEventListener('click', () => {
   if (!micMix.micGain) return;
-  const nowMuted = micMix.micGain.gain.value !== 0;
-  micMix.micGain.gain.value = nowMuted ? 0 : 1;
+  const nowMuted = !state.settings.micMuted;
   state.settings.micMuted = nowMuted;
+  applyMicGain();
   saveSettings();
   setMicMuteBtn(nowMuted);
 });

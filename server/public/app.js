@@ -1160,8 +1160,22 @@ function setupLiveKitRoomEvents(room) {
   room.on(LK.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
     if (topic === 'control' && controlHandlers.onDataReceived) controlHandlers.onDataReceived(payload, participant);
   });
-  room.on(LK.RoomEvent.Disconnected, () => {
-    if (lkRoom === room) leaveRoom();
+  room.on(LK.RoomEvent.Disconnected, (reason) => {
+    if (lkRoom !== room) return;
+    // O LiveKit já tenta reconectar sozinho por baixo dos panos
+    // (RoomEvent.Reconnecting/Reconnected) antes de disparar Disconnected -
+    // chegar aqui significa que ele desistiu, ou que o motivo é definitivo
+    // (identidade duplicada, expulso, sala apagada/fechada). Mesmo nesses
+    // casos ainda chamamos leaveRoom() pra limpar o estado direito, mas
+    // diferenciar o motivo evita um toast de pânico quando foi só queda de
+    // rede - e deixa claro que não foi por engano.
+    const DR = LK.DisconnectReason;
+    const terminal = reason === DR.DUPLICATE_IDENTITY || reason === DR.PARTICIPANT_REMOVED ||
+      reason === DR.ROOM_DELETED || reason === DR.ROOM_CLOSED;
+    if (!terminal && reason !== DR.CLIENT_INITIATED) {
+      showToast('A conexão da call caiu. Entra de novo quando a rede voltar.', 4000);
+    }
+    leaveRoom();
   });
 }
 
@@ -3404,6 +3418,7 @@ function recentlyInVoiceChannel(userId, channelId) {
 
 function voiceChannelOccupants(channelId) {
   const out = [];
+  const seenIds = new Set();
   // minha própria entrada vem sempre do estado LOCAL (activeVoiceChannel/
   // state.screen.sharing), nunca do cache remoto de presença — o cache só
   // atualiza depois de um round-trip pro servidor, então logo após sair de
@@ -3418,15 +3433,40 @@ function voiceChannelOccupants(channelId) {
       avatar: currentProfile ? currentProfile.avatar_url : null,
       sharingScreen: state.screen.sharing,
     });
+    seenIds.add(currentUser.id);
   }
-  if (!serverPresenceChannel) return out;
-  const state_ = serverPresenceChannel.presenceState();
-  for (const [userId, metas] of Object.entries(state_)) {
-    if (userId === currentUser.id) continue; // já tratado acima com o estado local
-    const meta = metas[0];
-    if (meta && meta.voiceChannelId === channelId) {
-      out.push({ id: userId, ...meta });
-      voiceOccupancyLastSeen.set(userId, { channelId, ts: Date.now() });
+  if (serverPresenceChannel) {
+    const state_ = serverPresenceChannel.presenceState();
+    for (const [userId, metas] of Object.entries(state_)) {
+      if (userId === currentUser.id) continue; // já tratado acima com o estado local
+      const meta = metas[0];
+      if (meta && meta.voiceChannelId === channelId) {
+        out.push({ id: userId, ...meta });
+        seenIds.add(userId);
+        voiceOccupancyLastSeen.set(userId, { channelId, ts: Date.now() });
+      }
+    }
+  }
+  // Rede de segurança: se EU estou nessa mesma call agora, o roster do
+  // próprio LiveKit (lkRoom.remoteParticipants) é fonte de verdade mais
+  // confiável que a presença do Supabase pra "quem está na call" - essa
+  // presença depende de um canal Realtime À PARTE (server:<serverId>) que
+  // pode ficar preso/atrasado (rede ruim, janela minimizada etc.) sem que a
+  // pessoa tenha de fato saído da call de verdade. O LiveKit em si nunca
+  // mente sobre quem está conectado na sala - usa pra completar quem o
+  // presence ainda não pegou, nunca pra remover ninguém.
+  if (lkRoom && activeVoiceChannel && activeVoiceChannel.id === channelId) {
+    for (const participant of lkRoom.remoteParticipants.values()) {
+      if (seenIds.has(participant.identity)) continue;
+      const info = memberInfo(participant.identity);
+      out.push({
+        id: participant.identity,
+        name: info.name,
+        avatar: info.avatar,
+        sharingScreen: participant.isScreenShareEnabled,
+      });
+      seenIds.add(participant.identity);
+      voiceOccupancyLastSeen.set(participant.identity, { channelId, ts: Date.now() });
     }
   }
   return out;

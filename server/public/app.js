@@ -1182,16 +1182,29 @@ function setupLiveKitRoomEvents(room) {
     if (lkRoom !== room) return;
     // O LiveKit já tenta reconectar sozinho por baixo dos panos
     // (RoomEvent.Reconnecting/Reconnected) antes de disparar Disconnected -
-    // chegar aqui significa que ele desistiu, ou que o motivo é definitivo
-    // (identidade duplicada, expulso, sala apagada/fechada). Mesmo nesses
-    // casos ainda chamamos leaveRoom() pra limpar o estado direito, mas
-    // diferenciar o motivo evita um toast de pânico quando foi só queda de
-    // rede - e deixa claro que não foi por engano.
+    // chegar aqui significa que ele desistiu, ou que o motivo é definitivo.
+    // Cada motivo tem um aviso próprio (em vez de um genérico "caiu") porque
+    // já apareceu caso real de desconexão sem explicação nenhuma pro usuário
+    // (reason != CLIENT_INITIATED mas também != os poucos que a gente tratava
+    // antes) - até descobrir a causa de raiz, é melhor o usuário conseguir
+    // nos dizer exatamente qual motivo apareceu do que ficar no escuro de
+    // novo. O nome do enum vai junto do texto só pra isso.
     const DR = LK.DisconnectReason;
-    const terminal = reason === DR.DUPLICATE_IDENTITY || reason === DR.PARTICIPANT_REMOVED ||
-      reason === DR.ROOM_DELETED || reason === DR.ROOM_CLOSED;
-    if (!terminal && reason !== DR.CLIENT_INITIATED) {
-      showToast('A conexão da call caiu. Entra de novo quando a rede voltar.', 4000);
+    const MESSAGES = {
+      [DR.DUPLICATE_IDENTITY]: 'Essa conta entrou na call de outro dispositivo, então essa sessão foi desconectada.',
+      [DR.SERVER_SHUTDOWN]: 'O servidor de voz reiniciou. Entra de novo na call.',
+      [DR.PARTICIPANT_REMOVED]: 'Você foi removido dessa call.',
+      [DR.ROOM_DELETED]: 'Essa sala de voz foi encerrada.',
+      [DR.STATE_MISMATCH]: 'A conexão da call ficou inconsistente e precisou ser reiniciada. Entra de novo.',
+      [DR.JOIN_FAILURE]: 'Não foi possível entrar na call.',
+      [DR.MIGRATION]: 'A call precisou trocar de servidor e a conexão caiu. Entra de novo.',
+      [DR.SIGNAL_CLOSE]: 'A conexão da call caiu. Entra de novo quando a rede voltar.',
+      [DR.ROOM_CLOSED]: 'Essa sala de voz foi fechada.',
+    };
+    if (reason !== DR.CLIENT_INITIATED) {
+      const reasonName = Object.keys(DR).find((k) => DR[k] === reason) || reason;
+      const base = MESSAGES[reason] || 'A conexão da call caiu.';
+      showToast(`${base} (motivo: ${reasonName})`, 6000);
     }
     leaveRoom();
   });
@@ -6375,6 +6388,9 @@ const CHANGELOG = {
     'Novo: push-to-talk (segurar pra falar) — ativa em Configurações > Voz e grava a tecla (ou botão lateral do mouse) que abre o microfone só enquanto segurada.',
     'Novo: auto-ducking — liga em Configurações > Voz pra abaixar automaticamente o volume de quem não está falando, ajuda a entender melhor quando várias pessoas falam ao mesmo tempo.',
     'Novo: redução de ruído avançada (RNNoise) pro microfone, em Configurações > Voz — opcional, corta ruído de fundo bem melhor que a redução padrão.',
+  ],
+  '4.6.1': [
+    'Melhorado: desconexão da call agora sempre mostra um aviso explicando o motivo (em vez de sumir sem explicação em alguns casos) — ajuda a identificar a causa de quedas que ainda não têm explicação clara.',
   ],
 };
 

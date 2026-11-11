@@ -2090,6 +2090,56 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .dock-btn.dock-hangup { background: var(--danger); border-color: var(--danger); color: white; }
 .dock-btn.dock-hangup:hover { background: var(--danger-hover); border-color: var(--danger-hover); }
 
+/* botão de compartilhar tela: design específico (ver changelog) - verde
+   pulsante e ondas de "transmissão" animadas quando ligado, em vez do azul
+   genérico dos outros botões do dock que ligam/desligam fonte. */
+#shareBtn.dock-btn {
+  position: relative;
+  background: #262626;
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px #333333;
+  color: #F5F5F5;
+  transition: background 0.18s, transform 0.15s, box-shadow 0.2s;
+}
+#shareBtn.dock-btn:hover { background: #2E2E2E; transform: translateY(-2px); }
+#shareBtn.dock-btn:active { transform: scale(0.92); }
+#shareBtn.dock-btn.active,
+#shareBtn.dock-btn.primary {
+  background: #22C55E;
+  border-color: transparent;
+  color: #0A0A0A;
+  box-shadow: 0 0 16px rgba(34, 197, 94, 0.45);
+}
+#shareBtn.dock-btn.active:hover { background: #2BD66A; filter: none; }
+#shareBtn .dock-share-ring { display: none; }
+#shareBtn.active .dock-share-ring {
+  display: block;
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid #22C55E;
+  animation: dockShareRing 1.6s ease-out infinite;
+  pointer-events: none;
+}
+#shareBtn.active svg { animation: dockShareIn 0.3s ease-out; }
+.dock-share-wave1 { opacity: 0.9; }
+.dock-share-wave2 { opacity: 0.55; }
+#shareBtn.active .dock-share-wave1 { animation: dockShareWave 1.4s ease-in-out infinite; }
+#shareBtn.active .dock-share-wave2 { animation: dockShareWave 1.4s ease-in-out 0.35s infinite; }
+@keyframes dockShareRing {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+@keyframes dockShareIn {
+  0% { transform: scale(0.6); }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+@keyframes dockShareWave {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
 .theme-picker { display: flex; gap: 10px; margin: 10px 0 4px; flex-wrap: wrap; }
 .theme-swatch-btn {
   display: flex;

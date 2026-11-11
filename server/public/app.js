@@ -6453,6 +6453,10 @@ const CHANGELOG = {
     'Corrigido: numa call só de câmera/voz (sem ninguém compartilhando tela), todo mundo ficava espremido numa tirinha pequena com a tela toda vazia por baixo — agora a câmera usa o espaço de verdade, igual acontece quando alguém compartilha a tela.',
     'Corrigido: o canal usado pra avisar que um anexo (imagem/arquivo) está disponível pra download podia cair e nunca mais se reconectar sozinho, fazendo o download falhar silenciosamente mesmo com quem mandou online — agora ele se reconecta automaticamente, igual já acontecia com a lista de quem está online.',
   ],
+  '4.6.3': [
+    '!!BIG!!MARCO FINALMENTE ATUALIZEI A PORRA DO BOTÃO QUE VOCE QUERIA',
+    'Botão de "Compartilhar tela" com visual novo — verde pulsante e ícone animado quando ligado, em vez do botão genérico antigo.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

@@ -279,7 +279,16 @@
           <span>Câmera</span>
         </button>
         <button id="shareBtn" class="dock-btn" type="button" title="Compartilhar tela">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span class="dock-share-ring" aria-hidden="true"></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="4" width="19" height="13" rx="3"></rect>
+            <path d="M9 21h6M12 17v4"></path>
+            <circle cx="12" cy="10.5" r="1.4" fill="currentColor" stroke="none"></circle>
+            <path class="dock-share-wave1" d="M9.2 7.9a4 4 0 0 0 0 5.2"></path>
+            <path class="dock-share-wave1" d="M14.8 7.9a4 4 0 0 1 0 5.2"></path>
+            <path class="dock-share-wave2" d="M6.9 6.2a7 7 0 0 0 0 8.6"></path>
+            <path class="dock-share-wave2" d="M17.1 6.2a7 7 0 0 1 0 8.6"></path>
+          </svg>
           <span>Compartilhar tela</span>
         </button>
         <button id="interactiveShareBtn" class="dock-btn icon-only hidden" type="button" title="Transmissão interativa — deixar alguém da call te controlar">

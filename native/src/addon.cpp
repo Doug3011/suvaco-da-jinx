@@ -117,7 +117,21 @@ static std::vector<AppInfo> EnumerateAudioApps() {
       std::wstring imgPath = ProcessImagePath(pid);
       if (!imgPath.empty() && _wcsicmp(imgPath.c_str(), OwnExecutablePath().c_str()) == 0) continue;
 
-      result.push_back({ pid, ProcessNameFromPid(pid) });
+      // Pedido explícito do usuário: o Discord nunca deve ser capturado, em
+      // momento nenhum - nem precisa estar na lista "sempre mutar" pra isso
+      // (elimina de vez a dependência de marcar o checkbox certo, e qualquer
+      // bug futuro ali). Cobre os canais beta/alpha do próprio Discord
+      // também (PTB/Canary/Development), que rodam como exe com nome
+      // diferente do estável.
+      std::wstring name = ProcessNameFromPid(pid);
+      if (_wcsicmp(name.c_str(), L"Discord") == 0 ||
+          _wcsicmp(name.c_str(), L"DiscordPTB") == 0 ||
+          _wcsicmp(name.c_str(), L"DiscordCanary") == 0 ||
+          _wcsicmp(name.c_str(), L"DiscordDevelopment") == 0) {
+        continue;
+      }
+
+      result.push_back({ pid, name });
     }
   } while (false);
 

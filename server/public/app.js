@@ -6457,6 +6457,9 @@ const CHANGELOG = {
     '!!BIG!!MARCO FINALMENTE ATUALIZEI A PORRA DO BOTÃO QUE VOCE QUERIA',
     'Botão de "Compartilhar tela" com visual novo — verde pulsante e ícone animado quando ligado, em vez do botão genérico antigo.',
   ],
+  '4.6.4': [
+    'O Discord agora nunca entra no áudio da sua transmissão de tela, em hipótese nenhuma — não depende mais de marcar ele na lista "sempre mutar".',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

@@ -5938,6 +5938,9 @@ const CHANGELOG = {
     'Corrigido: mutar um app bem na hora que ele aparecia na lista às vezes não fazia efeito nenhum.',
     'Corrigido: quem minimizava o Ribbit pra bandeja durante uma call podia sumir da lista "Na call"/aparecer Offline pros outros por vários minutos, mesmo seguindo ativo (compartilhando tela, por exemplo) — o Windows/Chromium throttla demais uma janela escondida, o que atrasava demais a atualização de presença.',
   ],
+  '4.5.3': [
+    'Mute de apps na transmissão refeito do zero: agora só existe a lista "sempre mutar" nas Configurações (tirei o painel "Nesta sessão", que só confundia e dava bug). A lista de apps com som se atualiza sozinha a cada poucos segundos enquanto você compartilha, então um app que você abrir depois de já estar compartilhando (um jogo, uma notificação do Discord) também entra pra ser mutado, não só os que já estavam tocando som no começo.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

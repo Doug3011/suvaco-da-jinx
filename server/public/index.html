@@ -583,6 +583,14 @@
                 <span class="switch-track"><span class="switch-knob"></span></span>
               </label>
             </div>
+            <div class="settings-row-switch-inline">
+              <span class="settings-card-label-plain">Redução de ruído avançada (RNNoise)</span>
+              <label class="switch">
+                <input type="checkbox" id="rnnoiseCheck" />
+                <span class="switch-track"><span class="switch-knob"></span></span>
+              </label>
+            </div>
+            <p class="settings-hint">RNNoise usa uma rede neural leve pra cortar ruído de fundo (teclado, ventilador, ruído de rua) bem melhor que a redução padrão do navegador — some com a próxima vez que o microfone ligar. Se não carregar por qualquer motivo, o microfone continua funcionando normal, só sem o filtro extra.</p>
             <p class="settings-hint">Com isso ligado dá pra conversar com quem está na sala sem precisar compartilhar tela ou câmera — igual uma chamada de voz. Use o botão de microfone na barra inferior pra mutar/desmutar a qualquer momento.</p>
             <div class="divider-line"><span>push-to-talk</span></div>
             <div class="settings-row-switch-inline">
@@ -995,6 +1003,13 @@
 
   <script src="/vendor/supabase.js"></script>
   <script src="/vendor/livekit-client.js"></script>
+  <script type="module">
+    // @sapphi-red/web-noise-suppressor v0.4.1 só vem como ESM/CJS, sem build
+    // UMD pra script clássico - carrega como módulo e pendura o que o
+    // app.js (script clássico) precisa em window, igual os outros vendors.
+    import { loadRnnoise, RnnoiseWorkletNode } from '/vendor/noise-suppressor/index.js';
+    window.NoiseSuppressor = { loadRnnoise, RnnoiseWorkletNode };
+  </script>
   <script src="/supabase-config.js"></script>
   <script src="/app.js"></script>
 </body>

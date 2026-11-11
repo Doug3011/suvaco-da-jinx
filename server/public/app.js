@@ -236,6 +236,7 @@ const els = {
   pushToTalkCheck: document.getElementById('pushToTalkCheck'),
   pushToTalkBindBtn: document.getElementById('pushToTalkBindBtn'),
   autoDuckingCheck: document.getElementById('autoDuckingCheck'),
+  rnnoiseCheck: document.getElementById('rnnoiseCheck'),
   refreshPermMuteBtn: document.getElementById('refreshPermMuteBtn'),
   permMuteList: document.getElementById('permMuteList'),
   soundboardBtn: document.getElementById('soundboardBtn'),
@@ -1202,6 +1203,7 @@ function loadSettings() {
     resolution: '1920x1080',
     fps: 30,
     noiseSuppression: true,
+    rnnoiseEnabled: false,
     bandwidthKbps: null,
     hideCursor: true,
     micDeviceId: '',
@@ -1260,6 +1262,7 @@ els.autoMicCheck.checked = state.settings.autoMic;
 els.pushToTalkCheck.checked = state.settings.pushToTalkEnabled;
 renderPushToTalkBindBtn();
 els.autoDuckingCheck.checked = state.settings.autoDuckingEnabled;
+els.rnnoiseCheck.checked = state.settings.rnnoiseEnabled;
 els.chatNotificationsCheck.checked = state.settings.chatNotifications;
 els.remoteAdminCheck.checked = state.settings.remoteAdminEnabled;
 els.clipEnabledCheck.checked = state.settings.clipEnabled;
@@ -1328,6 +1331,14 @@ els.fpsSelect.addEventListener('change', () => {
 els.noiseSuppressionCheck.addEventListener('change', () => {
   state.settings.noiseSuppression = els.noiseSuppressionCheck.checked;
   saveSettings();
+});
+els.rnnoiseCheck.addEventListener('change', () => {
+  state.settings.rnnoiseEnabled = els.rnnoiseCheck.checked;
+  saveSettings();
+  // só vale pra próxima vez que o mic ligar - trocar o grafo de áudio com o
+  // mic já no ar seria mais um lugar pra dar bug de reconexão (mesma lição
+  // dos bugs de áudio já corrigidos essa sessão); mutar/desmutar e sair/
+  // entrar da call já reconstrói o grafo do zero de qualquer forma.
 });
 els.hideCursorCheck.addEventListener('change', () => {
   state.settings.hideCursor = els.hideCursorCheck.checked;
@@ -4794,7 +4805,42 @@ function setBtnLabel(btn, text) {
    `track.enabled`) — dá no mesmo resultado, mas agora o mic de verdade é a
    entrada do grafo, não a track que sai pro RTCPeerConnection. */
 
-const micMix = { ctx: null, destination: null, micSource: null, micGain: null };
+const micMix = { ctx: null, destination: null, micSource: null, micGain: null, rnnoiseNode: null };
+
+// Binário do WASM é cacheado (fetch só na primeira vez que alguém liga o
+// RNNoise); já o nó do worklet (RnnoiseWorkletNode) precisa ser recriado
+// TODA vez que o mic liga, porque audioWorklet.addModule() é por
+// AudioContext, e micMix.ctx é recriado do zero a cada startMicShare.
+let rnnoiseWasmBinaryPromise = null;
+function getRnnoiseWasmBinary() {
+  if (!rnnoiseWasmBinaryPromise) {
+    rnnoiseWasmBinaryPromise = window.NoiseSuppressor.loadRnnoise({
+      url: '/vendor/noise-suppressor/rnnoise.wasm',
+      simdUrl: '/vendor/noise-suppressor/rnnoise_simd.wasm',
+    });
+  }
+  return rnnoiseWasmBinaryPromise;
+}
+
+// Conecta o RNNoise entre o gain do mic e o destino final, se estiver
+// ligado nas Configurações - devolve o próprio micGainNode sem mudar nada
+// se estiver desligado OU se qualquer parte do carregamento falhar
+// (WASM/worklet não suportado, rede, etc.). Nunca deixa isso derrubar o
+// microfone - na pior hipótese, só segue sem o filtro extra.
+async function connectRnnoiseIfEnabled(ctx, micGainNode) {
+  if (!state.settings.rnnoiseEnabled) return micGainNode;
+  try {
+    await ctx.audioWorklet.addModule('/vendor/noise-suppressor/rnnoise/workletProcessor.js');
+    const wasmBinary = await getRnnoiseWasmBinary();
+    const node = new window.NoiseSuppressor.RnnoiseWorkletNode(ctx, { maxChannels: 1, wasmBinary });
+    micGainNode.connect(node);
+    micMix.rnnoiseNode = node;
+    return node;
+  } catch (err) {
+    console.warn('RNNoise não carregou, seguindo com o microfone sem ele:', err);
+    return micGainNode;
+  }
+}
 
 async function startMicShare() {
   if (state.mic.sharing || !lkRoom) return;
@@ -4806,7 +4852,10 @@ async function startMicShare() {
   }
   state.mic.micStream = stream;
 
-  micMix.ctx = new AudioContext();
+  // RNNoise assume sample rate de 48kHz - força isso no contexto (sem essa
+  // opção, o AudioContext podia nascer com o sample rate "nativo" do
+  // dispositivo, que no Windows costuma ser 48000 mas não é garantido).
+  micMix.ctx = new AudioContext({ sampleRate: 48000 });
   micMix.destination = micMix.ctx.createMediaStreamDestination();
   micMix.micSource = micMix.ctx.createMediaStreamSource(stream);
   micMix.micGain = micMix.ctx.createGain();
@@ -4818,7 +4867,9 @@ async function startMicShare() {
   // applyMicGain).
   pushToTalkKeyHeld = false;
   applyMicGain();
-  micMix.micSource.connect(micMix.micGain).connect(micMix.destination);
+  micMix.micSource.connect(micMix.micGain);
+  const chainOutput = await connectRnnoiseIfEnabled(micMix.ctx, micMix.micGain);
+  chainOutput.connect(micMix.destination);
 
   state.mic.localTracks = micMix.destination.stream.getAudioTracks();
   state.mic.sharing = true;
@@ -4838,6 +4889,7 @@ function stopMicShare() {
   state.mic.localTracks = [];
   if (micMix.micSource) { micMix.micSource.disconnect(); micMix.micSource = null; }
   if (micMix.micGain) { micMix.micGain.disconnect(); micMix.micGain = null; }
+  if (micMix.rnnoiseNode) { micMix.rnnoiseNode.destroy(); micMix.rnnoiseNode.disconnect(); micMix.rnnoiseNode = null; }
   if (micMix.ctx) { micMix.ctx.close(); micMix.ctx = null; micMix.destination = null; }
   // qualquer som do soundboard que estivesse tocando nesse contexto morreu
   // junto com ele — limpa as referências pra não ficar lixo apontando pra

@@ -6460,6 +6460,9 @@ const CHANGELOG = {
   '4.6.4': [
     'O Discord agora nunca entra no áudio da sua transmissão de tela, em hipótese nenhuma — não depende mais de marcar ele na lista "sempre mutar".',
   ],
+  '4.6.5': [
+    'Corrigido bug sério: qualquer app com som ativo (um vídeo, um jogo) vazava o áudio de TODOS os outros apps rodando no PC junto, inclusive o Discord — a captura por app estava isolando errado desde a reescrita. Agora cada app transmite só o próprio som, isolado de verdade.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

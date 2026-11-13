@@ -227,15 +227,22 @@ class CaptureSession {
     AUDIOCLIENT_ACTIVATION_PARAMS params = {};
     params.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
     params.ProcessLoopbackParams.TargetProcessId = pid_;
-    // EXCLUDE, nao INCLUDE: cada processo com sessao propria (ex: um jogo
-    // lancado pela Steam) ja vira sua PROPRIA linha/captura em
-    // EnumerateAudioApps + CaptureSession - nao precisa "puxar a arvore"
-    // pra pegar o audio dele. Com INCLUDE_TARGET_PROCESS_TREE, a captura do
-    // PROCESSO PAI (ex: steam.exe, se nao estiver mutado) reconstruia e
-    // vazava o audio do FILHO mesmo com o filho mutado e com a captura dele
-    // corretamente parada - o pai, sendo capturado "com a arvore inteira",
-    // recapturava o mesmo audio por fora do mute.
-    params.ProcessLoopbackParams.ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE;
+    // INCLUDE, nao EXCLUDE - bug real reportado em uso: com EXCLUDE (versao
+    // anterior), capturar QUALQUER app (ex: um player de video) na verdade
+    // capturava o audio de TODO MUNDO MENOS esse app - ou seja, o Discord
+    // (e qualquer outro processo não relacionado) vazava pra dentro da
+    // captura de QUALQUER OUTRO app que estivesse tocando som, o tempo
+    // todo. Só não vazava quando NADA mais estava sendo capturado (nenhuma
+    // CaptureSession rodando) - exatamente o sintoma relatado ("sem som
+    // saindo não vaza, com vídeo/som vaza junto").
+    // EXCLUDE tinha sido escolhido pra resolver um problema mais estreito
+    // (processo PAI com sessao propria, ex: steam.exe, capturado com a
+    // arvore inteira recapturava o audio de um FILHO mesmo com o filho
+    // mutado à parte) - mas o preço foi capturar o resto do sistema inteiro
+    // junto, que é muito pior. Com INCLUDE_TARGET_PROCESS_TREE, cada
+    // captura isola de verdade só o app alvo (+ filhos dele), que é a
+    // garantia que esse recurso promete.
+    params.ProcessLoopbackParams.ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
 
     PROPVARIANT activateParams;
     PropVariantInit(&activateParams);

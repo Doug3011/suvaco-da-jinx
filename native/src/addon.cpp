@@ -176,21 +176,26 @@ static std::vector<AppInfo> EnumerateAudioApps() {
           : (_wcsicmp(name.c_str(), OwnExecutableBaseName().c_str()) == 0);
       if (isSelf) continue;
 
-      // Pedido explícito do usuário: o Discord nunca deve ser capturado, em
-      // momento nenhum - nem precisa estar na lista "sempre mutar" pra isso.
-      // Prefixo "Discord" (não nome exato) cobre PTB/Canary/Development E,
-      // mais importante, helpers como DiscordSystemHelper.exe - processo
-      // sandboxed cujo pai (launcher) já sai assim que termina de lançá-lo,
-      // então ProcessImagePath() falha nele (técnica comum de hardening) e
-      // só o nome via snapshot (ver ProcessBaseNameViaSnapshot) consegue
-      // identificar. Esse era o buraco real: a call de voz do Discord (e,
-      // pelo mesmo motivo, processos helper de OUTROS apps - jogos via
-      // Steam, navegadores etc.) tocava áudio por um PID que nunca batia
-      // com "Discord" exato nem aparecia na lista pra mutar manualmente -
-      // só "PID NNNN" solto, impossível de reconhecer ou mutar de forma
-      // confiável (o PID muda a cada sessão).
+      // Pedido do usuário: Discord volta a ser um app mutável NORMAL (igual
+      // qualquer outro) - não fica mais excluído incondicionalmente da
+      // captura. O problema real nunca foi "o Discord precisa ser
+      // bloqueado"; era que a call de voz dele roda em processos helper
+      // sandboxed (ex: DiscordSystemHelper.exe) cujo pai (launcher) já saiu
+      // assim que termina de lançá-los - ProcessImagePath() falha nesses,
+      // então só o nome via snapshot (ProcessBaseNameViaSnapshot) consegue
+      // identificar. Sem normalizar, cada helper aparecia na lista de
+      // "sempre mutar" com seu PRÓPRIO nome de processo (ex:
+      // "DiscordSystemHelper" separado de "Discord") - marcar só o
+      // checkbox "Discord" não mutava os helpers, e um helper novo podia
+      // surgir já tocando som (ex: quando o Discord liga seu próprio
+      // processamento de eco/ruído ao notar outro app também tocando som)
+      // sem nunca ter aparecido antes pra ser marcado - daí o vazamento
+      // "só quando tem outro som rolando" reportado. Normalizando pelo
+      // PREFIXO "Discord" (cobre .exe normal, PTB, Canary E os helpers)
+      // pro mesmo nome canônico, todo processo da família Discord cai no
+      // MESMO checkbox/grupo sempre, não importa quando ele apareceu.
       bool isDiscordFamily = name.size() >= 7 && _wcsnicmp(name.c_str(), L"Discord", 7) == 0;
-      if (isDiscordFamily) continue;
+      if (isDiscordFamily) name = L"Discord";
 
       result.push_back({ pid, name });
     }

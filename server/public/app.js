@@ -6466,6 +6466,9 @@ const CHANGELOG = {
   '4.6.6': [
     'Corrigido: a chamada de voz do Discord (e, pelo mesmo motivo, de outros apps como jogos via Steam) vinha de um processo "ajudante" que não conseguia ser identificado pelo nome e passava despercebido de qualquer mute — agora é reconhecido e excluído/mutado direito.',
   ],
+  '4.6.7': [
+    'O Discord volta a ser um app mutável normal nas Configurações (não fica mais sempre bloqueado) — e agora TODOS os processos dele, incluindo os da chamada de voz, caem debaixo do mesmo "Discord" na lista, então um único toggle muta a call inteira.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

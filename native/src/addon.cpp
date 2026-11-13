@@ -12,6 +12,7 @@
 #include <wrl/client.h>
 #include <wrl/implements.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 #include <string>
 #include <thread>
 #include <atomic>
@@ -44,11 +45,47 @@ static std::wstring ProcessImagePath(DWORD pid) {
   return result;
 }
 
+// Alguns processos (helpers sandboxed/protegidos - ex: DiscordSystemHelper.exe,
+// e o equivalente de outros apps com arquitetura parecida - jogos via
+// Steam, browsers Chromium etc.) negam PROCESS_QUERY_LIMITED_INFORMATION
+// mesmo sendo esse o nível MAIS permissivo que existe pra isso - geralmente
+// porque o processo que os lançou (o "broker"/launcher) já saiu, quebrando
+// de propósito o rastro de quem é o pai - técnica comum de hardening de
+// sandbox. ProcessImagePath() falha nesse caso, e ProcessNameFromPid()
+// caía pro fallback genérico "PID NNNN" - isso escondia o processo de
+// qualquer exclusão (ou mute manual) baseada em nome, mesmo ele sendo o
+// dono de verdade do áudio sendo tocado (ex: a chamada de voz do Discord).
+// CreateToolhelp32Snapshot lê a lista de processos direto do kernel sem
+// precisar abrir handle nenhum pro processo alvo - não dá o caminho
+// completo, mas dá o nome base do exe, que é tudo que a gente precisa.
+static std::wstring ProcessBaseNameViaSnapshot(DWORD pid) {
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snap == INVALID_HANDLE_VALUE) return L"";
+  PROCESSENTRY32W entry = {};
+  entry.dwSize = sizeof(entry);
+  std::wstring result;
+  if (Process32FirstW(snap, &entry)) {
+    do {
+      if (entry.th32ProcessID == pid) {
+        result = entry.szExeFile;
+        break;
+      }
+    } while (Process32NextW(snap, &entry));
+  }
+  CloseHandle(snap);
+  return result;
+}
+
 static std::wstring ProcessNameFromPid(DWORD pid) {
   std::wstring full = ProcessImagePath(pid);
-  if (full.empty()) return L"PID " + std::to_wstring(pid);
-  size_t slash = full.find_last_of(L"\\");
-  std::wstring name = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+  std::wstring name;
+  if (!full.empty()) {
+    size_t slash = full.find_last_of(L"\\");
+    name = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+  } else {
+    name = ProcessBaseNameViaSnapshot(pid);
+    if (name.empty()) return L"PID " + std::to_wstring(pid);
+  }
   size_t dot = name.find_last_of(L".");
   if (dot != std::wstring::npos) name = name.substr(0, dot);
   return name;
@@ -66,6 +103,24 @@ static const std::wstring& OwnExecutablePath() {
     return std::wstring(buf, len);
   }();
   return path;
+}
+
+// Nome base (sem path, sem extensão) do nosso próprio executável - usado só
+// como fallback de auto-exclusão quando um processo FILHO nosso é protegido/
+// sandboxed o bastante pra ProcessImagePath() falhar nele (mesmo caso do
+// DiscordSystemHelper.exe, ver ProcessBaseNameViaSnapshot) - sem isso, um
+// filho nosso assim caía como "PID NNNN" solto, fora do grupo "Ribbit",
+// capturável/mutável por engano.
+static const std::wstring& OwnExecutableBaseName() {
+  static std::wstring base = [] {
+    const std::wstring& full = OwnExecutablePath();
+    size_t slash = full.find_last_of(L"\\");
+    std::wstring name = (slash == std::wstring::npos) ? full : full.substr(slash + 1);
+    size_t dot = name.find_last_of(L".");
+    if (dot != std::wstring::npos) name = name.substr(0, dot);
+    return name;
+  }();
+  return base;
 }
 
 static std::vector<AppInfo> EnumerateAudioApps() {
@@ -110,26 +165,32 @@ static std::vector<AppInfo> EnumerateAudioApps() {
       // TOCA o áudio da call (inclusive o que você está assistindo), então
       // incluí-lo aqui deixava recapturar e remixar esse mesmo áudio de
       // volta na sua própria transmissão - vazamento, som duplicado e
-      // retorno crescente quando não estava perfeitamente mutado (e, pra
-      // processos filhos cujo nome falhava em resolver, nem dava pra mutar
-      // de jeito nenhum - cada um caía como um "PID NNNN" solto, separado
-      // do grupo "Ribbit").
+      // retorno crescente quando não estava perfeitamente mutado.
       std::wstring imgPath = ProcessImagePath(pid);
-      if (!imgPath.empty() && _wcsicmp(imgPath.c_str(), OwnExecutablePath().c_str()) == 0) continue;
+      std::wstring name = ProcessNameFromPid(pid);
+      bool isSelf = !imgPath.empty()
+          ? (_wcsicmp(imgPath.c_str(), OwnExecutablePath().c_str()) == 0)
+          // path não resolveu (processo filho sandboxed) - compara por nome
+          // base como último recurso, já que ProcessNameFromPid agora
+          // também cai pro nome via snapshot nesse caso (ver comentário lá).
+          : (_wcsicmp(name.c_str(), OwnExecutableBaseName().c_str()) == 0);
+      if (isSelf) continue;
 
       // Pedido explícito do usuário: o Discord nunca deve ser capturado, em
-      // momento nenhum - nem precisa estar na lista "sempre mutar" pra isso
-      // (elimina de vez a dependência de marcar o checkbox certo, e qualquer
-      // bug futuro ali). Cobre os canais beta/alpha do próprio Discord
-      // também (PTB/Canary/Development), que rodam como exe com nome
-      // diferente do estável.
-      std::wstring name = ProcessNameFromPid(pid);
-      if (_wcsicmp(name.c_str(), L"Discord") == 0 ||
-          _wcsicmp(name.c_str(), L"DiscordPTB") == 0 ||
-          _wcsicmp(name.c_str(), L"DiscordCanary") == 0 ||
-          _wcsicmp(name.c_str(), L"DiscordDevelopment") == 0) {
-        continue;
-      }
+      // momento nenhum - nem precisa estar na lista "sempre mutar" pra isso.
+      // Prefixo "Discord" (não nome exato) cobre PTB/Canary/Development E,
+      // mais importante, helpers como DiscordSystemHelper.exe - processo
+      // sandboxed cujo pai (launcher) já sai assim que termina de lançá-lo,
+      // então ProcessImagePath() falha nele (técnica comum de hardening) e
+      // só o nome via snapshot (ver ProcessBaseNameViaSnapshot) consegue
+      // identificar. Esse era o buraco real: a call de voz do Discord (e,
+      // pelo mesmo motivo, processos helper de OUTROS apps - jogos via
+      // Steam, navegadores etc.) tocava áudio por um PID que nunca batia
+      // com "Discord" exato nem aparecia na lista pra mutar manualmente -
+      // só "PID NNNN" solto, impossível de reconhecer ou mutar de forma
+      // confiável (o PID muda a cada sessão).
+      bool isDiscordFamily = name.size() >= 7 && _wcsnicmp(name.c_str(), L"Discord", 7) == 0;
+      if (isDiscordFamily) continue;
 
       result.push_back({ pid, name });
     }

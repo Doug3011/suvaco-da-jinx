@@ -6463,6 +6463,9 @@ const CHANGELOG = {
   '4.6.5': [
     'Corrigido bug sério: qualquer app com som ativo (um vídeo, um jogo) vazava o áudio de TODOS os outros apps rodando no PC junto, inclusive o Discord — a captura por app estava isolando errado desde a reescrita. Agora cada app transmite só o próprio som, isolado de verdade.',
   ],
+  '4.6.6': [
+    'Corrigido: a chamada de voz do Discord (e, pelo mesmo motivo, de outros apps como jogos via Steam) vinha de um processo "ajudante" que não conseguia ser identificado pelo nome e passava despercebido de qualquer mute — agora é reconhecido e excluído/mutado direito.',
+  ],
 };
 
 // Boas-vindas: aparece pra toda conta nova (justCreatedAccount, setado no

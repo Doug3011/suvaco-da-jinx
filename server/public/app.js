@@ -1067,6 +1067,23 @@ const tileVideoTracks = new Map();
 const tileStatsPrev = new Map(); // tileKey -> { bytes, ts } (pra calcular kbps por delta)
 const tileStatsLatest = new Map(); // tileKey -> snapshot pro painel do inspetor
 
+/* ---------------- fallback: mesh P2P via Supabase Realtime ----------------
+   Usado só quando o LiveKit falha ao conectar (ex: cota de minutos do
+   projeto excedida - "connection minutes limit exceeded" do lado do
+   LiveKit Cloud). joinVoiceChannel sempre tenta o LiveKit primeiro; só cai
+   aqui no catch. É uma reconstrução do sistema usado até a v4.4.x (removido
+   por completo na migração pro LiveKit) - consome as MESMAS
+   state.<fonte>.localTracks que a pipeline de captura já produz hoje, só
+   muda quem recebe essa track. Sem controle remoto nesse modo (ver
+   canUseRemoteAdmin) - reconstruir o canal de controle por cima do mesh não
+   valia a complexidade extra pra um recurso secundário. */
+let usingMeshFallback = false;
+let meshChannel = null; // Realtime channel voice:<channelId>
+const meshWatchPcs = new Map(); // tileKey -> RTCPeerConnection (eu assistindo)
+const meshBroadcastPcs = new Map(); // tileKey -> RTCPeerConnection (eu transmitindo pra alguém)
+const meshPresenceInfo = new Map(); // peerId -> { name, avatar, sharingScreen, sharingCamera, sharingMic }
+const MESH_PRESENCE_FIELD = { screen: 'sharingScreen', camera: 'sharingCamera', mic: 'sharingMic' };
+
 function lkSourceToLocal(source) {
   const LK = window.LivekitClient;
   if (!LK) return null;
@@ -1152,7 +1169,7 @@ function removeAllTilesFor(identity) {
 }
 
 function updatePeopleCount() {
-  const count = lkRoom ? lkRoom.remoteParticipants.size + 1 : 0;
+  const count = usingMeshFallback ? meshPresenceInfo.size + 1 : lkRoom ? lkRoom.remoteParticipants.size + 1 : 0;
   els.peopleCount.textContent = `· ${count} na sala`;
 }
 
@@ -1854,6 +1871,7 @@ function trackLkSource(source, track) {
 }
 
 async function publishLocalSource(source) {
+  if (usingMeshFallback) { meshAnnounceShareStart(source); return; }
   if (!lkRoom) return;
   const tracks = state[source].localTracks;
   if (!tracks.length) return;
@@ -1877,6 +1895,7 @@ async function publishLocalSource(source) {
 // track aqui quebraria reapplyBandwidthLimit, que despublica e republica a
 // MESMA track pra aplicar uma config nova sem recompartilhar.
 async function unpublishLocalSource(source) {
+  if (usingMeshFallback) { meshAnnounceShareStop(source); return; }
   if (!lkRoom) return;
   for (const pub of state[source].publications) {
     try {
@@ -1893,6 +1912,10 @@ async function unpublishLocalSource(source) {
 // config nova (banda/fps) é despublicar e publicar de novo com as
 // TrackPublishOptions atualizadas. Só mexe em fontes que já estão no ar.
 async function reapplyBandwidthLimit() {
+  if (usingMeshFallback) {
+    for (const pc of meshBroadcastPcs.values()) meshApplyBandwidthLimit(pc);
+    return;
+  }
   if (!lkRoom) return;
   if (state.screen.sharing) { await unpublishLocalSource('screen'); await publishLocalSource('screen'); }
   if (state.camera.sharing) { await unpublishLocalSource('camera'); await publishLocalSource('camera'); }
@@ -3599,7 +3622,7 @@ function renderCallMemberSidebar() {
   addGroup('Offline', offline, false);
 
   if (state.screen.sharing) {
-    const watching = lkRoom ? lkRoom.remoteParticipants.size : 0;
+    const watching = usingMeshFallback ? meshPresenceInfo.size : lkRoom ? lkRoom.remoteParticipants.size : 0;
     if (watching === 0) {
       els.memberList.appendChild(buildNudgeCard('Transmitindo sozinho?', 'Manda o convite e a galera já entra assistindo.'));
     }
@@ -3733,25 +3756,40 @@ function voiceChannelOccupants(channelId) {
     }
   }
   // Rede de segurança: se EU estou nessa mesma call agora, o roster do
-  // próprio LiveKit (lkRoom.remoteParticipants) é fonte de verdade mais
-  // confiável que a presença do Supabase pra "quem está na call" - essa
-  // presença depende de um canal Realtime À PARTE (server:<serverId>) que
-  // pode ficar preso/atrasado (rede ruim, janela minimizada etc.) sem que a
-  // pessoa tenha de fato saído da call de verdade. O LiveKit em si nunca
-  // mente sobre quem está conectado na sala - usa pra completar quem o
-  // presence ainda não pegou, nunca pra remover ninguém.
-  if (lkRoom && activeVoiceChannel && activeVoiceChannel.id === channelId) {
-    for (const participant of lkRoom.remoteParticipants.values()) {
-      if (seenIds.has(participant.identity)) continue;
-      const info = memberInfo(participant.identity);
-      out.push({
-        id: participant.identity,
-        name: info.name,
-        avatar: info.avatar,
-        sharingScreen: participant.isScreenShareEnabled,
-      });
-      seenIds.add(participant.identity);
-      voiceOccupancyLastSeen.set(participant.identity, { channelId, ts: Date.now() });
+  // próprio transporte ativo (lkRoom.remoteParticipants, ou meshPresenceInfo
+  // no modo reserva) é fonte de verdade mais confiável que a presença do
+  // Supabase pra "quem está na call" - essa presença depende de um canal
+  // Realtime À PARTE (server:<serverId>) que pode ficar preso/atrasado
+  // (rede ruim, janela minimizada etc.) sem que a pessoa tenha de fato
+  // saído da call de verdade. O transporte de voz em si nunca mente sobre
+  // quem está conectado na sala - usa pra completar quem o presence ainda
+  // não pegou, nunca pra remover ninguém.
+  if (activeVoiceChannel && activeVoiceChannel.id === channelId) {
+    if (lkRoom) {
+      for (const participant of lkRoom.remoteParticipants.values()) {
+        if (seenIds.has(participant.identity)) continue;
+        const info = memberInfo(participant.identity);
+        out.push({
+          id: participant.identity,
+          name: info.name,
+          avatar: info.avatar,
+          sharingScreen: participant.isScreenShareEnabled,
+        });
+        seenIds.add(participant.identity);
+        voiceOccupancyLastSeen.set(participant.identity, { channelId, ts: Date.now() });
+      }
+    } else if (usingMeshFallback) {
+      for (const [peerId, info] of meshPresenceInfo) {
+        if (seenIds.has(peerId)) continue;
+        out.push({
+          id: peerId,
+          name: info.name || 'Convidado',
+          avatar: info.avatar || null,
+          sharingScreen: !!info.sharingScreen,
+        });
+        seenIds.add(peerId);
+        voiceOccupancyLastSeen.set(peerId, { channelId, ts: Date.now() });
+      }
     }
   }
   return out;
@@ -4389,6 +4427,10 @@ function updateVoiceConnectedPanel() {
     return;
   }
   els.voiceConnectedPanel.classList.remove('hidden');
+  if (usingMeshFallback) {
+    els.voiceConnectedDetail.textContent = `${activeVoiceChannel.name} · modo reserva`;
+    return;
+  }
   const q = lkRoom ? lkRoom.localParticipant.connectionQuality : null;
   els.voiceConnectedDetail.textContent = `${activeVoiceChannel.name} · ${q != null ? connectionQualityLabel(q) : '—'}`;
 }
@@ -4397,6 +4439,319 @@ function startVoiceConnectedLoop() {
   voiceConnectedTimer = setInterval(updateVoiceConnectedPanel, 3000);
 }
 startVoiceConnectedLoop();
+
+/* ---------------- fallback: implementação da mesh (ver declarações de
+   estado perto de lkRoom) ---------------- */
+
+function meshPreferH264(pc) {
+  if (typeof RTCRtpSender === 'undefined' || !RTCRtpSender.getCapabilities) return;
+  const capabilities = RTCRtpSender.getCapabilities('video');
+  if (!capabilities) return;
+  const h264 = capabilities.codecs.filter((c) => c.mimeType.toLowerCase() === 'video/h264');
+  if (!h264.length) return; // sem suporte a H264 nesse PC, deixa o padrão do navegador
+  const others = capabilities.codecs.filter((c) => c.mimeType.toLowerCase() !== 'video/h264');
+  const preferred = [...h264, ...others];
+  for (const transceiver of pc.getTransceivers()) {
+    const track = transceiver.sender && transceiver.sender.track;
+    if (track && track.kind === 'video' && transceiver.setCodecPreferences) {
+      try {
+        transceiver.setCodecPreferences(preferred);
+      } catch {
+        /* alguns navegadores recusam certas combinações; segue com o padrão */
+      }
+    }
+  }
+}
+
+function meshApplyBandwidthLimit(pc) {
+  const kbps = state.settings.bandwidthKbps;
+  for (const sender of pc.getSenders()) {
+    if (!sender.track || sender.track.kind !== 'video') continue;
+    const params = sender.getParameters();
+    if (!params.encodings || !params.encodings.length) params.encodings = [{}];
+    for (const enc of params.encodings) {
+      if (kbps) enc.maxBitrate = kbps * 1000;
+      else delete enc.maxBitrate;
+      enc.maxFramerate = state.settings.fps;
+    }
+    params.degradationPreference = 'maintain-framerate';
+    sender.setParameters(params).catch(() => {
+      /* alguns navegadores recusam mudar parâmetros antes da negociação terminar; a próxima chamada tenta de novo */
+    });
+  }
+}
+
+const MESH_DISCONNECT_GRACE_MS = 8000;
+const meshDisconnectTimers = new Map();
+function meshScheduleDisconnectTimeout(timerKey, isStillDown, onGiveUp) {
+  meshClearDisconnectTimeout(timerKey);
+  const id = setTimeout(() => {
+    meshDisconnectTimers.delete(timerKey);
+    if (isStillDown()) onGiveUp();
+  }, MESH_DISCONNECT_GRACE_MS);
+  meshDisconnectTimers.set(timerKey, id);
+}
+function meshClearDisconnectTimeout(timerKey) {
+  const existing = meshDisconnectTimers.get(timerKey);
+  if (existing) {
+    clearTimeout(existing);
+    meshDisconnectTimers.delete(timerKey);
+  }
+}
+
+function meshSendSignal(to, data) {
+  if (!meshChannel) return;
+  meshChannel.send({ type: 'broadcast', event: 'signal', payload: { from: state.myId, to, data } });
+}
+
+function meshOnPresence(list) {
+  meshPresenceInfo.clear();
+  for (const c of list) {
+    if (c.id === state.myId) continue;
+    meshPresenceInfo.set(c.id, c);
+  }
+  updatePeopleCount();
+
+  const currentIds = new Set(list.map((c) => c.id));
+
+  for (const source of ['screen', 'camera', 'mic']) {
+    const field = MESH_PRESENCE_FIELD[source];
+    const sharingIds = new Set(list.filter((c) => c[field] && c.id !== state.myId).map((c) => c.id));
+
+    // parou de compartilhar essa fonte ou saiu -> derruba a tela de quem eu assistia
+    for (const key of [...meshWatchPcs.keys()]) {
+      if (!key.endsWith(`:${source}`)) continue;
+      const id = key.slice(0, key.lastIndexOf(':'));
+      if (!sharingIds.has(id)) meshTeardownWatch(id, source);
+    }
+    // gente nova compartilhando essa fonte -> peço pra assistir
+    for (const id of sharingIds) {
+      if (!meshWatchPcs.has(tileKey(id, source))) {
+        const info = meshPresenceInfo.get(id) || {};
+        meshRequestWatch(id, source, info.name || 'Convidado', info.avatar || null);
+      }
+    }
+  }
+
+  // espectador que saiu da sala -> derruba minhas transmissões (qualquer fonte) pra ele
+  for (const key of [...meshBroadcastPcs.keys()]) {
+    const viewerId = key.slice(0, key.lastIndexOf(':'));
+    if (!currentIds.has(viewerId)) meshTeardownBroadcast(key);
+  }
+
+  updateEmptyHint();
+}
+
+function meshOnSignal(from, data) {
+  const source = data.source || 'screen';
+  const key = tileKey(from, source);
+  if (data.kind === 'watch-request') {
+    meshCreateBroadcastPeer(from, source);
+  } else if (data.kind === 'offer') {
+    meshHandleOffer(from, source, data.sdp);
+  } else if (data.kind === 'answer') {
+    const pc = meshBroadcastPcs.get(key);
+    if (pc) pc.setRemoteDescription(data.sdp);
+  } else if (data.kind === 'ice') {
+    const pc = meshBroadcastPcs.get(key) || meshWatchPcs.get(key);
+    if (pc && data.candidate) pc.addIceCandidate(data.candidate).catch(() => {});
+  }
+}
+
+function meshRequestWatch(id, source, name, avatar) {
+  const key = tileKey(id, source);
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  meshWatchPcs.set(key, pc);
+
+  pc.addEventListener('icecandidate', (ev) => {
+    if (ev.candidate) meshSendSignal(id, { kind: 'ice', candidate: ev.candidate.toJSON(), source });
+  });
+  pc.addEventListener('track', (ev) => {
+    addOrUpdateTile(key, name, avatar, ev.streams[0], false, source);
+    if (source === 'screen' && !viewerClippers.has(key)) {
+      const clipper = startRollingClip(ev.streams[0], 30);
+      if (clipper) viewerClippers.set(key, clipper);
+    }
+  });
+  pc.addEventListener('connectionstatechange', () => {
+    const timerKey = `meshwatch:${key}`;
+    if (pc.connectionState === 'connected') {
+      meshClearDisconnectTimeout(timerKey);
+    } else if (pc.connectionState === 'closed') {
+      meshClearDisconnectTimeout(timerKey);
+      meshTeardownWatch(id, source);
+    } else if (pc.connectionState === 'failed') {
+      meshTeardownWatch(id, source);
+    } else if (pc.connectionState === 'disconnected') {
+      meshScheduleDisconnectTimeout(
+        timerKey,
+        () => pc.connectionState === 'disconnected',
+        () => meshTeardownWatch(id, source),
+      );
+    }
+  });
+
+  meshSendSignal(id, { kind: 'watch-request', source });
+}
+
+async function meshHandleOffer(from, source, sdp) {
+  const key = tileKey(from, source);
+  const pc = meshWatchPcs.get(key);
+  if (!pc) return;
+  await pc.setRemoteDescription(sdp);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  meshSendSignal(from, { kind: 'answer', sdp: answer, source });
+}
+
+function meshTeardownWatch(id, source) {
+  const key = tileKey(id, source);
+  const pc = meshWatchPcs.get(key);
+  if (pc) pc.close();
+  meshWatchPcs.delete(key);
+  const clipper = viewerClippers.get(key);
+  if (clipper) {
+    clipper.stop();
+    viewerClippers.delete(key);
+  }
+  removeTile(key);
+  updateEmptyHint();
+}
+
+async function meshCreateBroadcastPeer(viewerId, source) {
+  const localTracks = state[source].localTracks;
+  if (!localTracks.length) return; // pedido chegou depois que eu já parei essa fonte
+  const key = tileKey(viewerId, source);
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  meshBroadcastPcs.set(key, pc);
+
+  const combined = new MediaStream(localTracks);
+  for (const track of localTracks) pc.addTrack(track, combined);
+  meshPreferH264(pc);
+  meshApplyBandwidthLimit(pc);
+
+  pc.addEventListener('icecandidate', (ev) => {
+    if (ev.candidate) meshSendSignal(viewerId, { kind: 'ice', candidate: ev.candidate.toJSON(), source });
+  });
+  pc.addEventListener('connectionstatechange', () => {
+    const timerKey = `meshbroadcast:${key}`;
+    if (pc.connectionState === 'connected') {
+      meshClearDisconnectTimeout(timerKey);
+    } else if (pc.connectionState === 'closed') {
+      meshClearDisconnectTimeout(timerKey);
+    } else if (pc.connectionState === 'failed') {
+      meshClearDisconnectTimeout(timerKey);
+      pc.restartIce();
+      pc.createOffer().then((retryOffer) => {
+        return pc.setLocalDescription(retryOffer).then(() => {
+          meshSendSignal(viewerId, { kind: 'offer', sdp: retryOffer, source });
+        });
+      }).catch(() => meshTeardownBroadcast(key));
+    } else if (pc.connectionState === 'disconnected') {
+      meshScheduleDisconnectTimeout(
+        timerKey,
+        () => pc.connectionState === 'disconnected',
+        () => meshTeardownBroadcast(key),
+      );
+    }
+  });
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  meshSendSignal(viewerId, { kind: 'offer', sdp: offer, source });
+}
+
+function meshTeardownBroadcast(key) {
+  const pc = meshBroadcastPcs.get(key);
+  if (pc) pc.close();
+  meshBroadcastPcs.delete(key);
+}
+
+// equivalente ao antigo state.transport.send({type:'share:start'|'stop'}):
+// atualiza a Presence, e quem recebe o sync reage (meshOnPresence) pedindo
+// pra assistir (watch-request) ou derrubando o watch - sem nenhuma outra
+// coordenação direta daqui.
+const meshPresenceMeta = { name: '', avatar: null, sharingScreen: false, sharingCamera: false, sharingMic: false };
+function meshAnnounceShareStart(source) {
+  if (!meshChannel) return;
+  const field = MESH_PRESENCE_FIELD[source];
+  if (field) meshPresenceMeta[field] = true;
+  meshChannel.track(meshPresenceMeta);
+}
+function meshAnnounceShareStop(source) {
+  if (!meshChannel) return;
+  const field = MESH_PRESENCE_FIELD[source];
+  if (field) meshPresenceMeta[field] = false;
+  meshChannel.track(meshPresenceMeta);
+}
+
+// tenta entrar no modo reserva - chamado só do catch de joinVoiceChannel
+// quando o LiveKit falha. Resolve quando o canal de voz subscreve de
+// verdade; rejeita se nem isso conseguir (sem internet, Supabase fora etc).
+function joinVoiceChannelMesh(channel) {
+  const myId = currentUser.id;
+  meshPresenceMeta.name = state.myName;
+  meshPresenceMeta.avatar = currentProfile ? currentProfile.avatar_url : null;
+  meshPresenceMeta.sharingScreen = false;
+  meshPresenceMeta.sharingCamera = false;
+  meshPresenceMeta.sharingMic = false;
+
+  const rt = window.supabaseClient.channel(`voice:${channel.id}`, {
+    config: { presence: { key: myId }, broadcast: { self: false } },
+  });
+
+  rt.on('presence', { event: 'sync' }, () => {
+    const presenceState = rt.presenceState();
+    const clients = Object.entries(presenceState).map(([id, metas]) => ({ id, ...metas[0] }));
+    meshOnPresence(clients);
+    retrackServerPresence();
+  });
+  rt.on('broadcast', { event: 'signal' }, ({ payload }) => {
+    if (payload.to !== myId) return;
+    meshOnSignal(payload.from, payload.data);
+  });
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      window.supabaseClient.removeChannel(rt);
+      reject(new Error('timeout ao conectar no modo reserva'));
+    }, 8000);
+    rt.subscribe((status) => {
+      if (settled) return;
+      if (status === 'SUBSCRIBED') {
+        settled = true;
+        clearTimeout(timeout);
+        meshChannel = rt;
+        usingMeshFallback = true;
+        state.myId = myId;
+        rt.track(meshPresenceMeta);
+        resolve();
+      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        settled = true;
+        clearTimeout(timeout);
+        window.supabaseClient.removeChannel(rt);
+        reject(new Error('não consegui conectar no modo reserva'));
+      }
+    });
+  });
+}
+
+function leaveRoomMesh() {
+  for (const key of [...meshWatchPcs.keys()]) {
+    const sep = key.lastIndexOf(':');
+    meshTeardownWatch(key.slice(0, sep), key.slice(sep + 1));
+  }
+  for (const key of [...meshBroadcastPcs.keys()]) meshTeardownBroadcast(key);
+  if (meshChannel) {
+    window.supabaseClient.removeChannel(meshChannel);
+    meshChannel = null;
+  }
+  meshPresenceInfo.clear();
+  usingMeshFallback = false;
+}
 
 async function joinVoiceChannel(channel) {
   activeVoiceChannel = channel;
@@ -4418,12 +4773,21 @@ async function joinVoiceChannel(channel) {
     token = await fetchLiveKitToken(channel.id);
     await room.connect('wss://ribbit-b6l1aajo.livekit.cloud', token);
   } catch (err) {
-    console.error('não consegui entrar na call:', err);
-    showToast('Não consegui entrar na call agora. Tenta de novo em alguns segundos.', 3500);
-    activeVoiceChannel = null;
-    renderChannelList();
-    retrackServerPresence();
-    updateVoiceConnectedPanel();
+    console.error('não consegui entrar na call pelo LiveKit, tentando modo reserva (Supabase):', err);
+    try {
+      await joinVoiceChannelMesh(channel);
+    } catch (meshErr) {
+      console.error('modo reserva também falhou:', meshErr);
+      showToast('Não consegui entrar na call agora. Tenta de novo em alguns segundos.', 3500);
+      activeVoiceChannel = null;
+      renderChannelList();
+      retrackServerPresence();
+      updateVoiceConnectedPanel();
+      return;
+    }
+    updatePeopleCount();
+    enterRoomScreen(channel.name);
+    showToast('O servidor de voz principal está indisponível — entrando em modo reserva (conexão direta). Com 3+ pessoas assistindo a mesma tela pode ficar mais pesado, e o controle remoto fica desativado.', 7000);
     return;
   }
 
@@ -4510,7 +4874,12 @@ function leaveRoom() {
   stopCameraShare();
   stopMicShare();
   exitFocusIfActive();
-  if (lkRoom) {
+  if (usingMeshFallback) {
+    // mesma ideia do ramo LiveKit abaixo: remove os tiles explicitamente
+    // em vez de confiar só na limpeza de cada PC fechando.
+    for (const peerId of meshPresenceInfo.keys()) removeAllTilesFor(peerId);
+    leaveRoomMesh();
+  } else if (lkRoom) {
     const room = lkRoom;
     lkRoom = null; // zera antes do disconnect() - o listener de RoomEvent.Disconnected só rechama leaveRoom() se lkRoom ainda apontar pra essa room
     // remove os tiles de quem eu tava assistindo explicitamente, em vez de
@@ -4913,7 +5282,7 @@ async function connectRnnoiseIfEnabled(ctx, micGainNode) {
 }
 
 async function startMicShare() {
-  if (state.mic.sharing || !lkRoom) return;
+  if (state.mic.sharing || (!lkRoom && !usingMeshFallback)) return;
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia(micConstraints());
@@ -5514,7 +5883,10 @@ function stopCameraShare() {
    nessa conexão. */
 
 function canUseRemoteAdmin() {
-  return isElectron && state.settings.remoteAdminEnabled;
+  // desativado no modo reserva (mesh) - reconstruir o canal de controle por
+  // cima do WebRTC ponto-a-ponto não valia a complexidade extra, ver
+  // comentário no topo da seção "fallback: mesh P2P via Supabase Realtime".
+  return isElectron && state.settings.remoteAdminEnabled && !usingMeshFallback;
 }
 
 function openTileContextMenu(x, y, key, name) {
@@ -5999,7 +6371,7 @@ function updateSelfScreenWatchersBadge() {
   const key = tileKey(state.myId, 'screen');
   const tile = state.tiles.get(key);
   if (!tile) return;
-  const watching = lkRoom ? lkRoom.remoteParticipants.size : 0;
+  const watching = usingMeshFallback ? meshPresenceInfo.size : lkRoom ? lkRoom.remoteParticipants.size : 0;
   const badge = tile.root.querySelector('.tile-watchers-badge');
   badge.innerHTML = `${ICONS.monitor} ${watching} assistindo`;
   if (currentMainPanel === 'voice') renderMemberSidebar(); // mantém o nudge "Transmitindo sozinho?" em dia
@@ -6468,6 +6840,9 @@ const CHANGELOG = {
   ],
   '4.6.7': [
     'O Discord volta a ser um app mutável normal nas Configurações (não fica mais sempre bloqueado) — e agora TODOS os processos dele, incluindo os da chamada de voz, caem debaixo do mesmo "Discord" na lista, então um único toggle muta a call inteira.',
+  ],
+  '4.7.0': [
+    'Novo: se o servidor de voz principal estiver indisponível (ex: fora do ar ou com a cota de uso esgotada), o app agora cai automaticamente pra um modo reserva — conexão direta entre os participantes, sem depender dele. Funciona pra voz, câmera e tela; com 3 ou mais pessoas assistindo a mesma transmissão ao mesmo tempo pode ficar mais pesado que o normal, e o controle remoto fica desativado nesse modo (volta a funcionar normal quando o servidor principal voltar e você entrar de novo na call).',
   ],
 };
 

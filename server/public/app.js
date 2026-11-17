@@ -255,6 +255,7 @@ const els = {
   resolutionSelect: document.getElementById('resolutionSelect'),
   fpsSelect: document.getElementById('fpsSelect'),
   bandwidthSelect: document.getElementById('bandwidthSelect'),
+  bandwidthEstimateHint: document.getElementById('bandwidthEstimateHint'),
   hideCursorCheck: document.getElementById('hideCursorCheck'),
   micDeviceSelect: document.getElementById('micDeviceSelect'),
   camDeviceSelect: document.getElementById('camDeviceSelect'),
@@ -1350,13 +1351,49 @@ if (els.themePicker) {
   });
 }
 
+// Aviso de upload necessário em Configurações > Transmissão - usa a MESMA
+// tabela de bitrate já calibrada (VIDEO_BITRATE_MATRIX/matrixBitrateKbps,
+// mais abaixo no arquivo - acessível aqui por hoisting de function) pra
+// estimar quanto a opção escolhida custa, multiplicado por quem está
+// assistindo a transmissão AGORA (voiceChannelOccupants, já existe e já
+// funciona tanto com LiveKit quanto com a mesh). "Nativa" não tem altura
+// conhecida antes de compartilhar - mostra um aviso qualificado em vez de
+// um número inventado.
+function updateBandwidthEstimateHint() {
+  if (!els.bandwidthEstimateHint) return;
+  const resolutionValue = els.resolutionSelect.value;
+  const fps = Number(els.fpsSelect.value);
+
+  if (resolutionValue === 'native') {
+    els.bandwidthEstimateHint.textContent = 'Resolução "Nativa" varia conforme sua tela — não dá pra estimar o upload necessário antes de compartilhar.';
+    return;
+  }
+  const height = Number(resolutionValue.split('x')[1]);
+  const perViewerKbps = matrixBitrateKbps(height, fps);
+  const resLabel = resolutionValue.replace('x', '×');
+  const viewerCount = activeVoiceChannel ? Math.max(0, voiceChannelOccupants(activeVoiceChannel.id).length - 1) : 0;
+  const fmtMbps = (kbps) => {
+    const mbps = kbps / 1000;
+    return mbps < 10 ? mbps.toFixed(1) : Math.round(mbps).toString();
+  };
+
+  if (viewerCount > 0) {
+    const pessoaTxt = viewerCount === 1 ? '1 pessoa' : `${viewerCount} pessoas`;
+    els.bandwidthEstimateHint.textContent = `${resLabel} · ${fps}fps para ${pessoaTxt} assistindo: cerca de ${fmtMbps(perViewerKbps * viewerCount)} Mbps de upload.`;
+  } else {
+    els.bandwidthEstimateHint.textContent = `${resLabel} · ${fps}fps: cerca de ${fmtMbps(perViewerKbps)} Mbps de upload por pessoa assistindo.`;
+  }
+}
+
 els.resolutionSelect.addEventListener('change', () => {
   state.settings.resolution = els.resolutionSelect.value;
   saveSettings();
+  updateBandwidthEstimateHint();
 });
 els.fpsSelect.addEventListener('change', () => {
   state.settings.fps = Number(els.fpsSelect.value);
   saveSettings();
+  updateBandwidthEstimateHint();
 });
 els.noiseSuppressionCheck.addEventListener('change', () => {
   state.settings.noiseSuppression = els.noiseSuppressionCheck.checked;
@@ -1747,6 +1784,7 @@ if (isElectron && els.winMinimizeBtn) {
   }
 }
 
+let bandwidthEstimateTimer = null;
 function openSettingsModal() {
   els.settingsModal.classList.remove('hidden');
   populateDeviceSelects();
@@ -1755,6 +1793,11 @@ function openSettingsModal() {
   initCloseBehaviorSelect();
   updateAccountEmailStatus();
   refreshClipSaveDirDisplay();
+  updateBandwidthEstimateHint();
+  // atualiza sozinho enquanto o modal fica aberto - cobre gente entrando/
+  // saindo da call sem precisar espalhar essa chamada por todo ponto de
+  // presença existente.
+  if (!bandwidthEstimateTimer) bandwidthEstimateTimer = setInterval(updateBandwidthEstimateHint, 2000);
   const activeTab = document.querySelector('.settings-tab.active');
   if (activeTab && activeTab.dataset.tab === 'devices') startCameraPreview();
 }
@@ -1762,6 +1805,10 @@ function closeSettingsModal() {
   els.settingsModal.classList.add('hidden');
   stopCameraPreview();
   stopMicTest();
+  if (bandwidthEstimateTimer) {
+    clearInterval(bandwidthEstimateTimer);
+    bandwidthEstimateTimer = null;
+  }
 }
 els.settingsBtn.addEventListener('click', openSettingsModal);
 els.settingsModalClose.addEventListener('click', closeSettingsModal);
@@ -1913,6 +1960,10 @@ async function unpublishLocalSource(source) {
 // TrackPublishOptions atualizadas. Só mexe em fontes que já estão no ar.
 async function reapplyBandwidthLimit() {
   if (usingMeshFallback) {
+    // zera o estado adaptativo - o próximo tick de meshPollAdaptiveQuality
+    // recalcula o teto a partir do novo valor salvo, em vez de continuar
+    // de onde o algoritmo tinha parado com o teto ANTIGO.
+    meshAdaptiveState.clear();
     for (const pc of meshBroadcastPcs.values()) meshApplyBandwidthLimit(pc);
     return;
   }
@@ -4463,8 +4514,12 @@ function meshPreferH264(pc) {
   }
 }
 
-function meshApplyBandwidthLimit(pc) {
-  const kbps = state.settings.bandwidthKbps;
+// kbpsOverride (opcional) deixa o poll de qualidade adaptativa (ver
+// meshPollAdaptiveQuality) impor um teto DIFERENTE do configurado nas
+// Configurações pra UM espectador específico, sem mudar o valor salvo -
+// sem o parâmetro, usa state.settings.bandwidthKbps direto, igual sempre.
+function meshApplyBandwidthLimit(pc, kbpsOverride) {
+  const kbps = kbpsOverride != null ? kbpsOverride : state.settings.bandwidthKbps;
   for (const sender of pc.getSenders()) {
     if (!sender.track || sender.track.kind !== 'video') continue;
     const params = sender.getParameters();
@@ -4479,6 +4534,127 @@ function meshApplyBandwidthLimit(pc) {
       /* alguns navegadores recusam mudar parâmetros antes da negociação terminar; a próxima chamada tenta de novo */
     });
   }
+}
+
+// ---------------- qualidade adaptativa + diagnóstico por espectador ----------------
+// Teto de bitrate por espectador que sobe/desce sozinho conforme a conexão
+// com ESSE espectador específico (perda de pacote + RTT, via getStats()) -
+// sem isso, "Automático" na mesh não limitava nada, e o modo manual não
+// reagia a uma conexão ruim específica dentro de um grupo onde o resto
+// está bem. Como o publish já usa degradationPreference:'maintain-framerate',
+// baixar o teto de bitrate já faz o próprio navegador reduzir nitidez sem
+// derrubar o fps - não precisa renegociar resolução pra isso funcionar.
+const MESH_MIN_KBPS = 300;
+const meshAdaptiveState = new Map(); // tileKey -> { kbps, goodStreak, badStreak }
+const meshBroadcastStats = new Map(); // tileKey -> { rttMs, candidateType, lossFraction, quality, connected } (painel de diagnóstico lê daqui)
+
+function meshBitrateCeilingKbps() {
+  if (state.settings.bandwidthKbps) return state.settings.bandwidthKbps;
+  // "Automático": usa a mesma tabela de bitrate já calibrada (ver
+  // VIDEO_BITRATE_MATRIX/matrixBitrateKbps) como teto de verdade, em vez
+  // de deixar sem limite nenhum.
+  const heightGuess = state.settings.resolution === 'native'
+    ? 1080
+    : Number(state.settings.resolution.split('x')[1]) || 1080;
+  return matrixBitrateKbps(heightGuess, state.settings.fps);
+}
+
+async function meshReadPcHealth(pc) {
+  let report;
+  try {
+    report = await pc.getStats();
+  } catch {
+    return { rttMs: null, candidateType: null, lossFraction: null, connected: false };
+  }
+  let pair = null;
+  for (const stat of report.values()) {
+    if (stat.type === 'candidate-pair' && stat.state === 'succeeded') {
+      pair = stat;
+      break;
+    }
+  }
+  if (!pair) return { rttMs: null, candidateType: null, lossFraction: null, connected: false };
+  const rttMs = typeof pair.currentRoundTripTime === 'number' ? Math.round(pair.currentRoundTripTime * 1000) : null;
+  const localCand = pair.localCandidateId ? report.get(pair.localCandidateId) : null;
+  const remoteCand = pair.remoteCandidateId ? report.get(pair.remoteCandidateId) : null;
+  // "relay" só vai aparecer de verdade quando um TURN for configurado (ver
+  // ICE_SERVERS/loadIceServers) - até lá, toda conexão que chegar aqui é
+  // "direta" (host/srflx) por definição, já que não existe outra opção.
+  const isRelay = (localCand && localCand.candidateType === 'relay') || (remoteCand && remoteCand.candidateType === 'relay');
+  let lossFraction = null;
+  for (const stat of report.values()) {
+    if (stat.type === 'remote-inbound-rtp' && stat.kind === 'video' && typeof stat.fractionLost === 'number') {
+      lossFraction = stat.fractionLost;
+      break;
+    }
+  }
+  return { rttMs, candidateType: isRelay ? 'relay' : 'direct', lossFraction, connected: true };
+}
+
+function meshQualityLabel(health) {
+  if (!health || !health.connected) return 'falhou';
+  const loss = health.lossFraction || 0;
+  const rtt = health.rttMs;
+  if (loss > 0.08 || (rtt != null && rtt > 400)) return 'ruim';
+  if (loss > 0.02 || (rtt != null && rtt > 150)) return 'instável';
+  return 'boa';
+}
+
+async function meshPollAdaptiveQuality() {
+  if (!meshBroadcastPcs.size) return;
+  for (const [key, pc] of meshBroadcastPcs) {
+    const health = await meshReadPcHealth(pc);
+    const quality = meshQualityLabel(health);
+    meshBroadcastStats.set(key, { ...health, quality });
+    if (!key.endsWith(':screen')) continue; // teto adaptativo só importa pra vídeo pesado (tela)
+
+    const ceiling = meshBitrateCeilingKbps();
+    let adaptive = meshAdaptiveState.get(key);
+    if (!adaptive) {
+      adaptive = { kbps: ceiling, goodStreak: 0, badStreak: 0 };
+      meshAdaptiveState.set(key, adaptive);
+    }
+    if (quality === 'ruim') {
+      adaptive.goodStreak = 0;
+      adaptive.badStreak++;
+      adaptive.kbps = Math.round(adaptive.kbps * 0.7);
+    } else if (quality === 'boa') {
+      adaptive.badStreak = 0;
+      adaptive.goodStreak++;
+      if (adaptive.goodStreak >= 3) {
+        adaptive.kbps = Math.round(adaptive.kbps * 1.2);
+        adaptive.goodStreak = 0;
+      }
+    } else {
+      adaptive.goodStreak = 0;
+      adaptive.badStreak = 0;
+    }
+    adaptive.kbps = Math.min(ceiling, Math.max(MESH_MIN_KBPS, adaptive.kbps));
+    meshApplyBandwidthLimit(pc, adaptive.kbps);
+  }
+
+  // re-renderiza o painel de espectadores se ele estiver aberto agora -
+  // mesmo padrão que pollTileStats já usa pros tiles normais.
+  const selfScreenKey = tileKey(state.myId, 'screen');
+  const selfTile = state.tiles.get(selfScreenKey);
+  if (selfTile) {
+    const panel = selfTile.root.querySelector('.tile-inspector-panel');
+    if (panel && !panel.classList.contains('hidden')) renderTileInspectorPanel(selfScreenKey);
+  }
+}
+
+let meshAdaptiveTimer = null;
+function startMeshAdaptiveLoop() {
+  if (meshAdaptiveTimer) return;
+  meshAdaptiveTimer = setInterval(meshPollAdaptiveQuality, 3000);
+}
+function stopMeshAdaptiveLoop() {
+  if (meshAdaptiveTimer) {
+    clearInterval(meshAdaptiveTimer);
+    meshAdaptiveTimer = null;
+  }
+  meshAdaptiveState.clear();
+  meshBroadcastStats.clear();
 }
 
 const MESH_DISCONNECT_GRACE_MS = 8000;
@@ -4580,13 +4756,15 @@ function meshRequestWatch(id, source, name, avatar) {
     } else if (pc.connectionState === 'closed') {
       meshClearDisconnectTimeout(timerKey);
       meshTeardownWatch(id, source);
-    } else if (pc.connectionState === 'failed') {
-      meshTeardownWatch(id, source);
-    } else if (pc.connectionState === 'disconnected') {
+    } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+      // 'failed' ganhou a MESMA folga de 'disconnected' - desistir na hora
+      // matava essa conexão antes da renegociação que quem transmite tenta
+      // sozinho (restartIce + nova oferta, ver meshCreateBroadcastPeer)
+      // conseguir chegar e salvar a mesma ligação.
       meshScheduleDisconnectTimeout(
         timerKey,
-        () => pc.connectionState === 'disconnected',
-        () => meshTeardownWatch(id, source),
+        () => pc.connectionState !== 'connected',
+        () => meshTeardownWatchAfterFailure(id, source),
       );
     }
   });
@@ -4616,6 +4794,31 @@ function meshTeardownWatch(id, source) {
   }
   removeTile(key);
   updateEmptyHint();
+}
+
+// rede de segurança extra pra "se a conexão cair, reconectar sozinho":
+// depois que a folga de disconnected/failed esgota de verdade, tenta MAIS
+// UMA vez se a pessoa ainda consta compartilhando essa fonte no presence -
+// cobre o caso de a renegociação (restartIce) de quem transmite também não
+// ter dado certo, sem entrar num loop de retentativa infinita (só essa
+// chance extra; se continuar falhando, o próximo presence sync de verdade
+// tenta de novo, igual qualquer outra pessoa nova compartilhando).
+function meshMaybeRetryWatch(id, source) {
+  const info = meshPresenceInfo.get(id);
+  const field = MESH_PRESENCE_FIELD[source];
+  if (!info || !field || !info[field]) return;
+  const key = tileKey(id, source);
+  setTimeout(() => {
+    const info2 = meshPresenceInfo.get(id);
+    if (!meshWatchPcs.has(key) && info2 && info2[field]) {
+      meshRequestWatch(id, source, info2.name || 'Convidado', info2.avatar || null);
+    }
+  }, 2000);
+}
+
+function meshTeardownWatchAfterFailure(id, source) {
+  meshTeardownWatch(id, source);
+  meshMaybeRetryWatch(id, source);
 }
 
 async function meshCreateBroadcastPeer(viewerId, source) {
@@ -4665,6 +4868,8 @@ function meshTeardownBroadcast(key) {
   const pc = meshBroadcastPcs.get(key);
   if (pc) pc.close();
   meshBroadcastPcs.delete(key);
+  meshAdaptiveState.delete(key);
+  meshBroadcastStats.delete(key);
 }
 
 // equivalente ao antigo state.transport.send({type:'share:start'|'stop'}):
@@ -4728,6 +4933,7 @@ function joinVoiceChannelMesh(channel) {
         usingMeshFallback = true;
         state.myId = myId;
         rt.track(meshPresenceMeta);
+        startMeshAdaptiveLoop();
         resolve();
       } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         settled = true;
@@ -4740,6 +4946,7 @@ function joinVoiceChannelMesh(channel) {
 }
 
 function leaveRoomMesh() {
+  stopMeshAdaptiveLoop();
   for (const key of [...meshWatchPcs.keys()]) {
     const sep = key.lastIndexOf(':');
     meshTeardownWatch(key.slice(0, sep), key.slice(sep + 1));
@@ -4761,6 +4968,21 @@ async function joinVoiceChannel(channel) {
   const myId = currentUser.id;
   state.myName = currentProfile ? currentProfile.display_name : 'Convidado';
 
+  // Conexão direta (WebRTC ponto-a-ponto, sinalizado via Supabase Realtime)
+  // é o caminho normal agora - sem depender de nenhum servidor de terceiro
+  // pra transmitir. O LiveKit só entra em ação se a própria sinalização via
+  // Supabase falhar (ex: Realtime fora do ar) - bem mais raro do que a
+  // cota de um serviço de terceiro estourar, e mais barato de manter vivo
+  // como rede de segurança do que apagar de vez por enquanto.
+  try {
+    await joinVoiceChannelMesh(channel);
+    updatePeopleCount();
+    enterRoomScreen(channel.name);
+    return;
+  } catch (meshErr) {
+    console.error('não consegui entrar na call via conexão direta, tentando pelo LiveKit:', meshErr);
+  }
+
   const LK = window.LivekitClient;
   const room = new LK.Room({ adaptiveStream: false, dynacast: true });
   setupLiveKitRoomEvents(room);
@@ -4773,21 +4995,12 @@ async function joinVoiceChannel(channel) {
     token = await fetchLiveKitToken(channel.id);
     await room.connect('wss://ribbit-b6l1aajo.livekit.cloud', token);
   } catch (err) {
-    console.error('não consegui entrar na call pelo LiveKit, tentando modo reserva (Supabase):', err);
-    try {
-      await joinVoiceChannelMesh(channel);
-    } catch (meshErr) {
-      console.error('modo reserva também falhou:', meshErr);
-      showToast('Não consegui entrar na call agora. Tenta de novo em alguns segundos.', 3500);
-      activeVoiceChannel = null;
-      renderChannelList();
-      retrackServerPresence();
-      updateVoiceConnectedPanel();
-      return;
-    }
-    updatePeopleCount();
-    enterRoomScreen(channel.name);
-    showToast('O servidor de voz principal está indisponível — entrando em modo reserva (conexão direta). Com 3+ pessoas assistindo a mesma tela pode ficar mais pesado, e o controle remoto fica desativado.', 7000);
+    console.error('não consegui entrar na call (nem direto, nem pelo LiveKit):', err);
+    showToast('Não consegui entrar na call agora. Tenta de novo em alguns segundos.', 3500);
+    activeVoiceChannel = null;
+    renderChannelList();
+    retrackServerPresence();
+    updateVoiceConnectedPanel();
     return;
   }
 
@@ -4795,6 +5008,7 @@ async function joinVoiceChannel(channel) {
   state.myId = myId;
   updatePeopleCount();
   enterRoomScreen(channel.name);
+  showToast('Não consegui conectar direto com a call agora — usando o servidor de voz como alternativa.', 5000);
 }
 
 function enterRoomScreen(label) {
@@ -6458,6 +6672,18 @@ function renderTileInspectorPanel(key) {
   if (!tile) return;
   const panel = tile.root.querySelector('.tile-inspector-panel');
   if (!panel) return;
+
+  // No modo de conexão direta (mesh), a MINHA tela não tem "um" jeito de
+  // medir conexão - cada espectador tem a própria RTCPeerConnection, com
+  // qualidade possivelmente diferente um do outro. Esse é o único caso
+  // onde o inspetor do meu próprio tile mostra uma LISTA em vez de uma
+  // única leitura (ver meshPollAdaptiveQuality, que já deixa os dados
+  // prontos em meshBroadcastStats - não lê stats de novo aqui).
+  if (tile.isSelf && tile.source === 'screen' && usingMeshFallback) {
+    renderMeshWatchersInspectorPanel(panel);
+    return;
+  }
+
   const s = tileStatsLatest.get(key);
   if (!s) {
     panel.innerHTML = '<p class="hint">Calculando…</p>';
@@ -6473,6 +6699,29 @@ function renderTileInspectorPanel(key) {
     row('Pacotes perdidos', s.packetsLost),
     row('Jitter', s.jitterMs != null ? `${s.jitterMs} ms` : null),
   ].join('') || '<p class="hint">Sem dados ainda.</p>';
+}
+
+function renderMeshWatchersInspectorPanel(panel) {
+  const rows = [];
+  for (const [key, stats] of meshBroadcastStats) {
+    if (!key.endsWith(':screen')) continue;
+    const viewerId = key.slice(0, key.lastIndexOf(':'));
+    const info = meshPresenceInfo.get(viewerId);
+    const name = (info && info.name) || 'Convidado';
+    // "Via retransmissão" só aparece de verdade quando um TURN for
+    // configurado (ver ICE_SERVERS/loadIceServers) - até lá, essa pessoa
+    // sempre vai mostrar "Direta" ou "Falhou".
+    const label = !stats.connected ? 'Falhou' : stats.candidateType === 'relay' ? 'Via retransmissão' : 'Direta';
+    const cls = !stats.connected ? 'mesh-watcher-failed' : stats.candidateType === 'relay' ? 'mesh-watcher-relay' : 'mesh-watcher-direct';
+    const detail = [
+      stats.connected && stats.rttMs != null ? `${stats.rttMs} ms` : null,
+      stats.connected ? stats.quality : null,
+    ].filter(Boolean).join(' · ');
+    rows.push(
+      `<div class="tile-inspector-row"><span>${escapeHtml(name)}</span><strong class="${cls}">${label}${detail ? ` · ${detail}` : ''}</strong></div>`,
+    );
+  }
+  panel.innerHTML = rows.length ? rows.join('') : '<p class="hint">Ninguém assistindo agora.</p>';
 }
 
 function removeTile(key) {
@@ -6843,6 +7092,10 @@ const CHANGELOG = {
   ],
   '4.7.0': [
     'Novo: se o servidor de voz principal estiver indisponível (ex: fora do ar ou com a cota de uso esgotada), o app agora cai automaticamente pra um modo reserva — conexão direta entre os participantes, sem depender dele. Funciona pra voz, câmera e tela; com 3 ou mais pessoas assistindo a mesma transmissão ao mesmo tempo pode ficar mais pesado que o normal, e o controle remoto fica desativado nesse modo (volta a funcionar normal quando o servidor principal voltar e você entrar de novo na call).',
+  ],
+  '4.8.0': [
+    'A transmissão de tela, voz e câmera agora conecta direto entre os participantes por padrão (sem passar por nenhum servidor de terceiro) — ideal pra grupos de até 5 pessoas. A qualidade se ajusta sozinha pra cada espectador conforme a conexão dele, e se alguém cair reconecta por conta própria. Clica no ícone de qualidade da sua própria transmissão pra ver o estado de cada espectador (direta/falhou, ping, qualidade).',
+    'Novo: em Configurações > Transmissão, um aviso mostra quanto de upload a resolução/fps escolhidos vão exigir pra quem está assistindo agora — atualiza sozinho conforme a resolução/fps muda ou gente entra/sai da call.',
   ],
 };
 

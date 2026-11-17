@@ -1876,6 +1876,9 @@ input[type="file"] { color: var(--muted); font-size: 13px; }
 .tile-inspector-row strong { color: var(--text); font-weight: 600; }
 .tile-inspector-panel .hint { margin: 0; color: var(--muted-2); }
 .grid.strip-mode .tile-inspector-panel { display: none; }
+.mesh-watcher-direct { color: #22c55e; }
+.mesh-watcher-relay { color: #eab308; }
+.mesh-watcher-failed { color: #ef4444; }
 
 .empty-state {
   grid-column: 1 / -1;
